@@ -237,7 +237,7 @@ class SelfPlayTrainer:
             opponent_idx = random.randint(0, len(self.opponent_agents) - 1)
             
             # 保存当前主代理的权重
-            temp_path = os.path.join(self.checkpoint_dir, 'temp_agent.h5')
+            temp_path = os.path.join(self.checkpoint_dir, 'temp_agent.weights.h5')
             self.main_agent.save_model(temp_path)
             
             # 加载到对手代理
@@ -258,9 +258,9 @@ class SelfPlayTrainer:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         if is_best:
-            filename = f"best_agent_{self.model_type}_{timestamp}.h5"
+            filename = f"best_agent_{self.model_type}_{timestamp}.weights.h5"
         else:
-            filename = f"agent_{self.model_type}_{self.total_hands}.h5"
+            filename = f"agent_{self.model_type}_{self.total_hands}.weights.h5"
         
         filepath = os.path.join(self.checkpoint_dir, filename)
         
@@ -293,9 +293,15 @@ class SelfPlayTrainer:
                 filepath = os.path.join(self.checkpoint_dir, best_models[0])
             else:
                 # 尝试加载最新的检查点
-                checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('agent_') and f.endswith('.h5')]
+                checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('agent_') and (f.endswith('.h5') or f.endswith('.weights.h5'))]
                 if checkpoints:
-                    checkpoints.sort(reverse=True, key=lambda x: int(x.split('_')[-1].split('.')[0]))
+                    # 提取数字部分进行排序
+                    def get_hand_number(filename):
+                        # 提取文件名中的数字部分
+                        parts = filename.split('_')[-1].split('.')[0]
+                        return int(parts) if parts.isdigit() else 0
+                    
+                    checkpoints.sort(reverse=True, key=get_hand_number)
                     filepath = os.path.join(self.checkpoint_dir, checkpoints[0])
                 else:
                     logger.warning("没有找到检查点文件")
@@ -306,7 +312,10 @@ class SelfPlayTrainer:
             logger.info(f"加载模型检查点: {filepath}")
             
             # 尝试加载训练状态
-            state_filepath = filepath.replace('.h5', '_state.pkl')
+            if filepath.endswith('.weights.h5'):
+                state_filepath = filepath.replace('.weights.h5', '_state.pkl')
+            else:
+                state_filepath = filepath.replace('.h5', '_state.pkl')
             if os.path.exists(state_filepath):
                 with open(state_filepath, 'rb') as f:
                     state = pickle.load(f)

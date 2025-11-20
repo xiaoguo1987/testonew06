@@ -1,6 +1,7 @@
 # 德州扑克游戏核心逻辑
 
 import random
+import logging
 from typing import List, Dict, Optional, Tuple
 from .cards import Card, Deck, compare_hands
 
@@ -228,6 +229,11 @@ class PokerGame:
     def _showdown(self) -> None:
         """摊牌并确定获胜者"""
         active_players = [p for p in self.players if p.is_active]
+        
+        # 安全检查：确保至少有一个活跃玩家
+        if not active_players:
+            logging.warning("没有活跃玩家参与showdown，无法确定获胜者")
+            return
         
         # 比较手牌
         best_player = active_players[0]
