@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import seaborn as sns
+import traceback
 
 # 设置日志
 logging.basicConfig(
@@ -27,24 +28,79 @@ logging.basicConfig(
 )
 logger = logging.getLogger('PokerAIEvaluator')
 
-# 设置中文字体支持
+# 添加TensorFlow GPU内存限制配置
 try:
-    plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
-    plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-    logger.info("已设置中文字体支持")
-except Exception as e:
-    logger.warning(f"设置中文字体支持失败: {e}")
+    import tensorflow as tf
+    # 设置GPU内存增长模式，避免一次性占用全部内存
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            # 只使用第一块GPU并设置内存增长
+            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+            tf.config.experimental.set_memory_growth(gpus[0], True)
+            # 也可以设置固定内存限制
+            # tf.config.experimental.set_virtual_device_configuration(
+            #     gpus[0],
+            #     [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=10240)])
+            logger.info("成功设置TensorFlow GPU内存限制")
+        except RuntimeError as e:
+            logger.warning(f"设置GPU内存限制时出错: {e}")
+    else:
+        logger.info("未检测到可用GPU，将使用CPU")
+except ImportError:
+    logger.warning("未导入TensorFlow，跳过GPU设置")
+# 移除重复导入，HandEvaluator在后面会统一导入
+
+# 中文字体设置 - 使用更可靠的字体处理方案
+    try:
+        # 首先获取系统可用字体列表
+        available_fonts = set(plt.rcParams['font.sans-serif'])
+        logger.debug(f"可用字体: {list(available_fonts)[:10]}")  # 只显示前10个以减少日志量
+        
+        # 定义优先使用的字体列表
+        preferred_fonts = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'sans-serif']
+        
+        # 筛选系统实际可用的字体
+        usable_fonts = []
+        for font in preferred_fonts:
+            if font in available_fonts or font == 'sans-serif':
+                usable_fonts.append(font)
+        
+        # 使用筛选后的字体列表
+        plt.rcParams['font.sans-serif'] = usable_fonts
+        plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+        logger.info(f"中文字体设置成功，使用字体: {plt.rcParams['font.sans-serif']}")
+    except Exception as e:
+        logger.warning(f"设置中文字体支持失败: {e}")
+        # 完全回退到matplotlib默认行为
+        plt.rcParams.update(plt.rcParamsDefault)  # 使用默认设置
+        logger.info("已恢复matplotlib默认字体设置")
 
 # 导入必要的模块
 try:
+    # 首先尝试导入tensorflow，因为其他模块可能依赖它
+    try:
+        import tensorflow as tf
+        logger.info("成功导入TensorFlow")
+    except ImportError:
+        logger.warning("未安装TensorFlow，部分功能可能无法使用")
+    
+    # 然后导入其他必要模块
     from poker_ai.reward.self_play_trainer import SelfPlayTrainer
     from poker_ai.advisor.ai_advisor import AIAvisor
     from poker_ai.game.poker_game import PokerGame, Player
     from poker_ai.model.ai_agent import PokerAIAgent
     from poker_ai.model.hand_evaluator import HandEvaluator
     logger.info("成功导入所有必要模块")
-except Exception as e:
-    logger.error(f"导入模块失败: {e}")
+except ImportError as e:
+    if "tensorflow" in str(e):
+        logger.error(f"缺少TensorFlow依赖: {e}")
+        logger.error("请先安装TensorFlow: pip install tensorflow")
+    else:
+        logger.error(f"导入模块失败: {e}")
+    logger.error("请确保所有依赖都已正确安装")
+    # 在本地开发环境中，我们可以继续运行以测试基本功能
+    # 但在生产环境中可能需要退出
     raise
 
 def parse_arguments():
@@ -136,10 +192,47 @@ def run_comprehensive_evaluation(args):
         num_eval_games=args.num_games
     )
     
-    # 加载模型
-    success = trainer.load_checkpoint(args.model_path)
-    if not success:
-        logger.error(f"无法加载模型: {args.model_path}")
+    # 加载模型 - 改进路径处理以确保能正确加载checkpoints目录中的模型文件
+    try:
+        # 确保路径是绝对路径
+        model_path = os.path.abspath(args.model_path)
+        logger.info(f"尝试加载模型: {model_path}")
+        
+        # 详细检查文件信息
+        logger.info(f"文件存在性检查: {os.path.exists(model_path)}")
+        if os.path.exists(model_path):
+            logger.info(f"文件大小: {os.path.getsize(model_path)} 字节")
+            logger.info(f"文件权限: {os.access(model_path, os.R_OK)}")
+        
+        # 检查路径是否存在
+        if not os.path.exists(model_path):
+            # 尝试在checkpoints目录中查找
+            checkpoint_path = os.path.join('checkpoints', args.model_path)
+            if os.path.exists(checkpoint_path):
+                model_path = os.path.abspath(checkpoint_path)
+                logger.info(f"在checkpoints目录中找到模型: {model_path}")
+            else:
+                logger.error(f"模型文件不存在: {args.model_path}")
+                logger.info(f"当前工作目录: {os.getcwd()}")
+                if os.path.exists('checkpoints'):
+                    logger.info(f"checkpoints目录内容: {os.listdir('checkpoints')}")
+                return None
+        
+        # 直接使用trainer.main_agent.load_model方法（无返回值）
+        logger.info(f"调用trainer.main_agent.load_model方法")
+        trainer.main_agent.load_model(model_path)
+        logger.info(f"模型加载完成: {model_path}")
+        # 移除未使用的success变量
+    except Exception as e:
+        logger.error(f"加载模型时发生错误: {str(e)}")
+        logger.error(f"错误类型: {type(e).__name__}")
+        import traceback
+        logger.error(f"错误堆栈: {traceback.format_exc()}")
+        logger.info(f"当前工作目录: {os.getcwd()}")
+        if os.path.exists('checkpoints'):
+            logger.info(f"checkpoints目录内容: {os.listdir('checkpoints')}")
+        if os.path.exists(model_path):
+            logger.info(f"模型文件确实存在，权限: {os.access(model_path, os.R_OK)}")
         return None
     
     # 执行基本评估
@@ -191,6 +284,9 @@ def run_detailed_evaluation(args, trainer):
     
     # 运行指定数量的游戏
     for game_idx in range(args.num_games):
+        # 每10局游戏打印一次进度，确保程序仍在运行
+        if game_idx % 10 == 0:
+            logger.info(f"评估进度: 已完成 {game_idx}/{args.num_games} 局游戏")
         logger.debug(f"评估游戏 {game_idx + 1}/{args.num_games}")
         
         # 创建游戏
@@ -211,7 +307,12 @@ def run_detailed_evaluation(args, trainer):
         # 记录初始手牌强度（翻牌前）
         main_player = players[0]
         hand_evaluator = HandEvaluator()
-        preflop_strength, _ = hand_evaluator.evaluate_hand(main_player.cards)
+        logger.info("手牌评估器已初始化")  # 添加明确的日志标记
+        
+        # 翻牌前阶段没有公共牌，传入空列表作为community_cards
+        hand_result, _ = hand_evaluator.evaluate_hand(main_player.cards, [])
+        # 将牌型转换为数值强度
+        preflop_strength = HandEvaluator.HAND_RANKS.get(hand_result, 0) / 9.0  # 归一化到0-1范围
         detailed_stats['hand_strength_distribution'].append(preflop_strength)
         
         # 分类手牌强度
@@ -224,58 +325,134 @@ def run_detailed_evaluation(args, trainer):
         detailed_stats['win_rate_by_hand_strength'][strength_category]['count'] += 1
         
         # 游戏主循环
-        while True:
-            # 记录当前轮次
-            current_stage = ['preflop', 'flop', 'turn', 'river'][game.round_num]
+        max_rounds = 10  # 设置最大轮数限制，防止无限循环
+        round_count = 0
+        
+        while round_count < max_rounds:
+            round_count += 1
+            
+            # 记录当前轮次 - 添加安全检查
+            try:
+                if 1 <= game.round <= 4:
+                    current_stage = ['preflop', 'flop', 'turn', 'river'][game.round - 1]
+                    logger.debug(f"游戏{game_idx + 1} - 当前阶段: {current_stage}")
+                else:
+                    current_stage = 'unknown'
+                    logger.warning(f"游戏{game_idx + 1} - 无效的游戏轮次: {game.round}")
+            except Exception as e:
+                current_stage = 'unknown'
+                logger.error(f"游戏{game_idx + 1} - 获取游戏轮次时出错: {e}")
+            
             stage_start_stack = main_player.stack
             
-            # 处理当前轮次的所有动作
-            while not game.is_round_over():
-                current_player = game.next_player()
-                if not current_player:
-                    break
-                
-                # 决定使用哪个代理
-                if current_player.name == "Main_AI":
-                    agent = trainer.main_agent
-                else:
-                    # 为对手选择一个代理
-                    opponent_idx = int(current_player.name.split('_')[-1]) - 1
-                    if opponent_idx < len(trainer.opponent_agents):
-                        agent = trainer.opponent_agents[opponent_idx]
-                    else:
-                        agent = trainer.opponent_agents[0]
-                
-                # 选择动作
-                action, amount = agent.select_action(game, current_player)
-                
-                # 记录主玩家的动作
-                if current_player.name == "Main_AI":
-                    game_result['actions'].append({
-                        'stage': current_stage,
-                        'action': action,
-                        'amount': amount,
-                        'pot_size': game.pot
-                    })
-                    
-                    # 更新动作分布
-                    if action in detailed_stats['action_distribution']:
-                        detailed_stats['action_distribution'][action] += 1
+            # 处理当前轮次的所有动作，添加最大动作限制
+            max_actions = 100  # 每轮最大动作数限制
+            action_count = 0
             
-            # 记录轮次结果
-            stage_profit = main_player.stack - stage_start_stack
-            game_result['stage_results'][current_stage] = stage_profit
-            detailed_stats['profit_by_stage'][current_stage].append(stage_profit)
+            try:
+                while not game.is_round_over() and action_count < max_actions:
+                    action_count += 1
+                    
+                    current_player = game.next_player()
+                    if not current_player:
+                        logger.warning(f"游戏{game_idx + 1}在{current_stage}阶段没有更多玩家")
+                        break
+                    
+                    # 决定使用哪个代理
+                    if current_player.name == "Main_AI":
+                        agent = trainer.main_agent
+                    else:
+                        # 为对手选择一个代理
+                        try:
+                            # 安全地获取对手索引
+                            name_parts = current_player.name.split('_')
+                            if len(name_parts) > 1 and name_parts[-1].isdigit():
+                                opponent_idx = int(name_parts[-1]) - 1
+                                # 确保索引有效
+                                if 0 <= opponent_idx < len(trainer.opponent_agents):
+                                    agent = trainer.opponent_agents[opponent_idx]
+                                else:
+                                    agent = trainer.opponent_agents[0]  # 默认使用第一个对手代理
+                            else:
+                                agent = trainer.opponent_agents[0]  # 默认使用第一个对手代理
+                        except Exception as e:
+                            logger.warning(f"游戏{game_idx + 1} - 选择对手代理时出错: {e}，使用默认代理")
+                            agent = trainer.opponent_agents[0]
+                    
+                    # 选择动作
+                    try:
+                        action, amount = agent.select_action(game, current_player)
+                    except Exception as e:
+                        logger.error(f"游戏{game_idx + 1} - 代理选择动作时出错: {e}")
+                        action, amount = 'fold', 0  # 使用默认动作避免崩溃
+                    
+                    # 记录主玩家的动作
+                    if current_player.name == "Main_AI":
+                        game_result['actions'].append({
+                            'stage': current_stage,
+                            'action': action,
+                            'amount': amount,
+                            'pot_size': game.pot
+                        })
+                        
+                        # 更新动作分布
+                        if action in detailed_stats['action_distribution']:
+                            detailed_stats['action_distribution'][action] += 1
+                
+                if action_count >= max_actions:
+                    logger.warning(f"游戏{game_idx + 1}在{current_stage}阶段达到最大动作限制")
+            except Exception as e:
+                logger.error(f"处理游戏{game_idx + 1}的{current_stage}阶段时出错: {e}")
+            
+            # 记录轮次结果 - 添加详细日志
+            try:
+                stage_profit = main_player.stack - stage_start_stack
+                logger.debug(f"游戏{game_idx + 1} - {current_stage}阶段利润: {stage_profit}")
+                
+                # 确保stage_results字典存在
+                if 'stage_results' not in game_result:
+                    game_result['stage_results'] = {}
+                game_result['stage_results'][current_stage] = stage_profit
+                
+                # 安全地添加到详细统计中
+                if current_stage in detailed_stats['profit_by_stage']:
+                    detailed_stats['profit_by_stage'][current_stage].append(stage_profit)
+                    logger.debug(f"游戏{game_idx + 1} - 已将{current_stage}阶段利润添加到统计中，当前累计: {detailed_stats['profit_by_stage'][current_stage]}")
+                else:
+                    logger.warning(f"游戏{game_idx + 1} - 未知的游戏阶段: {current_stage}")
+            except Exception as e:
+                logger.error(f"游戏{game_idx + 1} - 记录轮次结果时出错: {e}")
             
             # 进入下一轮或结束游戏
-            if game.proceed_to_next_round():
+            try:
+                # 添加安全检查：确保对手数量大于0
+                if len(game.players) <= 1:
+                    logger.info(f"游戏{game_idx + 1}因玩家数量不足而结束")
+                    break
+                
+                # 正确处理游戏进行和结束的逻辑
+                # 修改这里的逻辑：当轮次完成后，继续下一轮或结束游戏
+                # 如果game.proceed_to_next_round()返回True表示游戏结束
+                if game.proceed_to_next_round():
+                    # 游戏结束，跳出循环
+                    logger.debug(f"游戏{game_idx + 1}已结束")
+                    break
+            except Exception as e:
+                logger.error(f"游戏{game_idx + 1}进行下一轮时出错: {e}")
+                # 发生错误时也跳出循环以防止无限循环
                 break
         
+        if round_count >= max_rounds:
+            logger.warning(f"游戏{game_idx + 1}达到最大轮数限制，强制结束")
+        
         # 记录游戏结果
-        if hasattr(game, 'winner') and game.winner and game.winner.name == "Main_AI":
-            game_result['is_winner'] = True
-            detailed_stats['win_by_position'][0] += 1  # 位置0是主玩家
-            detailed_stats['win_rate_by_hand_strength'][strength_category]['wins'] += 1
+        try:
+            if hasattr(game, 'winner') and game.winner and game.winner.name == "Main_AI":
+                game_result['is_winner'] = True
+                detailed_stats['win_by_position'][0] += 1  # 位置0是主玩家
+                detailed_stats['win_rate_by_hand_strength'][strength_category]['wins'] += 1
+        except Exception as e:
+            logger.error(f"游戏{game_idx + 1}记录获胜结果时出错: {e}")
         
         detailed_stats['game_results'].append(game_result)
     
@@ -286,6 +463,13 @@ def run_detailed_evaluation(args, trainer):
             stats['win_rate'] = stats['wins'] / stats['count']
         else:
             stats['win_rate'] = 0.0
+    
+    # 确保各阶段利润统计正确，处理空列表情况
+    for stage in detailed_stats['profit_by_stage']:
+        if not detailed_stats['profit_by_stage'][stage]:
+            # 如果阶段利润列表为空，添加一个0作为默认值
+            detailed_stats['profit_by_stage'][stage] = [0.0]
+            logger.warning(f"阶段 {stage} 没有利润数据，设置默认值为0")
     
     return detailed_stats
 
@@ -342,34 +526,34 @@ def generate_evaluation_report(args, results, results_file):
     模型类型: {args.model_type}
     评估游戏数: {args.num_games}
     
-    基本评估结果:
-    - 平均利润: {results['basic']['avg_profit']:.2f}
-    - 胜率: {results['basic']['win_rate']:.2%}
-    - 总利润: {results['basic']['total_profit']:.2f}
-    - 获胜次数: {results['basic']['wins']}
+   # 基本评估结果:
+    - 平均利润: {results.get('basic', {}).get('avg_profit', 0):.2f}
+    - 胜率: {results.get('basic', {}).get('win_rate', 0):.2%}
+    - 总利润: {results.get('basic', {}).get('total_profit', 0):.2f}
+    - 获胜次数: {results.get('basic', {}).get('wins', 0)}
     
     详细统计:
     1. 动作分布:
-       - 弃牌: {results['detailed']['action_distribution']['fold']}次
-       - 跟注: {results['detailed']['action_distribution']['call']}次
-       - 加注: {results['detailed']['action_distribution']['raise']}次
+       - 弃牌: {results.get('detailed', {}).get('action_distribution', {}).get('fold', 0)}次
+       - 跟注: {results.get('detailed', {}).get('action_distribution', {}).get('call', 0)}次
+       - 加注: {results.get('detailed', {}).get('action_distribution', {}).get('raise', 0)}次
     
     2. 各阶段平均利润:
-       - 翻牌前: {np.mean(results['detailed']['profit_by_stage']['preflop']):.2f}
-       - 翻牌: {np.mean(results['detailed']['profit_by_stage']['flop']):.2f}
-       - 转牌: {np.mean(results['detailed']['profit_by_stage']['turn']):.2f}
-       - 河牌: {np.mean(results['detailed']['profit_by_stage']['river']):.2f}
+       - 翻牌前: {np.mean(results.get('detailed', {}).get('profit_by_stage', {}).get('preflop', [0])):.2f}
+       - 翻牌: {np.mean(results.get('detailed', {}).get('profit_by_stage', {}).get('flop', [0])):.2f}
+       - 转牌: {np.mean(results.get('detailed', {}).get('profit_by_stage', {}).get('turn', [0])):.2f}
+       - 河牌: {np.mean(results.get('detailed', {}).get('profit_by_stage', {}).get('river', [0])):.2f}
     
     3. 按手牌强度的胜率:
-       - 弱牌 (<= 0.4): {results['detailed']['win_rate_by_hand_strength']['weak']['win_rate']:.2%} 
-         (样本数: {results['detailed']['win_rate_by_hand_strength']['weak']['count']})
-       - 中等牌 (0.4-0.7): {results['detailed']['win_rate_by_hand_strength']['medium']['win_rate']:.2%} 
-         (样本数: {results['detailed']['win_rate_by_hand_strength']['medium']['count']})
-       - 强牌 (> 0.7): {results['detailed']['win_rate_by_hand_strength']['strong']['win_rate']:.2%} 
-         (样本数: {results['detailed']['win_rate_by_hand_strength']['strong']['count']})
+       - 弱牌 (<= 0.4): {results.get('detailed', {}).get('win_rate_by_hand_strength', {}).get('weak', {}).get('win_rate', 0):.2%} 
+         (样本数: {results.get('detailed', {}).get('win_rate_by_hand_strength', {}).get('weak', {}).get('count', 0)})
+       - 中等牌 (0.4-0.7): {results.get('detailed', {}).get('win_rate_by_hand_strength', {}).get('medium', {}).get('win_rate', 0):.2%} 
+         (样本数: {results.get('detailed', {}).get('win_rate_by_hand_strength', {}).get('medium', {}).get('count', 0)})
+       - 强牌 (> 0.7): {results.get('detailed', {}).get('win_rate_by_hand_strength', {}).get('strong', {}).get('win_rate', 0):.2%} 
+         (样本数: {results.get('detailed', {}).get('win_rate_by_hand_strength', {}).get('strong', {}).get('count', 0)})
     
     4. 按位置的胜率:
-       - 主玩家: {results['detailed']['win_by_position'][0] / args.num_games:.2%}
+       - 主玩家: {results.get('detailed', {}).get('win_by_position', {}).get(0, 0) / args.num_games:.2%}
     
     评估结果文件: {results_file}
     ======================================================
@@ -495,7 +679,8 @@ def generate_visualizations(args, results):
     cumulative_profits = np.cumsum(game_profits)
     
     plt.figure(figsize=(12, 6))
-    plt.plot(range(1, args.num_games + 1), cumulative_profits, 'b-')
+    # 使用game_profits的实际长度来创建x轴，确保长度匹配
+    plt.plot(range(1, len(game_profits) + 1), cumulative_profits, 'b-')
     plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)
     plt.title('累计利润曲线')
     plt.xlabel('游戏局数')

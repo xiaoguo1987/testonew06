@@ -32,7 +32,8 @@ class SelfPlayTrainer:
                  eval_interval: int = 100,  # 评估间隔（局数）
                  checkpoint_interval: int = 500,  # 保存检查点间隔（局数）
                  num_eval_games: int = 50,  # 每次评估的游戏局数
-                 use_ensemble: bool = False):
+                 use_ensemble: bool = False,
+                 target_update_freq: int = 10):  # DQN目标网络更新频率
         
         self.model_type = model_type
         self.checkpoint_dir = checkpoint_dir
@@ -44,6 +45,7 @@ class SelfPlayTrainer:
         self.checkpoint_interval = checkpoint_interval
         self.num_eval_games = num_eval_games
         self.use_ensemble = use_ensemble
+        self.target_update_freq = target_update_freq
         
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -65,7 +67,7 @@ class SelfPlayTrainer:
         if self.use_ensemble:
             self.main_agent = EnsembleAgent()
         else:
-            self.main_agent = PokerAIAgent(agent_type=self.model_type)
+            self.main_agent = PokerAIAgent(agent_type=self.model_type, target_update_freq=self.target_update_freq)
         
         # 创建对手代理（使用历史版本）
         self.opponent_agents = []
@@ -73,7 +75,7 @@ class SelfPlayTrainer:
             if self.use_ensemble:
                 self.opponent_agents.append(EnsembleAgent())
             else:
-                self.opponent_agents.append(PokerAIAgent(agent_type=self.model_type))
+                self.opponent_agents.append(PokerAIAgent(agent_type=self.model_type, target_update_freq=self.target_update_freq))
     
     def _create_game(self) -> Tuple[PokerGame, List[Player]]:
         """创建游戏实例和玩家"""

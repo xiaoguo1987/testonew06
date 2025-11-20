@@ -9,11 +9,12 @@ from ..game.poker_game import Player, PokerGame
 class PokerAIAgent:
     """德州扑克AI代理统一接口"""
     
-    def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None):
+    def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None, target_update_freq: int = 10):
         """
         初始化AI代理
         agent_type: 'dqn' 或 'policy_gradient'
         state_dim: 状态维度，如果为None则自动计算
+        target_update_freq: DQN目标网络更新频率（仅DQN代理有效）
         """
         self.state_rep = StateRepresentation()
         
@@ -23,7 +24,7 @@ class PokerAIAgent:
         
         # 根据类型创建相应的代理
         if agent_type == 'dqn':
-            self.agent = DQNAgent(state_dim=state_dim)
+            self.agent = DQNAgent(state_dim=state_dim, target_update_freq=target_update_freq)
         elif agent_type == 'policy_gradient':
             self.agent = PolicyGradientAgent(state_dim=state_dim)
         else:
