@@ -51,31 +51,35 @@ except ImportError:
     logger.warning("未导入TensorFlow，跳过GPU设置")
 # 移除重复导入，HandEvaluator在后面会统一导入
 
-# 中文字体设置 - 调整缩进，与TensorFlow导入逻辑平级（独立代码块）
+# ===== 修正后的中文字体配置（彻底解决 sans-serif 警告）=====
 try:
-    # 首先获取系统可用字体列表
-    available_fonts = set(plt.rcParams['font.sans-serif'])
-    logger.debug(f"可用字体: {list(available_fonts)[:10]}")  # 只显示前10个以减少日志量
-    
-    # 定义优先使用的字体列表
-    preferred_fonts = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'sans-serif']
-    
-    # 筛选系统实际可用的字体
-    usable_fonts = []
-    for font in preferred_fonts:
-        if font in available_fonts or font == 'sans-serif':
-            usable_fonts.append(font)
-    
-    # 使用筛选后的字体列表
-    plt.rcParams['font.sans-serif'] = usable_fonts
-    plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-    logger.info(f"中文字体设置成功，使用字体: {plt.rcParams['font.sans-serif']}")
+    import matplotlib.pyplot as plt
+    import matplotlib.font_manager as fm
+
+    # 1. 直接指定系统已安装的具体字体名称（从 fc-list 输出中获取）
+    target_font = 'WenQuanYi Zen Hei'  # 与 fc-list 输出的字体名称完全一致
+    font_path = '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'  # 从 fc-list 输出中复制的路径
+
+    # 2. 优先尝试通过字体名称设置（简单直接）
+    plt.rcParams['font.sans-serif'] = [target_font, 'DejaVu Sans']  # 只保留具体字体，去掉 sans-serif
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+    # 3. 验证字体是否生效（打印日志确认）
+    available_fonts = [f.name for f in fm.fontManager.ttflist]
+    if target_font in available_fonts:
+        logger.info(f"中文字体设置成功！已加载: {target_font}")
+    else:
+        # 兜底：直接通过字体文件路径设置（100% 生效）
+        font_prop = fm.FontProperties(fname=font_path)
+        plt.rcParams['font.family'] = font_prop.get_name()
+        logger.info(f"通过字体文件路径设置成功！路径: {font_path}")
+
 except Exception as e:
     logger.warning(f"设置中文字体支持失败: {e}")
-    # 完全回退到matplotlib默认行为
-    plt.rcParams.update(plt.rcParamsDefault)  # 使用默认设置
+    # 回退到 matplotlib 默认字体（避免崩溃）
+    plt.rcParams.update(plt.rcParamsDefault)
     logger.info("已恢复matplotlib默认字体设置")
-
+# ================================================================
 # 导入必要的模块
 try:
     # 首先尝试导入tensorflow，因为其他模块可能依赖它
