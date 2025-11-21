@@ -112,6 +112,9 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
             
             # 执行动作
             game.handle_action(current_player, action, amount)
+            
+            # 移动到下一个玩家
+            game.next_player()
         
         # 计算每轮利润并更新累计利润
         round_profits = {}
