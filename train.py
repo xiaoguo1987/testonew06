@@ -67,6 +67,7 @@ def parse_arguments():
     parser.add_argument('--num-hands', type=int, default=10000, help='训练的手牌数量')
     parser.add_argument('--learning-rate', type=float, default=0.001, help='学习率')
     parser.add_argument('--batch-size', type=int, default=64, help='批处理大小')
+    parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
     parser.add_argument('--eval-interval', type=int, default=100, help='评估间隔（局数）')
     parser.add_argument('--checkpoint-interval', type=int, default=500, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=50, help='每次评估的游戏局数')
@@ -209,7 +210,8 @@ def evaluate_model(args):
             big_blind=args.big_blind,
             initial_stack=args.initial_stack,
             num_players=args.num_players,
-            num_eval_games=args.num_eval_games
+            num_eval_games=args.num_eval_games,
+            target_update_freq=args.target_update
         )
         
         # 加载模型

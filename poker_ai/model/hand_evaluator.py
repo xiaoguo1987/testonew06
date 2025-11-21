@@ -106,9 +106,9 @@ class HandEvaluator:
         """
         rank_counts = {}
         for card in cards:
-            if card.rank_value not in rank_counts:
-                rank_counts[card.rank_value] = 0
-            rank_counts[card.rank_value] += 1
+            if card.value not in rank_counts:
+                rank_counts[card.value] = 0
+            rank_counts[card.value] += 1
         
         # 按次数降序，相同次数按牌值降序
         sorted_counts = sorted(rank_counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
@@ -124,7 +124,7 @@ class HandEvaluator:
         
         # 检查是否包含10, J, Q, K, A
         royal_ranks = [10, 11, 12, 13, 14]
-        ranks = [card.rank_value for card in cards]
+        ranks = [card.value for card in cards]
         
         # 检查是否包含所有皇家牌值
         for rank in royal_ranks:
@@ -134,7 +134,7 @@ class HandEvaluator:
         # 检查是否有至少5张同花色的皇家牌
         for suit in SUITS:
             suit_cards = [c for c in cards if c.suit == suit]
-            suit_ranks = [c.rank_value for c in suit_cards]
+            suit_ranks = [c.value for c in suit_cards]
             if all(rank in suit_ranks for rank in royal_ranks):
                 return True
         
@@ -196,7 +196,7 @@ class HandEvaluator:
         for card in cards:
             if card.suit not in suit_counts:
                 suit_counts[card.suit] = []
-            suit_counts[card.suit].append(card.rank_value)
+            suit_counts[card.suit].append(card.value)
         
         # 找出最大的同花牌组
         max_suit = max(suit_counts.items(), key=lambda x: len(x[1]))
@@ -207,7 +207,7 @@ class HandEvaluator:
         检查是否为顺子
         """
         # 获取唯一的牌值，排序
-        unique_ranks = sorted(list(set([card.rank_value for card in cards])))
+        unique_ranks = sorted(list(set([card.value for card in cards])))
         
         # 需要至少5个不同的牌值
         if len(unique_ranks) < 5:
@@ -232,7 +232,7 @@ class HandEvaluator:
         获取顺子的最大牌值
         """
         # 获取唯一的牌值，排序
-        unique_ranks = sorted(list(set([card.rank_value for card in cards])))
+        unique_ranks = sorted(list(set([card.value for card in cards])))
         
         # 特殊情况：A-2-3-4-5顺子，最大牌值为5
         if 14 in unique_ranks and 2 in unique_ranks and 3 in unique_ranks and 4 in unique_ranks and 5 in unique_ranks:
@@ -275,7 +275,7 @@ class HandEvaluator:
         获取高牌强度值列表
         """
         # 获取所有牌值，降序排序
-        ranks = sorted([card.rank_value for card in cards], reverse=True)
+        ranks = sorted([card.value for card in cards], reverse=True)
         # 取前5个最大的牌值
         return ranks[:5]
     
@@ -283,7 +283,7 @@ class HandEvaluator:
         """
         获取排除特定牌值后的牌值作为踢脚牌
         """
-        kickers = [card.rank_value for card in cards if card.rank_value not in excluded_ranks]
+        kickers = [card.value for card in cards if card.value not in excluded_ranks]
         return sorted(kickers, reverse=True)
     
     def calculate_win_probability(self, hole_cards: List[Card], community_cards: List[Card], 
