@@ -18,7 +18,7 @@ logger = logging.getLogger('SelfPlayTrainer')
 from ..game.poker_game import PokerGame, Player
 from ..model.ai_agent import PokerAIAgent, EnsembleAgent
 from ..reward.reward_calculator import RewardCalculator, AdaptiveRewardCalculator
-from utils.checkpoint import save_checkpoint  # 确保该导入有效
+from ..utils.checkpoint import save_checkpoint, load_checkpoint, find_latest_checkpoint
 
 
 class SelfPlayTrainer:
@@ -258,57 +258,64 @@ class SelfPlayTrainer:
                 os.remove(temp_path)
     
     def save_checkpoint(self, is_best: bool = False) -> None:
-        """保存检查点（灵活处理文件名与格式）"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if is_best:
-            filename = f"best_agent_{self.model_type}_{timestamp}.pkl"
-        else:
-            filename = f"agent_{self.model_type}_{self.total_hands}.pkl"
-        filepath = os.path.join(self.checkpoint_dir, filename)
-        
+        """保存检查点（使用导入的工具函数）"""
         try:
-            self.main_agent.save_model(filepath)
-            logger.info(f"保存检查点: {filename}")
-            # 保存训练状态
-            state = {
+            # 准备检查点文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if is_best:
+                filename = f"best_agent_{self.model_type}_{timestamp}.pkl"
+            else:
+                filename = f"agent_{self.model_type}_{self.total_hands}.pkl"
+            filepath = os.path.join(self.checkpoint_dir, filename)
+            
+            # 准备元数据
+            metadata = {
                 'total_hands': self.total_hands,
                 'total_profit': self.total_profit,
                 'best_score': self.best_score,
                 'performance_history': self.performance_history,
-                'strategy_metrics': {  # 新增策略指标状态
+                'strategy_metrics': {
                     'bluff_attempts': self.total_bluff_attempts,
                     'aggressive_actions': self.total_aggressive_actions
-                }
+                },
+                'model_type': self.model_type
             }
-            with open(filepath.replace('.pkl', '_state.pkl'), 'wb') as f:
-                pickle.dump(state, f)
+            
+            # 使用导入的工具函数保存检查点
+            success = save_checkpoint(self.main_agent, filepath, metadata)
+            
+            if success:
+                logger.info(f"保存检查点: {filename}")
+            else:
+                # 后备方案：如果工具函数失败，使用原始方法
+                logger.warning("工具函数保存失败，使用后备方法")
+                self.main_agent.save_model(filepath)
+                with open(filepath.replace('.pkl', '_state.pkl'), 'wb') as f:
+                    pickle.dump(metadata, f)
+                logger.info(f"使用后备方法保存检查点: {filename}")
+                
         except Exception as e:
             logger.error(f"保存检查点失败: {e}")
     
     def load_checkpoint(self, filepath: Optional[str] = None) -> bool:
-        """加载检查点（健壮解析文件名）"""
-        if not filepath:
-            # 优先加载最佳模型，再加载最新检查点
-            best_models = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('best_agent_')]
-            if best_models:
-                filepath = os.path.join(self.checkpoint_dir, max(best_models))  # 最新最佳模型
-            else:
-                checkpoints = [f for f in os.listdir(self.checkpoint_dir) if f.startswith('agent_')]
-                if checkpoints:
-                    # 按文件名中的局数排序（提取数字部分）
-                    def extract_hands(fname):
-                        parts = fname.split('_')
-                        for p in parts:
-                            if p.replace('.pkl', '').isdigit():
-                                return int(p.replace('.pkl', ''))
-                        return 0
-                    checkpoints.sort(key=extract_hands, reverse=True)
-                    filepath = os.path.join(self.checkpoint_dir, checkpoints[0])
-                else:
-                    logger.warning("无检查点文件")
-                    return False
+        """加载检查点（不自动加载最新检查点）"""
+        # 不自动加载最新检查点，只在指定路径时加载
+        if filepath is None:
+            logger.warning("未指定检查点路径，不自动加载最新检查点")
+            return False
         
         try:
+            # 验证文件是否存在
+            if not os.path.exists(filepath):
+                # 尝试添加常见扩展名
+                if os.path.exists(filepath + '.pkl'):
+                    filepath = filepath + '.pkl'
+                elif os.path.exists(filepath + '.weights'):
+                    filepath = filepath + '.weights'
+                else:
+                    logger.error(f"检查点文件不存在: {filepath}")
+                    return False
+                    
             self.main_agent.load_model(filepath)
             logger.info(f"加载检查点: {filepath}")
             # 加载状态
@@ -358,7 +365,8 @@ class SelfPlayTrainer:
     def train(self, num_hands: int) -> None:
         """主训练循环（整合指标统计与评估）"""
         logger.info(f"开始训练，共{num_hands}手牌")
-        self.load_checkpoint()  # 加载历史检查点
+        # 不再自动加载检查点，避免覆盖用户指定的模型
+        logger.info("从当前模型状态开始训练")
         start_hand = self.total_hands
 
         for _ in range(start_hand, start_hand + num_hands):

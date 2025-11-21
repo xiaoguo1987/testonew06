@@ -128,10 +128,30 @@ class PokerAIAgent:
             return self.agent.epsilon
         return None
     
-    def set_epsilon(self, value: float) -> None:
-        """设置探索率（DQN特定）"""
+    def set_epsilon(self, value: float, min_value: Optional[float] = None, decay_rate: Optional[float] = None) -> None:
+        """设置探索参数（DQN特定）
+        
+        Args:
+            value: 当前探索率值
+            min_value: 最小探索率值（可选）
+            decay_rate: 衰减率值（可选）
+        """
         if self.agent_type == 'dqn' and hasattr(self.agent, 'epsilon'):
-            self.agent.epsilon = max(0.1, min(1.0, value))
+            # 设置当前探索率，确保在合理范围内
+            self.agent.epsilon = max(0.01, min(1.0, value))
+            
+            # 设置最小探索率（如果提供）
+            if min_value is not None and hasattr(self.agent, 'epsilon_min'):
+                self.agent.epsilon_min = max(0.01, min(1.0, min_value))
+            
+            # 设置衰减率（如果提供）
+            if decay_rate is not None and hasattr(self.agent, 'epsilon_decay'):
+                self.agent.epsilon_decay = max(0.00001, min(0.1, decay_rate))
+            
+            # 日志记录
+            logger.info(f"更新DQN探索参数 - epsilon: {self.agent.epsilon}, " 
+                      f"epsilon_min: {getattr(self.agent, 'epsilon_min', 'N/A')}, "
+                      f"epsilon_decay: {getattr(self.agent, 'epsilon_decay', 'N/A')}")
 
 # 创建一个组合多个AI代理的集成模型
 class EnsembleAgent:

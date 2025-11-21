@@ -37,9 +37,10 @@ logger.info(f"日志已配置，记录到: {log_file}")
 # 导入必要的模块
 try:
     from poker_ai.reward.self_play_trainer import SelfPlayTrainer
-    from poker_ai.advisor.ai_advisor import AIAvisor
+    from poker_ai.advisor.ai_advisor import PokerAdvisor  # 修正类名拼写错误
     from poker_ai.game.poker_game import PokerGame, Player
     from poker_ai.model.ai_agent import PokerAIAgent
+    from poker_ai.utils import checkpoint  # 确保正确导入checkpoint模块
     logger.info("成功导入所有必要模块")
 except Exception as e:
     logger.error(f"导入模块失败: {e}")
@@ -149,16 +150,24 @@ def train_model(args):
             optimizer=args.optimizer
         )
         
-        # 设置探索参数
+        # 设置探索参数 - 使用增强的set_epsilon方法
         if hasattr(trainer, 'main_agent') and trainer.main_agent:
-            # 直接设置探索率（如果是DQN代理）
-            if hasattr(trainer.main_agent, 'agent') and hasattr(trainer.main_agent.agent, 'epsilon'):
-                trainer.main_agent.agent.epsilon = args.eps_start
-            if hasattr(trainer.main_agent, 'agent') and hasattr(trainer.main_agent.agent, 'epsilon_min'):
-                trainer.main_agent.agent.epsilon_min = args.eps_end
-            # 设置衰减率
-            if hasattr(trainer.main_agent, 'agent') and hasattr(trainer.main_agent.agent, 'epsilon_decay'):
-                trainer.main_agent.agent.epsilon_decay = args.eps_decay
+            # 使用增强的set_epsilon方法一次性设置所有探索参数
+            if hasattr(trainer.main_agent, 'set_epsilon'):
+                trainer.main_agent.set_epsilon(
+                    value=args.eps_start,
+                    min_value=args.eps_end,
+                    decay_rate=args.eps_decay
+                )
+            # 直接设置代理内部参数（作为后备）
+            elif hasattr(trainer.main_agent, 'agent'):
+                if hasattr(trainer.main_agent.agent, 'epsilon'):
+                    trainer.main_agent.agent.epsilon = args.eps_start
+                if hasattr(trainer.main_agent.agent, 'epsilon_min'):
+                    trainer.main_agent.agent.epsilon_min = args.eps_end
+                if hasattr(trainer.main_agent.agent, 'epsilon_decay'):
+                    trainer.main_agent.agent.epsilon_decay = args.eps_decay
+                logger.info(f"已通过直接访问设置探索参数: eps_start={args.eps_start}, eps_end={args.eps_end}, eps_decay={args.eps_decay}")
         
         # 设置对手更新间隔
         if hasattr(trainer, 'opponent_update_interval'):
@@ -213,7 +222,9 @@ def evaluate_model(args):
             initial_stack=args.initial_stack,
             num_players=args.num_players,
             num_eval_games=args.num_eval_games,
-            target_update_freq=args.target_update
+            target_update_freq=args.target_update,
+            learning_rate=args.learning_rate,
+            optimizer=args.optimizer
         )
         
         # 加载模型
