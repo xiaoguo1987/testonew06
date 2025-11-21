@@ -69,7 +69,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
     profit_history = {player.name: [] for player in players}
     
     # 记录初始筹码
-    initial_chips = {player.name: player.chips for player in players}
+    initial_chips = {player.name: player.stack for player in players}
     
     # 运行测试手牌
     for hand_num in range(1, num_hands + 1):
@@ -81,7 +81,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
         game.start_new_hand()
         
         # 记录每轮开始时的玩家筹码
-        start_chips = {player.name: player.chips for player in players}
+        start_chips = {player.name: player.stack for player in players}
         
         # 进行游戏
         while not game.is_hand_over:
@@ -116,7 +116,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
         # 计算每轮利润并更新累计利润
         round_profits = {}
         for player in players:
-            round_profit = player.chips - start_chips[player.name]
+            round_profit = player.stack - start_chips[player.name]
             round_profits[player.name] = round_profit
             player.total_profit += round_profit
             profit_history[player.name].append(player.total_profit)
@@ -129,7 +129,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
         })
     
     # 计算最终利润
-    final_profits = {player.name: player.chips - initial_chips[player.name] 
+    final_profits = {player.name: player.stack - initial_chips[player.name] 
                     for player in players}
     
     return hand_results, profit_history, final_profits
