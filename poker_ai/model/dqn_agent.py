@@ -1,5 +1,6 @@
 # 德州扑克DQN代理模型
 
+import os
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model
@@ -158,8 +159,21 @@ class DQNAgent:
     
     def load(self, name: str) -> None:
         """加载模型权重"""
-        self.model.load_weights(name)
-        self.update_target_model()
+        import pickle
+        if name.endswith('.pkl') or os.path.exists(name + '.pkl'):
+            # 使用pickle加载整个模型
+            filepath = name if name.endswith('.pkl') else name + '.pkl'
+            with open(filepath, 'rb') as f:
+                loaded_model = pickle.load(f)
+                # 将加载的模型属性复制到当前模型
+                for key, value in loaded_model.__dict__.items():
+                    if not key.startswith('_') or key in ['_model', '_target_model']:
+                        setattr(self, key, value)
+            self.update_target_model()
+        else:
+            # 尝试使用Keras加载权重
+            self.model.load_weights(name)
+            self.update_target_model()
     
     def save(self, name: str) -> None:
         """保存模型权重"""
