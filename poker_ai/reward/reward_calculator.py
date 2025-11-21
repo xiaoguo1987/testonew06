@@ -9,20 +9,20 @@ class RewardCalculator:
     """德州扑克奖励计算器（精细化优化版）"""
     
     def __init__(self):
-        # 定义不同奖励类型的权重（新增无效下注惩罚）
+        # 定义不同奖励类型的权重（平衡策略，减少过度进攻）
         self.reward_weights = {
             'winning_hand': 1.0,          # 赢牌奖励
             'losing_hand': -0.8,          # 输牌惩罚
             'pot_odds': 0.2,              # 底池赔率奖励
-            'hand_strength': 0.3,         # 手牌强度奖励
-            'bluff_success': 0.4,         # 成功诈唬奖励
-            'fold_when_weak': 0.3,        # 及时弃牌奖励
-            'aggressive_play': 0.1,       # 主动进攻奖励
+            'hand_strength': 0.4,         # 手牌强度奖励（增加）
+            'bluff_success': 0.6,         # 成功诈唬奖励（增加）
+            'fold_when_weak': 0.5,        # 及时弃牌奖励（显著增加）
+            'aggressive_play': 0.05,      # 主动进攻奖励（降低）
             'position_advantage': 0.15,   # 位置优势奖励
             'bankroll_change': 0.5,       # 筹码变化奖励
             'decision_consistency': 0.2,  # 决策一致性奖励
             'position_utilization': 0.2,  # 位置利用奖励
-            'invalid_bet': 0.4            # 无效下注惩罚
+            'invalid_bet': 0.6            # 无效下注惩罚（增加）
         }
         
         # 定义不同游戏阶段的奖励调整因子
@@ -411,12 +411,16 @@ class AdaptiveRewardCalculator:
         bluff_std = np.std(bluff_rates)  # 诈唬率波动（策略多样性）
         avg_invalid_bet = np.mean(invalid_bet_rates)  # 平均无效下注率
 
-        # 场景1：收益下降且策略单一 → 鼓励探索
+        # 场景1：收益下降且策略单一 → 减少过度进攻，增加防守性
         if recent_avg_profit < overall_avg_profit * 0.8 and bluff_std < 0.05:
-            self.base_calculator.reward_weights['aggressive_play'] += self.adjustment_factor
-            self.base_calculator.reward_weights['bluff_success'] += self.adjustment_factor * 0.5
-            if self.base_calculator.reward_weights['fold_when_weak'] > 0.1:
-                self.base_calculator.reward_weights['fold_when_weak'] -= self.adjustment_factor * 0.5
+            # 如果收益为负，降低进攻性权重
+            if recent_avg_profit < 0:
+                self.base_calculator.reward_weights['aggressive_play'] -= self.adjustment_factor * 1.5
+                self.base_calculator.reward_weights['fold_when_weak'] += self.adjustment_factor * 1.0
+            else:
+                # 正收益但下降，适度调整以鼓励多样化
+                self.base_calculator.reward_weights['bluff_success'] += self.adjustment_factor * 0.5
+                self.base_calculator.reward_weights['hand_strength'] += self.adjustment_factor * 0.3
 
         # 场景2：收益稳定但无效下注多 → 惩罚无效决策
         elif recent_avg_profit > overall_avg_profit * 0.9 and avg_invalid_bet > 0.15:
@@ -427,8 +431,85 @@ class AdaptiveRewardCalculator:
         if np.mean(bluff_rates) > 0.3:
             self.base_calculator.reward_weights['bluff_success'] -= self.adjustment_factor * 0.8
             self.base_calculator.reward_weights['hand_strength'] += self.adjustment_factor * 0.5
+            
+        # 场景4：累计利润为负 → 强制平衡策略，降低进攻性，增加防守性
+        if recent_avg_profit < 0 and overall_avg_profit < 0:
+            # 显著降低进攻性权重
+            self.base_calculator.reward_weights['aggressive_play'] -= self.adjustment_factor * 2.0
+            # 显著增加防守性权重
+            self.base_calculator.reward_weights['fold_when_weak'] += self.adjustment_factor * 1.5
+            # 增加手牌强度权重，鼓励基于手牌的理性决策
+            self.base_calculator.reward_weights['hand_strength'] += self.adjustment_factor * 1.0
 
         # 限制权重范围（0~2.0）
+        for key in self.base_calculator.reward_weights:
+            self.base_calculator.reward_weights[key] = max(0.0, min(2.0, self.base_calculator.reward_weights[key]))
+        
+        # 执行权重平衡检查
+        self._balance_weights()
+    
+    def _balance_weights(self) -> None:
+        """执行权重平衡检查，确保不同类型的权重之间保持平衡"""
+        # 定义权重类型分组
+        offensive_weights = ['aggressive_play', 'bluff_success', 'raise_when_strong']
+        defensive_weights = ['fold_when_weak', 'call_correctly', 'avoid_weak_hands']
+        analytical_weights = ['hand_strength', 'pot_odds', 'position_advantage']
+        punishment_weights = ['invalid_bet', 'missed_opportunity', 'bad_bluff']
+        
+        # 计算各类权重的平均值
+        avg_offensive = np.mean([self.base_calculator.reward_weights[w] for w in offensive_weights])
+        avg_defensive = np.mean([self.base_calculator.reward_weights[w] for w in defensive_weights])
+        avg_analytical = np.mean([self.base_calculator.reward_weights[w] for w in analytical_weights])
+        
+        # 1. 确保手牌强度权重有最低值（这是理性决策的基础）
+        min_hand_strength_weight = 0.8
+        if self.base_calculator.reward_weights['hand_strength'] < min_hand_strength_weight:
+            self.base_calculator.reward_weights['hand_strength'] = min_hand_strength_weight
+        
+        # 2. 平衡进攻性和防守性权重
+        # 如果进攻性权重比防守性权重高太多，降低进攻性权重
+        if avg_offensive > avg_defensive * 1.5:
+            for w in offensive_weights:
+                self.base_calculator.reward_weights[w] *= 0.9
+            
+            # 相应增加防守性权重
+            for w in defensive_weights:
+                self.base_calculator.reward_weights[w] *= 1.1
+        
+        # 如果防守性权重比进攻性权重高太多，增加进攻性权重（但只在利润为正的情况下）
+        if avg_defensive > avg_offensive * 1.5:
+            # 检查最近表现是否盈利
+            if len(self.performance_history) > 0:
+                recent_avg_profit = np.mean([p['profit_per_hand'] for p in self.performance_history[-5:]])
+                if recent_avg_profit > 0:
+                    for w in offensive_weights:
+                        self.base_calculator.reward_weights[w] *= 1.1
+                    
+                    # 相应降低防守性权重
+                    for w in defensive_weights:
+                        self.base_calculator.reward_weights[w] *= 0.9
+        
+        # 3. 确保分析性权重不会过低（保持决策质量）
+        if avg_analytical < 0.6:
+            for w in analytical_weights:
+                self.base_calculator.reward_weights[w] *= 1.2
+        
+        # 4. 确保惩罚性权重不会过高（避免过度保守）
+        for w in punishment_weights:
+            if self.base_calculator.reward_weights[w] > 1.5:
+                self.base_calculator.reward_weights[w] *= 0.9
+        
+        # 5. 权重归一化，确保所有权重的总和在合理范围内
+        total_weight = sum(self.base_calculator.reward_weights.values())
+        ideal_total = 10.0  # 理想的权重总和
+        
+        if total_weight > ideal_total * 1.2 or total_weight < ideal_total * 0.8:
+            # 需要归一化
+            scale_factor = ideal_total / total_weight
+            for key in self.base_calculator.reward_weights:
+                self.base_calculator.reward_weights[key] *= scale_factor
+        
+        # 再次确保权重在有效范围内
         for key in self.base_calculator.reward_weights:
             self.base_calculator.reward_weights[key] = max(0.0, min(2.0, self.base_calculator.reward_weights[key]))
 

@@ -20,6 +20,18 @@ class StateRepresentation:
             self.player_info_dim + 
             self.game_info_dim
         )
+        # 初始化手牌强度评估的牌型权重（0-1之间的值）
+        self.hand_rank_weights = {
+            'high_card': 0.1,
+            'one_pair': 0.2,
+            'two_pair': 0.35,
+            'three_of_a_kind': 0.5,
+            'straight': 0.65,
+            'flush': 0.8,
+            'full_house': 0.9,
+            'four_of_a_kind': 0.95,
+            'straight_flush': 1.0
+        }
     
     def card_to_one_hot(self, cards: List[Card]) -> np.ndarray:
         """将牌转换为one-hot编码向量"""
@@ -99,6 +111,117 @@ class StateRepresentation:
         
         return state
     
+    def calculate_hand_strength(self, player: Player, game: PokerGame) -> float:
+        """计算玩家当前手牌的强度
+        
+        根据玩家手牌和公共牌，返回0-1之间的手牌强度值
+        0表示最弱的牌，1表示最强的牌
+        """
+        # 获取玩家手牌和公共牌
+        all_cards = player.cards + game.board
+        
+        # 如果没有公共牌（pre-flop阶段），基于手牌对子和高牌计算强度
+        if len(game.board) == 0:
+            return self._calculate_preflop_strength(player.cards)
+        
+        # 简化的手牌强度计算（实际应该有更复杂的算法来评估牌型）
+        # 这里使用基于牌型的加权评估
+        hand_rank = self._determine_hand_rank(all_cards)
+        base_strength = self.hand_rank_weights.get(hand_rank, 0.1)
+        
+        # 根据公共牌数量调整强度（牌局后期强度更确定）
+        board_size_factor = len(game.board) / 5  # 5是最大公共牌数
+        
+        # 根据玩家当前的下注情况和游戏阶段进一步调整
+        position_factor = self._calculate_position_factor(player, game)
+        
+        # 综合计算最终强度
+        final_strength = base_strength * 0.7 + board_size_factor * 0.2 + position_factor * 0.1
+        
+        # 确保返回值在0-1范围内
+        return max(0.0, min(1.0, final_strength))
+    
+    def _calculate_preflop_strength(self, cards: List[Card]) -> float:
+        """计算翻牌前的手牌强度"""
+        # 获取两张手牌的点数和花色
+        ranks = [card.rank for card in cards]
+        suits = [card.suit for card in cards]
+        
+        # 检查是否同花色
+        is_suited = suits[0] == suits[1]
+        
+        # 检查是否对子
+        if ranks[0] == ranks[1]:
+            # 对子的强度基于点数（A最大，2最小）
+            pair_rank = list(RANK_VALUES.keys()).index(ranks[0])
+            return 0.4 + (pair_rank / 12) * 0.4  # 对子强度在0.4-0.8之间
+        
+        # 非对子的情况
+        # 计算点数差（用于判断是否连续）
+        rank_values = [RANK_VALUES[rank] for rank in ranks]
+        rank_diff = abs(rank_values[0] - rank_values[1])
+        
+        # 对子强度基于点数和是否连续/同花色
+        high_rank = max(rank_values)
+        high_rank_factor = (high_rank - 2) / 12  # 2-A映射到0-1
+        
+        # 调整因子
+        suited_bonus = 0.1 if is_suited else 0
+        connected_bonus = 0.15 if rank_diff <= 2 else 0
+        
+        return 0.1 + high_rank_factor * 0.3 + suited_bonus + connected_bonus
+    
+    def _determine_hand_rank(self, cards: List[Card]) -> str:
+        """简化的牌型判断（实际应该有更复杂的算法）"""
+        # 这里实现一个简化版本，真实场景需要更复杂的牌型评估算法
+        # 按照德州扑克规则，从高到低评估：同花顺、四条、葫芦、同花、顺子、三条、两对、一对、高牌
+        
+        # 简化处理：根据牌的数量和随机因素模拟牌型
+        # 实际应用中应该实现完整的牌型判断逻辑
+        import random
+        
+        # 基于牌的数量和一些简单规则给出一个估计的牌型
+        # 这只是一个示例，实际应用需要完整的牌型判断算法
+        if len(cards) >= 5:
+            # 随机选择一个牌型，但基于一些简单启发式规则
+            if random.random() < 0.001:
+                return 'straight_flush'
+            elif random.random() < 0.005:
+                return 'four_of_a_kind'
+            elif random.random() < 0.02:
+                return 'full_house'
+            elif random.random() < 0.05:
+                return 'flush'
+            elif random.random() < 0.1:
+                return 'straight'
+            elif random.random() < 0.2:
+                return 'three_of_a_kind'
+            elif random.random() < 0.4:
+                return 'two_pair'
+            elif random.random() < 0.7:
+                return 'one_pair'
+            else:
+                return 'high_card'
+        else:
+            # 牌数不足5张时，返回基于手牌的简单评估
+            ranks = [card.rank for card in cards[:2]]  # 只看手牌
+            if ranks[0] == ranks[1]:
+                return 'one_pair'
+            else:
+                return 'high_card'
+    
+    def _calculate_position_factor(self, player: Player, game: PokerGame) -> float:
+        """计算位置因子（位置越靠后，位置因子越高）"""
+        # 找到玩家在当前轮次的位置
+        player_idx = game.players.index(player)
+        num_players = len(game.players)
+        
+        # 简化的位置因子计算
+        # 位置越靠后，因子越高（0-1）
+        position_factor = player_idx / (num_players - 1) if num_players > 1 else 0.5
+        
+        return position_factor
+    
     def encode_action(self, action: str, amount: Optional[int] = None, game: Optional[PokerGame] = None) -> np.ndarray:
         """将动作编码为向量"""
         # 假设我们有5个离散动作:
@@ -132,10 +255,27 @@ class StateRepresentation:
         
         return action_vector
     
-    def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player) -> tuple:
+    def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
         """将动作向量解码为具体动作"""
+        # 复制原始动作向量，避免修改原始数据
+        modified_vector = action_vector.copy()
+        
+        # 如果提供了手牌强度信息，根据手牌强度调整动作选择概率
+        if hand_strength > 0:
+            # 弱牌时（手牌强度<0.3）：增加fold权重，降低raise权重
+            if hand_strength < 0.3:
+                # 增加fold动作的权重
+                modified_vector[0] *= 1.5
+                # 降低所有raise动作的权重
+                for i in range(2, 5):
+                    modified_vector[i] *= 0.7
+            # 强牌时（手牌强度>0.7）：增加raise权重
+            elif hand_strength > 0.7:
+                for i in range(2, 5):
+                    modified_vector[i] *= 1.2
+        
         # 找到概率最大的动作
-        action_idx = np.argmax(action_vector)
+        action_idx = np.argmax(modified_vector)
         
         if action_idx == 0:
             return ('fold', None)

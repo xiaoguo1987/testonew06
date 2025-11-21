@@ -105,10 +105,12 @@ class DQNAgent:
                 # 如果没有游戏信息，返回简单动作索引
                 return action_idx, None
             else:
+                # 计算手牌强度
+                hand_strength = self.state_rep.calculate_hand_strength(player, game)
                 # 解码为具体动作
                 action_vector = np.zeros(self.action_dim)
                 action_vector[action_idx] = 1
-                return self.state_rep.decode_action(action_vector, game, player)
+                return self.state_rep.decode_action(action_vector, game, player, hand_strength)
         
         # 利用模型选择最优动作
         q_values = self.model.predict(state.reshape(1, -1), verbose=0)[0]
@@ -117,9 +119,11 @@ class DQNAgent:
         if game is None or player is None:
             return action_idx, None
         else:
+            # 计算手牌强度
+            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
-            return self.state_rep.decode_action(action_vector, game, player)
+            return self.state_rep.decode_action(action_vector, game, player, hand_strength)
     
     def replay(self) -> None:
         """从经验回放中学习"""
@@ -243,9 +247,11 @@ class PolicyGradientAgent:
         if game is None or player is None:
             return action_idx, None
         else:
+            # 计算手牌强度
+            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
-            return self.state_rep.decode_action(action_vector, game, player)
+            return self.state_rep.decode_action(action_vector, game, player, hand_strength)
     
     def discount_rewards(self, rewards: List[float]) -> np.ndarray:
         """计算折扣奖励"""
