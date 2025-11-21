@@ -68,6 +68,7 @@ def parse_arguments():
     parser.add_argument('--learning-rate', type=float, default=0.001, help='学习率')
     parser.add_argument('--batch-size', type=int, default=64, help='批处理大小')
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamax', 'rmsprop', 'sgd'], help='优化器类型')
     parser.add_argument('--eval-interval', type=int, default=100, help='评估间隔（局数）')
     parser.add_argument('--checkpoint-interval', type=int, default=500, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=50, help='每次评估的游戏局数')
@@ -144,7 +145,9 @@ def train_model(args):
             checkpoint_interval=args.checkpoint_interval,
             num_eval_games=args.num_eval_games,
             use_ensemble=args.use_ensemble,
-            opponent_update_interval=args.opponent_update_interval
+            opponent_update_interval=args.opponent_update_interval,
+            learning_rate=args.learning_rate,
+            optimizer=args.optimizer
         )
         
         # 设置探索参数

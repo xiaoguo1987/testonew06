@@ -24,7 +24,8 @@ class DQNAgent:
                  epsilon_decay: float = 0.995,
                  memory_size: int = 10000,
                  batch_size: int = 64,
-                 target_update_freq: int = 10):
+                 target_update_freq: int = 10,
+                 optimizer: str = 'adam'):
         
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -35,6 +36,7 @@ class DQNAgent:
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
+        self.optimizer_type = optimizer
         
         # 经验回放缓冲区
         self.memory = deque(maxlen=memory_size)
@@ -62,8 +64,22 @@ class DQNAgent:
             Dense(self.action_dim, activation='linear')  # 输出Q值
         ])
         
+        # 根据optimizer_type选择优化器
+        if self.optimizer_type.lower() == 'adam':
+            optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        elif self.optimizer_type.lower() == 'adamax':
+            optimizer = tf.keras.optimizers.Adamax(learning_rate=self.learning_rate)
+        elif self.optimizer_type.lower() == 'rmsprop':
+            optimizer = tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate)
+        elif self.optimizer_type.lower() == 'sgd':
+            optimizer = tf.keras.optimizers.SGD(learning_rate=self.learning_rate)
+        else:
+            # 默认使用Adam优化器
+            logger.warning(f"未知的优化器类型: {self.optimizer_type}，默认使用Adam")
+            optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        
         model.compile(
-            optimizer=Adam(learning_rate=self.learning_rate),
+            optimizer=optimizer,
             loss='mse',
             metrics=['mae']
         )

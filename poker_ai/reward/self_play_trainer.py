@@ -32,7 +32,11 @@ class SelfPlayTrainer:
                  eval_interval: int = 100,  # 评估间隔（局数）
                  checkpoint_interval: int = 500,  # 保存检查点间隔（局数）
                  num_eval_games: int = 50,  # 每次评估的游戏局数
-                 use_ensemble: bool = False):
+                 use_ensemble: bool = False,
+                 opponent_update_interval: int = 10000,
+                 learning_rate: float = 0.001,
+                 optimizer: str = 'adam',
+                 target_update_freq: int = 10):
         
         self.model_type = model_type
         self.checkpoint_dir = checkpoint_dir
@@ -46,6 +50,8 @@ class SelfPlayTrainer:
         self.use_ensemble = use_ensemble
         self.opponent_update_interval = opponent_update_interval
         self.target_update_freq = target_update_freq
+        self.learning_rate = learning_rate
+        self.optimizer = optimizer
         
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -67,7 +73,8 @@ class SelfPlayTrainer:
         if self.use_ensemble:
             self.main_agent = EnsembleAgent()
         else:
-            self.main_agent = PokerAIAgent(agent_type=self.model_type, target_update_freq=self.target_update_freq)
+            self.main_agent = PokerAIAgent(agent_type=self.model_type, target_update_freq=self.target_update_freq, 
+                                         learning_rate=self.learning_rate, optimizer=self.optimizer)
         
         # 创建对手代理（使用历史版本）
         self.opponent_agents = []
@@ -75,7 +82,8 @@ class SelfPlayTrainer:
             if self.use_ensemble:
                 self.opponent_agents.append(EnsembleAgent())
             else:
-                self.opponent_agents.append(PokerAIAgent(agent_type=self.model_type, target_update_freq=self.target_update_freq))
+                self.opponent_agents.append(PokerAIAgent(agent_type=self.model_type, target_update_freq=self.target_update_freq, 
+                                                        learning_rate=self.learning_rate, optimizer=self.optimizer))
     
     def _create_game(self) -> Tuple[PokerGame, List[Player]]:
         """创建游戏实例和玩家"""
