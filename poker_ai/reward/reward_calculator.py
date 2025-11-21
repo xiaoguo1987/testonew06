@@ -82,7 +82,43 @@ class RewardCalculator:
             ('A', 'Q'): 0.75 if is_suited else 0.6, ('A', 'J'): 0.7 if is_suited else 0.55,
             ('A', 'T'): 0.65 if is_suited else 0.5, ('K', 'Q'): 0.65 if is_suited else 0.5,
             ('K', 'J'): 0.6 if is_suited else 0.45, ('Q', 'J'): 0.55 if is_suited else 0.4,
-            ('J', 'T'): 0.5 if is_suited else 0.35, ('T', '9'): 0.45 if is_suited else 0.3
+            ('J', 'T'): 0.5 if is_suited else 0.35, ('T', '9'): 0.45 if is_suited else 0.3,
+            
+            # 其他高牌组合
+           # ('A', '9'): 0.6 if is_suited else 0.45,
+           # ('A', '8'): 0.55 if is_suited else 0.4,
+          #  ('A', '7'): 0.5 if is_suited else 0.38,
+          #  ('A', '6'): 0.48 if is_suited else 0.36,
+            ('A', '5'): 0.46 if is_suited else 0.35,
+            ('A', '4'): 0.44 if is_suited else 0.34,
+            ('A', '3'): 0.42 if is_suited else 0.33,
+            ('A', '2'): 0.4 if is_suited else 0.32,
+            
+            ('K', 'T'): 0.55 if is_suited else 0.4,
+            ('Q', 'T'): 0.5 if is_suited else 0.38,
+            ('Q', '9'): 0.48 if is_suited else 0.36,
+           # ('J', 'T'): 0.55 if is_suited else 0.45,
+            ('J', '9'): 0.5 if is_suited else 0.38,
+           # ('T', '9'): 0.55 if is_suited else 0.45,
+            ('T', '8'): 0.5 if is_suited else 0.38,
+            
+            # 同花连张（已在上面覆盖，但这里特别强调）
+            # 这些强度值与上面重复，因为已经在上面的条目里考虑了同色情况
+            # 以下是额外的低牌同花连张组合
+            ('9', '8'): 0.55 if is_suited else 0.45,
+            ('9', '7'): 0.5 if is_suited else 0.38,
+            
+            ('8', '7'): 0.55 if is_suited else 0.45,
+            
+            ('7', '6'): 0.55 if is_suited else 0.45,
+            
+            ('6', '5'): 0.55 if is_suited else 0.45,
+            
+            ('5', '4'): 0.55 if is_suited else 0.45,
+            
+            ('4', '3'): 0.55 if is_suited else 0.45,
+            
+            ('3', '2'): 0.55 if is_suited else 0.45
         }
         
         base_strength = hand_strength_map.get(key, 0.3)
