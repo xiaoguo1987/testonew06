@@ -16,13 +16,14 @@ from poker_ai.model.ai_agent import PokerAIAgent
 from poker_ai.reward.reward_calculator import RewardCalculator
 
 # 设置日志
-logging.basicConfig(level=logging.INFO,
+logging.basicConfig(level=logging.DEBUG,  # 修改为DEBUG级别以查看更详细的日志
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     handlers=[
                         logging.FileHandler("test_fix.log"),
                         logging.StreamHandler()
                     ])
 logger = logging.getLogger('TestFix')
+logger.setLevel(logging.DEBUG)  # 确保logger使用DEBUG级别
 
 def setup_test_environment():
     """设置测试环境"""
@@ -67,6 +68,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
     # 初始化统计数据
     hand_results = []
     profit_history = {player.name: [] for player in players}
+    logger.debug("初始化统计数据完成")
     
     # 记录初始筹码
     initial_chips = {player.name: player.stack for player in players}
@@ -76,21 +78,39 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
         # 进度显示
         if hand_num % 100 == 0:
             logger.info(f"已完成 {hand_num}/{num_hands} 手牌")
+        elif hand_num % 10 == 0:
+            logger.debug(f"处理手牌 {hand_num}/{num_hands}")
         
         # 开始新手牌
+        logger.debug(f"开始手牌 #{hand_num}")
         game.start_new_hand()
         
         # 记录每轮开始时的玩家筹码
         start_chips = {player.name: player.stack for player in players}
         
         # 进行游戏
+        logger.debug(f"开始游戏循环，初始玩家索引: {game.current_player}")
+        loop_count = 0
+        max_loop_iterations = 100  # 防止无限循环
         while not game.is_hand_over():
+            loop_count += 1
+            if loop_count > max_loop_iterations:
+                logger.error(f"警告: 游戏循环超过{max_loop_iterations}次迭代，可能陷入死循环")
+                logger.error(f"当前状态: hand_num={hand_num}, current_player_index={game.current_player}, current_bet={game.current_bet}")
+                # 显示所有玩家状态
+                for i, p in enumerate(game.players):
+                    logger.error(f"玩家{i} ({p.name}): stack={p.stack}, bet={p.bet}, folded={p.folded}")
+                break
+                
             # 获取当前活跃玩家
             current_player = game.players[game.current_player]
+            logger.debug(f"循环#{loop_count}: 当前玩家={current_player.name}, 索引={game.current_player}, 已下注={current_player.bet}, 当前底池={game.current_bet}")
             
             if current_player.is_ai and current_player.name in ai_agents:
                 # AI玩家选择动作
+                logger.debug(f"AI玩家 {current_player.name} 正在选择动作")
                 action, amount = ai_agents[current_player.name].select_action(game, current_player)
+                logger.debug(f"AI玩家 {current_player.name} 选择动作: {action}, 金额: {amount}")
             else:
                 # 非AI玩家采取默认动作（简单策略）
                 if game.current_bet > current_player.bet:
@@ -109,28 +129,42 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
                     else:
                         action = 'raise'
                         amount = game.current_bet + game.big_blind * 2
+                logger.debug(f"非AI玩家 {current_player.name} 选择动作: {action}, 金额: {amount}")
             
             # 执行动作
+            logger.debug(f"执行动作: {action}, 金额: {amount}")
             game.handle_action(current_player, action, amount)
+            logger.debug(f"动作执行完成")
             
             # 移动到下一个玩家
+            logger.debug(f"移动到下一个玩家")
             game.next_player()
+            logger.debug(f"新的当前玩家索引: {game.current_player}")
+        
+        if loop_count > max_loop_iterations:
+            logger.error("由于可能的死循环，提前结束手牌")
+            # 重置游戏状态以继续下一手牌
+            game.start_new_hand()
         
         # 计算每轮利润并更新累计利润
+        logger.debug("计算本轮利润")
         round_profits = {}
         for player in players:
             round_profit = player.stack - start_chips[player.name]
             round_profits[player.name] = round_profit
             player.total_profit += round_profit
             profit_history[player.name].append(player.total_profit)
+            logger.debug(f"玩家 {player.name}: 本轮利润={round_profit}, 累计利润={player.total_profit}")
         
         # 记录结果（由于PokerGame类没有hand_winner属性，暂时记录为Unknown）
         # 查找当前轮次中筹码增加的玩家作为获胜者
+        logger.debug("确定本轮获胜者")
         winner = None
         for player in players:
             if player.stack > start_chips[player.name]:
                 winner = player
                 break
+        logger.debug(f"手牌 #{hand_num} 获胜者: {winner.name if winner else 'Unknown'}")
         
         hand_results.append({
             'hand_num': hand_num,
@@ -139,8 +173,10 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
         })
     
     # 计算最终利润
+    logger.debug("计算最终利润")
     final_profits = {player.name: player.stack - initial_chips[player.name] 
                     for player in players}
+    logger.debug(f"最终利润: {final_profits}")
     
     return hand_results, profit_history, final_profits
 
