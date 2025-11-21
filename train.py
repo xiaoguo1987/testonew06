@@ -102,7 +102,6 @@ def parse_arguments():
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
     parser.add_argument('--eps-end', type=float, default=0.01, help='ε-贪婪策略最终探索率')
     parser.add_argument('--eps-decay', type=float, default=0.0001, help='ε衰减速率')
-    parser.add_argument('--target-update', type=int, default=10, help='目标网络更新频率')
     
     return parser.parse_args()
 
