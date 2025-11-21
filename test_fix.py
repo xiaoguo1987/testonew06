@@ -84,7 +84,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
         start_chips = {player.name: player.stack for player in players}
         
         # 进行游戏
-        while not game.is_hand_over:
+        while not game.is_hand_over():
             # 获取当前活跃玩家
             current_player = game.get_current_player()
             
@@ -121,10 +121,17 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
             player.total_profit += round_profit
             profit_history[player.name].append(player.total_profit)
         
-        # 记录结果
+        # 记录结果（由于PokerGame类没有hand_winner属性，暂时记录为Unknown）
+        # 查找当前轮次中筹码增加的玩家作为获胜者
+        winner = None
+        for player in players:
+            if player.stack > start_chips[player.name]:
+                winner = player
+                break
+        
         hand_results.append({
             'hand_num': hand_num,
-            'winner': game.hand_winner.name if game.hand_winner else 'None',
+            'winner': winner.name if winner else 'Unknown',
             'profits': round_profits
         })
     
