@@ -44,6 +44,8 @@ class SelfPlayTrainer:
         self.checkpoint_interval = checkpoint_interval
         self.num_eval_games = num_eval_games
         self.use_ensemble = use_ensemble
+        self.opponent_update_interval = opponent_update_interval
+        self.target_update_freq = target_update_freq
         
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
