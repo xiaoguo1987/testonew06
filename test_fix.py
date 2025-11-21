@@ -111,7 +111,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
                         amount = game.current_bet + game.big_blind * 2
             
             # 执行动作
-            game.execute_action(current_player, action, amount)
+            game.handle_action(current_player, action, amount)
         
         # 计算每轮利润并更新累计利润
         round_profits = {}
