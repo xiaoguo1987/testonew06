@@ -25,7 +25,7 @@ class SelfPlayTrainer:
     """德州扑克自我对弈训练器（整合策略指标统计与自适应奖励调整）"""
     
     def __init__(self,
-                 model_type: str = 'dqn',  # 'dqn' 或 'policy_gradient'
+                 model_type: str = 'dqn',  # 'dqn'、'policy_gradient' 或 'ppo'
                  checkpoint_dir: str = './checkpoints',
                  small_blind: int = 5,
                  big_blind: int = 10,

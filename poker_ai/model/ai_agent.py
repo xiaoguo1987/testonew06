@@ -4,6 +4,7 @@ import numpy as np
 from typing import Tuple, Optional, Dict
 from .state_representation import StateRepresentation
 from .dqn_agent import DQNAgent, PolicyGradientAgent
+from .ppo_model import PPOModel  # 添加PPO模型导入
 from ..game.poker_game import Player, PokerGame
 
 class PokerAIAgent:
@@ -13,7 +14,7 @@ class PokerAIAgent:
                  learning_rate: float = 0.001, optimizer: str = 'adam'):
         """
         初始化AI代理
-        agent_type: 'dqn' 或 'policy_gradient'
+        agent_type: 'dqn'、'policy_gradient' 或 'ppo'
         state_dim: 状态维度，如果为None则自动计算
         target_update_freq: DQN目标网络更新频率（仅DQN代理有效）
         learning_rate: 学习率
@@ -31,6 +32,9 @@ class PokerAIAgent:
                                  learning_rate=learning_rate, optimizer=optimizer)
         elif agent_type == 'policy_gradient':
             self.agent = PolicyGradientAgent(state_dim=state_dim)
+        elif agent_type == 'ppo':
+            # 创建PPO模型
+            self.agent = PPOModel(input_dim=state_dim, lr=learning_rate)
         else:
             raise ValueError(f"不支持的代理类型: {agent_type}")
         
@@ -64,6 +68,13 @@ class PokerAIAgent:
             # 回合结束时训练
             if done:
                 self.agent.train()
+        elif self.agent_type == 'ppo':
+            # PPO代理需要完整的经验元组
+            if all(v is not None for v in [state, action, next_state, done]):
+                # 对于PPO，我们可能需要累积一批经验后再训练
+                # 这里简化处理，直接调用训练方法
+                self.agent.train(np.array([state]), np.array([action]), np.array([reward]), 
+                                np.array([done]), np.array([1.0]))  # 简化处理
     
     def get_decision_info(self, game: PokerGame, player: Player) -> Dict:
         """
@@ -82,6 +93,12 @@ class PokerAIAgent:
             # 获取动作概率
             action_probs = self.agent.get_action_probs(state)
             decision_info['action_probabilities'] = action_probs.tolist()
+            decision_info['most_likely_action'] = int(np.argmax(action_probs))
+        elif self.agent_type == 'ppo':
+            # 获取动作概率和状态价值
+            action_probs, value = self.agent.predict(state)
+            decision_info['action_probabilities'] = action_probs.tolist()
+            decision_info['state_value'] = float(value)
             decision_info['most_likely_action'] = int(np.argmax(action_probs))
         
         # 添加游戏状态信息
@@ -242,6 +259,9 @@ if __name__ == "__main__":
     # 创建单个AI代理
     ai_agent = PokerAIAgent(agent_type='dqn')
     
+    # 创建PPO代理
+    ppo_agent = PokerAIAgent(agent_type='ppo')
+    
     # 创建集成代理
     ensemble_agent = EnsembleAgent()
     
@@ -249,7 +269,10 @@ if __name__ == "__main__":
     ai_action = ai_agent.select_action(game, players[1])
     print(f"单个AI代理选择的动作: {ai_action}")
     
-    ensemble_action = ensemble_agent.select_action(game, players[2])
+    ppo_action = ppo_agent.select_action(game, players[2])
+    print(f"PPO代理选择的动作: {ppo_action}")
+    
+    ensemble_action = ensemble_agent.select_action(game, players[3])
     print(f"集成代理选择的动作: {ensemble_action}")
     
     # 测试决策信息
