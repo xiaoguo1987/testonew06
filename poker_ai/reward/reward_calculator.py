@@ -450,11 +450,11 @@ class AdaptiveRewardCalculator:
     
     def _balance_weights(self) -> None:
         """执行权重平衡检查，确保不同类型的权重之间保持平衡"""
-        # 定义权重类型分组
-        offensive_weights = ['aggressive_play', 'bluff_success', 'raise_when_strong']
-        defensive_weights = ['fold_when_weak', 'call_correctly', 'avoid_weak_hands']
+        # 定义权重类型分组，只使用实际存在的权重键
+        offensive_weights = ['aggressive_play', 'bluff_success']
+        defensive_weights = ['fold_when_weak']
         analytical_weights = ['hand_strength', 'pot_odds', 'position_advantage']
-        punishment_weights = ['invalid_bet', 'missed_opportunity', 'bad_bluff']
+        punishment_weights = ['invalid_bet']
         
         # 计算各类权重的平均值
         avg_offensive = np.mean([self.base_calculator.reward_weights[w] for w in offensive_weights])

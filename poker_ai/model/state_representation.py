@@ -274,8 +274,32 @@ class StateRepresentation:
                 for i in range(2, 5):
                     modified_vector[i] *= 1.2
         
+        # 行为调整：如果玩家处于亏损状态，降低进攻性
+        # 获取玩家的历史利润（通过累计统计）
+        player_profit = getattr(player, 'total_profit', 0)
+        
+        # 在负利润情况下，调整动作选择以更加谨慎
+        if player_profit < 0:
+            # 降低所有raise动作的权重
+            for i in range(2, 5):
+                modified_vector[i] *= 0.6
+            # 增加fold和call的权重，使AI更加保守
+            modified_vector[0] *= 1.3  # 增加fold权重
+            modified_vector[1] *= 1.2  # 增加call权重
+        
         # 找到概率最大的动作
         action_idx = np.argmax(modified_vector)
+        
+        # 行为调整：如果玩家处于亏损状态，进一步降低进攻性
+        # 在负利润情况下，当选择raise动作时，有50%概率转为更保守的动作
+        if action_idx >= 2 and player_profit < 0 and np.random.random() < 0.5:
+            # 选择更保守的动作
+            call_amount = max(0, game.current_bet - player.bet)
+            # 优先选择call（如果可行），否则选择fold
+            if call_amount <= player.stack:
+                return ('call', call_amount)
+            else:
+                return ('fold', None)
         
         if action_idx == 0:
             return ('fold', None)
