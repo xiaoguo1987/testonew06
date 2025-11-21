@@ -49,13 +49,14 @@ def setup_test_environment():
         if player.is_ai:
             ai_agents[player.name] = PokerAIAgent(agent_type='dqn')
     
-    # 创建奖励计算器（使用修复后的权重）
-    reward_calculator = RewardCalculator(
-        profit_weight=1.5,
-        aggressive_play_weight=0.8,  # 降低了进攻性权重
-        bluff_success_weight=0.5,    # 增加了诈唬成功权重
-        hand_strength_weight=1.0
-    )
+    # 创建奖励计算器
+    reward_calculator = RewardCalculator()
+    
+    # 调整奖励权重以测试我们的修复方案
+    reward_calculator.reward_weights['aggressive_play'] = 0.05  # 降低进攻性权重
+    reward_calculator.reward_weights['bluff_success'] = 0.6    # 增加诈唬成功权重
+    reward_calculator.reward_weights['hand_strength'] = 0.4    # 增加手牌强度权重
+    reward_calculator.reward_weights['fold_when_weak'] = 0.5   # 增加及时弃牌奖励
     
     return game, players, ai_agents, reward_calculator
 
