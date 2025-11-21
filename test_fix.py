@@ -44,11 +44,11 @@ def setup_test_environment():
     # 创建游戏实例，小盲注5，大盲注10
     game = PokerGame(5, 10, players)
     
-    # 创建AI代理（使用DQN模型）
+    # 创建AI代理（使用PPO模型）
     ai_agents = {}
     for player in players:
         if player.is_ai:
-            ai_agents[player.name] = PokerAIAgent(agent_type='dqn')
+            ai_agents[player.name] = PokerAIAgent(agent_type='ppo')
     
     # 创建奖励计算器
     reward_calculator = RewardCalculator()

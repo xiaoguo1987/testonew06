@@ -1,21 +1,26 @@
 import tensorflow as tf
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from tensorflow.keras import layers, models
 from tensorflow.keras.optimizers import Adam
+from ..game.poker_game import Player, PokerGame
+from .state_representation import StateRepresentation
 
 class PPOModel:
     """近端策略优化（PPO）模型，兼容德州扑克AI训练框架"""
     def __init__(
         self,
         input_dim: int = 18,  # 状态输入维度（与DQN/PG一致）
-        output_dim: int = 3,  # 动作维度（fold=0, call=1, raise=2）
+        output_dim: int = 5,  # 动作维度（与DQN保持一致）
         lr: float = 3e-4,
         clip_epsilon: float = 0.2,  # PPO Clip参数
         gamma: float = 0.99,  # 折扣因子
         lambda_: float = 0.95,  # GAE参数
         update_epochs: int = 10,  # 每批数据更新轮次
-        batch_size: int = 64  # 批次大小
+        batch_size: int = 64,  # 批次大小
+        epsilon: float = 0.1,  # 探索率（兼容DQN接口）
+        epsilon_min: float = 0.01,
+        epsilon_decay: float = 0.995
     ):
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -25,6 +30,10 @@ class PPOModel:
         self.update_epochs = update_epochs
         self.batch_size = batch_size
         self.last_loss = 0.0  # 记录最新损失（用于TensorBoard）
+        self.epsilon = epsilon  # 探索率
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
+        self.state_rep = StateRepresentation()  # 状态表示器
 
         # 构建策略网络（Actor）和价值网络（Critic）
         self.actor = self._build_actor()
@@ -93,6 +102,71 @@ class PPOModel:
         else:
             action = np.random.choice(self.output_dim, p=action_probs)
         return action, action_probs[action]
+    
+    def act(self, state: np.ndarray, game: Optional[PokerGame] = None, player: Optional[Player] = None) -> Tuple[str, Optional[int]]:
+        """与DQN兼容的动作选择接口
+        
+        Args:
+            state: 当前状态向量
+            game: 游戏实例
+            player: 当前玩家
+            
+        Returns:
+            (动作类型, 动作金额)
+        """
+        # 探索与利用
+        if np.random.rand() <= self.epsilon:
+            # 随机选择动作
+            action_idx = np.random.randint(0, self.output_dim)
+        else:
+            # 使用PPO模型选择动作
+            action_probs, _ = self.predict(state)
+            action_idx = np.random.choice(self.output_dim, p=action_probs)
+        
+        if game is None or player is None:
+            # 如果没有游戏信息，返回动作索引
+            return action_idx, None
+        else:
+            # 计算手牌强度
+            hand_strength = self.state_rep.calculate_hand_strength(player, game)
+            # 构建动作向量（独热编码）
+            action_vector = np.zeros(self.output_dim)
+            action_vector[action_idx] = 1
+            # 使用state_representation解码动作
+            return self.state_rep.decode_action(action_vector, game, player, hand_strength)
+    
+    def remember(self, state: np.ndarray, action: int, reward: float, next_state: np.ndarray, done: bool) -> None:
+        """兼容DQN接口的经验存储方法
+        
+        注意：PPO通常不使用经验回放，这里仅为兼容接口
+        """
+        # 由于PPO使用回合经验而非经验回放，这里可以不做实际存储
+        # 或者可以存储到临时缓冲区，在回合结束时统一训练
+        pass
+    
+    def replay(self) -> None:
+        """兼容DQN接口的回放学习方法
+        
+        注意：PPO通常不使用经验回放，这里仅为兼容接口
+        """
+        # PPO不使用经验回放，这里为空实现
+        pass
+    
+    def load(self, filepath: str) -> None:
+        """兼容DQN接口的模型加载方法"""
+        self.load_weights(filepath)
+    
+    def save(self, filepath: str) -> None:
+        """兼容DQN接口的模型保存方法"""
+        self.save_weights(filepath)
+    
+    def update_target_model(self) -> None:
+        """兼容DQN接口的目标模型更新方法
+        
+        注意：PPO不使用目标网络，这里为空实现
+        """
+        # PPO不使用目标网络，这里为空实现
+        pass
 
     def train(
         self,
