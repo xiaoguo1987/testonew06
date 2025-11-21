@@ -37,7 +37,7 @@ logger.info(f"日志已配置，记录到: {log_file}")
 # 导入必要的模块
 try:
     from poker_ai.reward.self_play_trainer import SelfPlayTrainer
-    from poker_ai.advisor.ai_advisor import PokerAdvisor  # 修正类名拼写错误
+    from poker_ai.advisor.ai_advisor import AIAvisor  # 正确的类名是AIAvisor
     from poker_ai.game.poker_game import PokerGame, Player
     from poker_ai.model.ai_agent import PokerAIAgent
     from poker_ai.utils import checkpoint  # 确保正确导入checkpoint模块

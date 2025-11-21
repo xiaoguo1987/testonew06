@@ -257,6 +257,16 @@ class PokerGame:
         winner.stack += self.pot
         self.pot = 0
     
+    def is_hand_over(self) -> bool:
+        """检查当前手牌是否结束"""
+        # 检查是否只剩一个活跃玩家
+        active_players = [p for p in self.players if p.is_active]
+        if len(active_players) <= 1:
+            return True
+        
+        # 检查是否已经完成所有轮次（河牌后）
+        return self.round > 4
+    
     def get_game_state(self) -> Dict:
         """获取游戏当前状态（用于AI决策）"""
         return {

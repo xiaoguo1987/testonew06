@@ -1,11 +1,15 @@
 # 德州扑克AI代理接口
 
 import numpy as np
+import logging
 from typing import Tuple, Optional, Dict
 from .state_representation import StateRepresentation
 from .dqn_agent import DQNAgent, PolicyGradientAgent
 from .ppo_model import PPOModel  # 添加PPO模型导入
 from ..game.poker_game import Player, PokerGame
+
+# 设置日志
+logger = logging.getLogger('PokerAIAgent')
 
 class PokerAIAgent:
     """德州扑克AI代理统一接口"""

@@ -110,7 +110,7 @@ class RewardCalculator:
 
     def _create_remaining_deck(self, used_cards: Set[Card]) -> List[Card]:
         """创建剩余牌库（排除已使用的牌）"""
-        suits = ['hearts', 'diamonds', 'clubs', 'spades']
+        suits = ['♥', '♦', '♣', '♠']
         ranks = ['2','3','4','5','6','7','8','9','T','J','Q','K','A']
         full_deck = [Card(rank, suit) for suit in suits for rank in ranks]
         return [card for card in full_deck if card not in used_cards]
@@ -394,6 +394,10 @@ class AdaptiveRewardCalculator:
         for key in self.base_calculator.reward_weights:
             self.base_calculator.reward_weights[key] = max(0.0, min(2.0, self.base_calculator.reward_weights[key]))
 
+    def is_bluffing(self, player: Player, game: PokerGame, action: str) -> bool:
+        """判断玩家是否在诈唬（代理到基础计算器）"""
+        return self.base_calculator.is_bluffing(player, game, action)
+    
     def calculate_reward(self, *args, **kwargs) -> float:
         """兼容基础计算器接口"""
         return self.base_calculator.calculate_reward(*args, **kwargs)
@@ -408,7 +412,7 @@ if __name__ == "__main__":
     players = [Player(f"Player {i}", 10000, i > 0) for i in range(6)]
     game = PokerGame(5, 10, players)
     game.start_new_hand()
-    game.board = [Card('5', 'hearts'), Card('10', 'clubs'), Card('K', 'spades')]  # 模拟翻牌
+    game.board = [Card('5', '♥'), Card('10', '♣'), Card('K', '♠')]  # 模拟翻牌
     
     # 初始化计算器
     reward_calc = RewardCalculator()
