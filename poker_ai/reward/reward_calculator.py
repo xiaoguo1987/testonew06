@@ -57,15 +57,24 @@ class RewardCalculator:
         rank1, rank2 = cards[0].rank, cards[1].rank
         is_suited = cards[0].suit == cards[1].suit
         
-        # 定义一些常见起手牌的相对强度
-        # 这里是一个简化版本，实际应该使用更精确的评估
+        # 定义所有起手牌的相对强度
         hand_strength_map = {
+            # 对子（从高到低）
             ('A', 'A'): 0.95,
             ('K', 'K'): 0.85,
             ('Q', 'Q'): 0.75,
             ('J', 'J'): 0.65,
             ('T', 'T'): 0.55,
             ('9', '9'): 0.45,
+            ('8', '8'): 0.38,
+            ('7', '7'): 0.32,
+            ('6', '6'): 0.28,
+            ('5', '5'): 0.25,
+            ('4', '4'): 0.22,
+            ('3', '3'): 0.20,
+            ('2', '2'): 0.18,
+            
+            # AK以上高牌组合
             ('A', 'K'): 0.8 if is_suited else 0.65,
             ('A', 'Q'): 0.75 if is_suited else 0.6,
             ('A', 'J'): 0.7 if is_suited else 0.55,
@@ -73,7 +82,42 @@ class RewardCalculator:
             ('K', 'Q'): 0.65 if is_suited else 0.5,
             ('K', 'J'): 0.6 if is_suited else 0.45,
             ('Q', 'J'): 0.55 if is_suited else 0.4,
-            # 更多组合可以继续添加
+            
+            # 其他高牌组合
+           # ('A', '9'): 0.6 if is_suited else 0.45,
+           # ('A', '8'): 0.55 if is_suited else 0.4,
+          #  ('A', '7'): 0.5 if is_suited else 0.38,
+          #  ('A', '6'): 0.48 if is_suited else 0.36,
+            ('A', '5'): 0.46 if is_suited else 0.35,
+            ('A', '4'): 0.44 if is_suited else 0.34,
+            ('A', '3'): 0.42 if is_suited else 0.33,
+            ('A', '2'): 0.4 if is_suited else 0.32,
+            
+            ('K', 'T'): 0.55 if is_suited else 0.4,
+            ('Q', 'T'): 0.5 if is_suited else 0.38,
+            ('Q', '9'): 0.48 if is_suited else 0.36,
+            ('J', 'T'): 0.55 if is_suited else 0.45,
+            ('J', '9'): 0.5 if is_suited else 0.38,
+            ('T', '9'): 0.55 if is_suited else 0.45,
+            ('T', '8'): 0.5 if is_suited else 0.38,
+            
+            # 同花连张（已在上面覆盖，但这里特别强调）
+            # 这些强度值与上面重复，因为已经在上面的条目里考虑了同色情况
+            # 以下是额外的低牌同花连张组合
+            ('9', '8'): 0.55 if is_suited else 0.45,
+            ('9', '7'): 0.5 if is_suited else 0.38,
+            
+            ('8', '7'): 0.55 if is_suited else 0.45,
+            
+            ('7', '6'): 0.55 if is_suited else 0.45,
+            
+            ('6', '5'): 0.55 if is_suited else 0.45,
+            
+            ('5', '4'): 0.55 if is_suited else 0.45,
+            
+            ('4', '3'): 0.55 if is_suited else 0.45,
+            
+            ('3', '2'): 0.55 if is_suited else 0.45,
         }
         
         # 考虑牌的顺序无关性
@@ -98,21 +142,91 @@ class RewardCalculator:
     
     def _estimate_win_probability(self, player: Player, game: PokerGame) -> float:
         """
-        使用简化的方法估算胜率
-        在实际实现中，这里应该使用蒙特卡洛模拟
+        使用蒙特卡洛模拟估算胜率
+        通过模拟大量可能的剩余公共牌和对手手牌组合来计算胜率
         """
-        # 简化版本 - 根据已有的公共牌和手牌评估强度
-        # 实际实现中，应该模拟剩余的公共牌和对手的可能手牌
+        import itertools
+        from copy import deepcopy
         
-        # 计算当前的手牌等级
-        if len(game.board) >= 3:
-            # 使用当前可见的牌进行评估
-            best_hand = player.cards + game.board
-            # 这里简化处理，返回一个基于手牌等级的强度值
-            # 实际中应该使用更复杂的算法
-            return 0.5 + (len(game.board) / 5) * 0.3
+        # 确定已使用的牌（玩家手牌和公共牌）
+        used_cards = set(player.cards) | set(game.board)
         
-        return 0.5  # 默认值
+        # 计算剩余需要发的公共牌数量
+        remaining_community_cards_needed = 5 - len(game.board)
+        
+        # 获取活跃的对手数量
+        active_opponents = [p for p in game.players if p.is_active and p != player]
+        num_opponents = len(active_opponents)
+        
+        # 如果没有对手，胜率为100%
+        if num_opponents == 0:
+            return 1.0
+        
+        # 蒙特卡洛模拟的参数
+        num_simulations = 1000  # 模拟次数，可以根据需要调整
+        wins = 0
+        ties = 0
+        
+        # 生成未使用的牌
+        all_possible_cards = []
+        for suit in ['♥', '♦', '♣', '♠']:
+            for rank in ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']:
+                card = type(list(used_cards)[0])(rank, suit)  # 创建与已有牌相同类型的新牌
+                if card not in used_cards:
+                    all_possible_cards.append(card)
+        
+        # 进行蒙特卡洛模拟
+        for _ in range(num_simulations):
+            # 随机打乱剩余的牌
+            shuffled_cards = deepcopy(all_possible_cards)
+            from random import shuffle
+            shuffle(shuffled_cards)
+            
+            # 模拟剩余的公共牌
+            simulated_community_cards = shuffled_cards[:remaining_community_cards_needed]
+            complete_board = game.board + simulated_community_cards
+            
+            # 玩家的完整手牌（手牌+公共牌）
+            player_complete_hand = player.cards + complete_board
+            
+            # 模拟对手的手牌
+            opponent_wins = 0
+            
+            # 为每个对手分配2张牌
+            card_index = remaining_community_cards_needed
+            for _ in range(num_opponents):
+                # 确保有足够的牌给对手
+                if card_index + 2 > len(shuffled_cards):
+                    break
+                
+                # 对手的手牌
+                opponent_cards = shuffled_cards[card_index:card_index+2]
+                card_index += 2
+                
+                # 对手的完整手牌
+                opponent_complete_hand = opponent_cards + complete_board
+                
+                # 比较玩家和对手的手牌
+                from ..game.cards import compare_hands
+                result = compare_hands(player_complete_hand, opponent_complete_hand)
+                
+                # 如果任何一个对手赢了，玩家就输了这一局模拟
+                if result < 0:
+                    opponent_wins += 1
+                    break  # 只要有一个对手赢，玩家就输了
+                elif result == 0:
+                    ties += 1
+                    break  # 平局
+            
+            # 如果没有对手赢，玩家就赢了
+            if opponent_wins == 0:
+                wins += 1
+        
+        # 计算胜率
+        # 考虑平局的情况，将平局平均分配给获胜概率
+        win_probability = (wins + ties * 0.5) / num_simulations
+        
+        return win_probability
     
     def calculate_pot_odds(self, player: Player, game: PokerGame, action_amount: Optional[int] = None) -> float:
         """

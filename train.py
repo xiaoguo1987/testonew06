@@ -92,6 +92,16 @@ def parse_arguments():
     # 演示参数
     parser.add_argument('--demo-hands', type=int, default=10, help='演示的手牌数量')
     
+    # 自我对弈参数
+    parser.add_argument('--use-self-play', action='store_true', default=True, help='启用自我对弈训练')
+    parser.add_argument('--opponent-update-interval', type=int, default=10000, help='对手更新间隔（局数）')
+    
+    # 探索参数
+    parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
+    parser.add_argument('--eps-end', type=float, default=0.01, help='ε-贪婪策略最终探索率')
+    parser.add_argument('--eps-decay', type=float, default=0.0001, help='ε衰减速率')
+    parser.add_argument('--target-update', type=int, default=10, help='目标网络更新频率')
+    
     return parser.parse_args()
 
 def setup_environment(args):
@@ -132,8 +142,24 @@ def train_model(args):
             eval_interval=args.eval_interval,
             checkpoint_interval=args.checkpoint_interval,
             num_eval_games=args.num_eval_games,
-            use_ensemble=args.use_ensemble
+            use_ensemble=args.use_ensemble,
+            opponent_update_interval=args.opponent_update_interval
         )
+        
+        # 设置探索参数
+        if hasattr(trainer, 'main_agent') and trainer.main_agent:
+            # 直接设置探索率（如果是DQN代理）
+            if hasattr(trainer.main_agent, 'agent') and hasattr(trainer.main_agent.agent, 'epsilon'):
+                trainer.main_agent.agent.epsilon = args.eps_start
+            if hasattr(trainer.main_agent, 'agent') and hasattr(trainer.main_agent.agent, 'epsilon_min'):
+                trainer.main_agent.agent.epsilon_min = args.eps_end
+            # 设置衰减率
+            if hasattr(trainer.main_agent, 'agent') and hasattr(trainer.main_agent.agent, 'epsilon_decay'):
+                trainer.main_agent.agent.epsilon_decay = args.eps_decay
+        
+        # 设置对手更新间隔
+        if hasattr(trainer, 'opponent_update_interval'):
+            trainer.opponent_update_interval = args.opponent_update_interval
         
         # 如果指定了模型路径或需要恢复训练
         if args.model_path:

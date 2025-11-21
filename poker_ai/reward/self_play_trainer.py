@@ -32,7 +32,8 @@ class SelfPlayTrainer:
                  eval_interval: int = 100,  # 评估间隔（局数）
                  checkpoint_interval: int = 500,  # 保存检查点间隔（局数）
                  num_eval_games: int = 50,  # 每次评估的游戏局数
-                 use_ensemble: bool = False):
+                 use_ensemble: bool = False,
+                 opponent_update_interval: int = 10000):  # 对手更新间隔
         
         self.model_type = model_type
         self.checkpoint_dir = checkpoint_dir
@@ -44,6 +45,7 @@ class SelfPlayTrainer:
         self.checkpoint_interval = checkpoint_interval
         self.num_eval_games = num_eval_games
         self.use_ensemble = use_ensemble
+        self.opponent_update_interval = opponent_update_interval
         
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -372,7 +374,7 @@ class SelfPlayTrainer:
                     logger.info(f"新的最佳模型！得分: {current_score:.4f}")
             
             # 定期更新对手
-            if self.total_hands % (self.eval_interval // 2) == 0:
+            if self.total_hands % self.opponent_update_interval == 0:
                 self.update_opponents()
             
             # 定期保存检查点
