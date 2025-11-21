@@ -394,6 +394,14 @@ class AdaptiveRewardCalculator:
         for key in self.base_calculator.reward_weights:
             self.base_calculator.reward_weights[key] = max(0.0, min(2.0, self.base_calculator.reward_weights[key]))
 
+    def calculate_hand_strength(self, player: Player, game: PokerGame) -> float:
+        """估算手牌强度（代理到基础计算器）"""
+        return self.base_calculator.calculate_hand_strength(player, game)
+    
+    def calculate_pot_odds(self, player: Player, game: PokerGame, action_amount: Optional[int] = None) -> float:
+        """计算底池赔率（代理到基础计算器）"""
+        return self.base_calculator.calculate_pot_odds(player, game, action_amount)
+    
     def is_bluffing(self, player: Player, game: PokerGame, action: str) -> bool:
         """判断玩家是否在诈唬（代理到基础计算器）"""
         return self.base_calculator.is_bluffing(player, game, action)
