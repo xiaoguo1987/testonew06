@@ -99,17 +99,39 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
                 logger.error(f"当前状态: hand_num={hand_num}, current_player_index={game.current_player}, current_bet={game.current_bet}")
                 # 显示所有玩家状态
                 for i, p in enumerate(game.players):
-                    logger.error(f"玩家{i} ({p.name}): stack={p.stack}, bet={p.bet}, folded={p.folded}")
+                    logger.error(f"玩家{i} ({p.name}): stack={p.stack}, bet={p.bet}, is_active={p.is_active}, is_all_in={p.is_all_in}")
                 break
+            
+            # 检查当前轮次是否结束，如果结束则进入下一轮
+            if game.is_round_over():
+                logger.debug(f"轮次{game.round}结束，进入下一轮")
+                is_hand_over = game.proceed_to_next_round()
+                if is_hand_over:
+                    logger.debug("手牌结束")
+                    break
+                continue
                 
             # 获取当前活跃玩家
             current_player = game.players[game.current_player]
+            # 跳过非活跃或已全下的玩家
+            if not current_player.is_active or current_player.is_all_in:
+                logger.debug(f"跳过非活跃或已全下的玩家: {current_player.name}")
+                game.next_player()
+                continue
+                
             logger.debug(f"循环#{loop_count}: 当前玩家={current_player.name}, 索引={game.current_player}, 已下注={current_player.bet}, 当前底池={game.current_bet}")
+            
+            # 确定安全的最大下注金额，避免过大的下注
+            max_safe_bet = min(current_player.stack, game.big_blind * 5)  # 限制最大下注为大盲注的5倍
             
             if current_player.is_ai and current_player.name in ai_agents:
                 # AI玩家选择动作
                 logger.debug(f"AI玩家 {current_player.name} 正在选择动作")
                 action, amount = ai_agents[current_player.name].select_action(game, current_player)
+                # 限制AI的下注金额
+                if action == 'raise' and amount is not None and amount > max_safe_bet:
+                    amount = max_safe_bet
+                    logger.debug(f"限制AI下注金额为: {amount}")
                 logger.debug(f"AI玩家 {current_player.name} 选择动作: {action}, 金额: {amount}")
             else:
                 # 非AI玩家采取默认动作（简单策略）
@@ -128,7 +150,8 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
                         amount = None
                     else:
                         action = 'raise'
-                        amount = game.current_bet + game.big_blind * 2
+                        # 使用安全的小额加注
+                        amount = min(game.current_bet + game.big_blind * 2, max_safe_bet)
                 logger.debug(f"非AI玩家 {current_player.name} 选择动作: {action}, 金额: {amount}")
             
             # 执行动作
@@ -138,7 +161,11 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
             
             # 移动到下一个玩家
             logger.debug(f"移动到下一个玩家")
-            game.next_player()
+            next_player = game.next_player()
+            if next_player is None:
+                logger.debug("没有找到下一个活跃玩家，检查轮次是否结束")
+                if game.is_round_over():
+                    game.proceed_to_next_round()
             logger.debug(f"新的当前玩家索引: {game.current_player}")
         
         if loop_count > max_loop_iterations:
