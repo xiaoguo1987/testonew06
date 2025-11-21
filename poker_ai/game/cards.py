@@ -29,6 +29,10 @@ class Card:
         if not isinstance(other, Card):
             return False
         return self.rank == other.rank and self.suit == other.suit
+    
+    def __hash__(self) -> int:
+        # 确保Card对象可以被哈希化，用于集合和字典键
+        return hash((self.rank, self.suit))
 
 class Deck:
     """表示一副扑克牌"""
