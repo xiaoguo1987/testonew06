@@ -86,7 +86,7 @@ def run_test_hands(game, players, ai_agents, reward_calculator, num_hands=1000):
         # 进行游戏
         while not game.is_hand_over():
             # 获取当前活跃玩家
-            current_player = game.get_current_player()
+            current_player = game.players[game.current_player]
             
             if current_player.is_ai and current_player.name in ai_agents:
                 # AI玩家选择动作
