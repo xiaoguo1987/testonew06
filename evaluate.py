@@ -51,30 +51,30 @@ except ImportError:
     logger.warning("未导入TensorFlow，跳过GPU设置")
 # 移除重复导入，HandEvaluator在后面会统一导入
 
-# 中文字体设置 - 使用更可靠的字体处理方案
-    try:
-        # 首先获取系统可用字体列表
-        available_fonts = set(plt.rcParams['font.sans-serif'])
-        logger.debug(f"可用字体: {list(available_fonts)[:10]}")  # 只显示前10个以减少日志量
-        
-        # 定义优先使用的字体列表
-        preferred_fonts = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'sans-serif']
-        
-        # 筛选系统实际可用的字体
-        usable_fonts = []
-        for font in preferred_fonts:
-            if font in available_fonts or font == 'sans-serif':
-                usable_fonts.append(font)
-        
-        # 使用筛选后的字体列表
-        plt.rcParams['font.sans-serif'] = usable_fonts
-        plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-        logger.info(f"中文字体设置成功，使用字体: {plt.rcParams['font.sans-serif']}")
-    except Exception as e:
-        logger.warning(f"设置中文字体支持失败: {e}")
-        # 完全回退到matplotlib默认行为
-        plt.rcParams.update(plt.rcParamsDefault)  # 使用默认设置
-        logger.info("已恢复matplotlib默认字体设置")
+# 中文字体设置 - 调整缩进，与TensorFlow导入逻辑平级（独立代码块）
+try:
+    # 首先获取系统可用字体列表
+    available_fonts = set(plt.rcParams['font.sans-serif'])
+    logger.debug(f"可用字体: {list(available_fonts)[:10]}")  # 只显示前10个以减少日志量
+    
+    # 定义优先使用的字体列表
+    preferred_fonts = ['SimHei', 'WenQuanYi Micro Hei', 'Heiti TC', 'Arial Unicode MS', 'sans-serif']
+    
+    # 筛选系统实际可用的字体
+    usable_fonts = []
+    for font in preferred_fonts:
+        if font in available_fonts or font == 'sans-serif':
+            usable_fonts.append(font)
+    
+    # 使用筛选后的字体列表
+    plt.rcParams['font.sans-serif'] = usable_fonts
+    plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+    logger.info(f"中文字体设置成功，使用字体: {plt.rcParams['font.sans-serif']}")
+except Exception as e:
+    logger.warning(f"设置中文字体支持失败: {e}")
+    # 完全回退到matplotlib默认行为
+    plt.rcParams.update(plt.rcParamsDefault)  # 使用默认设置
+    logger.info("已恢复matplotlib默认字体设置")
 
 # 导入必要的模块
 try:
