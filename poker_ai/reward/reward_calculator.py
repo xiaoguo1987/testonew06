@@ -339,6 +339,8 @@ class AdaptiveRewardCalculator:
     
     def __init__(self, base_calculator: Optional[RewardCalculator] = None):
         self.base_calculator = base_calculator or RewardCalculator()
+        # 添加reward_weights属性引用，解决AttributeError问题
+        self.reward_weights = self.base_calculator.reward_weights
         self.performance_history = []  # 存储最近表现（含策略指标）
         self.adjustment_factor = 0.05  # 调整因子
         self.history_size = 50  # 历史记录大小
