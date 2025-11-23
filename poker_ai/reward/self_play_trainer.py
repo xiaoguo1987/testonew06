@@ -206,8 +206,23 @@ class SelfPlayTrainer:
                     action_idx = decision_info['most_likely_action']
 
                 # 4. 执行动作
-                game.handle_action(current_player, action_str, amount)
+                # 4. 执行动作 (增加了死循环保护)
+                success = game.handle_action(current_player, action_str, amount)
                 
+                # 如果动作无效（比如钱不够还要加注），强制弃牌以打破死循环
+                if not success:
+                    # logger.warning(f"玩家 {current_player.name} 执行了无效动作 {action_str} {amount}，强制弃牌")
+                    game.handle_action(current_player, 'fold', None)
+                    # 如果是训练模式，给予一个惩罚
+                    if is_training and last_step_info is not None:
+                        # 给一个负奖励，告诉它不要做无效动作
+                        self.main_agent.learn(
+                            reward=-0.5, # 小惩罚
+                            state=prev_state,
+                            action=prev_action_idx,
+                            next_state=current_state,
+                            done=False
+                        )
                 # 5. 更新暂存信息，等待下一次唤醒
                 last_step_info = (current_state, action_idx)
 

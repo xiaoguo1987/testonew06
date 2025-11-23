@@ -302,7 +302,7 @@ class HandEvaluator:
         """
         # 这里实现一个简化的胜率计算
         # 在实际项目中，应该使用更复杂的蒙特卡洛模拟
-        logger.info(f"计算胜率: 底牌={hole_cards}, 公共牌={community_cards}, 对手数={num_opponents}")
+        #logger.info(f"计算胜率: 底牌={hole_cards}, 公共牌={community_cards}, 对手数={num_opponents}")
         
         # 基于当前牌型给出一个估计的胜率
         hand_type, _ = self.evaluate_hand(hole_cards, community_cards)
@@ -332,5 +332,5 @@ class HandEvaluator:
         community_factor = len(community_cards) / 5
         final_rate = adjusted_rate * 0.5 + adjusted_rate * 0.5 * community_factor
         
-        logger.info(f"估计胜率: {final_rate:.2%}")
+        #logger.info(f"估计胜率: {final_rate:.2%}")
         return final_rate
