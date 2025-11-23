@@ -91,7 +91,10 @@ class SelfPlayTrainer:
                 learning_rate=self.learning_rate, 
                 optimizer=self.optimizer
             )
-        
+        # =================================================
+        # 🔥 必须加上这一行！初始化列表 🔥
+        self.opponent_agents = []
+        # =================================================
         # 前 4 个对手是正常的 DQN (历史版本)
         for i in range(self.num_players - 2):
             self.opponent_agents.append(PokerAIAgent(
