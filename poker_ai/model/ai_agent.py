@@ -113,14 +113,24 @@ class PokerAIAgent:
         
         return decision_info
     
-    def load_model(self, filepath: str) -> None:
-        """加载模型权重"""
-        self.agent.load(filepath)
+    def load_model(self, filepath: str) -> bool:
+        """兼容性接口：调用 load_model"""
+        return self.load_model(filepath)   # 添加 return
     
     def save_model(self, filepath: str) -> None:
         """保存模型权重"""
         self.agent.save(filepath)
     
+    # === 新增：兼容 CheckpointManager 的别名方法 ===
+    def save(self, filepath: str) -> None:
+        """兼容性接口：调用 save_model"""
+        self.save_model(filepath)
+
+    def load(self, filepath: str) -> None:
+        """兼容性接口：调用 load_model"""
+        self.load_model(filepath)
+    # ============================================
+
     def update_target_model(self) -> None:
         """更新目标模型（DQN特定）"""
         if self.agent_type == 'dqn':
