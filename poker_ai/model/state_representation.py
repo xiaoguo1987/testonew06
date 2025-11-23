@@ -127,7 +127,8 @@ class StateRepresentation:
         win_rate = self.evaluator.calculate_win_probability(
             player.cards, 
             game.board, 
-            num_opponents=max(1, active_opponents)
+            num_opponents=max(1, active_opponents),
+            simulations=100
         )
         return win_rate
     

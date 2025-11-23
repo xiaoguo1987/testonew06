@@ -448,7 +448,8 @@ class SelfPlayTrainer:
             self.total_profit += result['player_profits']['Main_AI']
             
             # 记录单局表现（含策略指标）
-            self.record_performance(result['player_profits']['Main_AI'])
+            if self.total_hands % 100 == 0:
+               self.record_performance(result['player_profits']['Main_AI'])
             
             # 定期评估
             if self.total_hands % self.eval_interval == 0:
