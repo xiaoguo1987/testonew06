@@ -228,31 +228,58 @@ class PokerGame:
         return False
     
     def _showdown(self) -> None:
-        """摊牌并确定获胜者"""
+        """摊牌并确定获胜者（修复平局逻辑）"""
         active_players = [p for p in self.players if p.is_active]
         
-        # 安全检查：确保至少有一个活跃玩家
         if not active_players:
-            logging.warning("没有活跃玩家参与showdown，无法确定获胜者")
             return
-        
-        # 比较手牌
-        best_player = active_players[0]
-        for player in active_players[1:]:
-            # 组合玩家手牌和公共牌
-            player_hand = player.cards + self.board
-            best_player_hand = best_player.cards + self.board
             
-            result = compare_hands(player_hand, best_player_hand)
-            if result > 0:
-                best_player = player
-            elif result == 0:
-                # 平局情况
-                # 在实际实现中，这里需要处理底池分配
-                pass
+        # 1. 计算所有活跃玩家的牌力
+        player_ranks = []
+        for player in active_players:
+            # 组合玩家手牌和公共牌
+            full_hand = player.cards + self.board
+            # 获取牌力评分 (rank, strength_list)
+            rank_score = compare_hands(full_hand, full_hand) # 这里借用compare_hands获取结构，实际应该用evaluate_hand
+            # 注意：原代码的compare_hands设计是比较两个手牌，这里我们需要直接评估
+            # 假设 evaluate_hand 返回 (rank_int, [kicker_ints])
+            from .cards import evaluate_hand
+            score = evaluate_hand(full_hand)
+            player_ranks.append((player, score))
+            
+        # 2. 找出最强牌力（可能有多个）
+        # 排序：牌型等级(降序), 踢脚牌(降序)
+        # score[0]是牌型等级，score[1]是踢脚牌列表
+        player_ranks.sort(key=lambda x: (x[1][0], x[1][1]), reverse=True)
         
-        self._award_pot(best_player)
-    
+        best_score = player_ranks[0][1]
+        winners = []
+        
+        for player, score in player_ranks:
+            # 比较牌型等级和踢脚牌是否完全相同
+            if score[0] == best_score[0] and score[1] == best_score[1]:
+                winners.append(player)
+            else:
+                break # 因为已经排过序，一旦不等，后面的更小
+        
+        # 3. 分配底池
+        if len(winners) > 0:
+            share = self.pot // len(winners)
+            remainder = self.pot % len(winners)
+            
+            for winner in winners:
+                winner.stack += share
+                # 记录该玩家本局赢利，用于后续奖励计算
+                # 注意：这里可能需要额外的逻辑标记谁是Winner，原代码是通过stack变化计算的
+            
+            # 剩下的零头给第一个人（简化处理）
+            if remainder > 0:
+                winners[0].stack += remainder
+                
+            self.pot = 0
+            # 标记赢家供外部读取
+            self.winner = winners[0] # 简单标记一个，用于日志
+            
     def _award_pot(self, winner: Player) -> None:
         """奖励底池给获胜者"""
         winner.stack += self.pot

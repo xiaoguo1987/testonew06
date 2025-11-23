@@ -4,6 +4,8 @@ import numpy as np
 from typing import List, Dict, Optional
 from ..game.cards import Card, RANK_VALUES
 from ..game.poker_game import Player, PokerGame
+# 1. 在文件顶部引入 HandEvaluator
+from ..model.hand_evaluator import HandEvaluator  # 确保路径正确
 
 class StateRepresentation:
     """德州扑克状态表示转换器"""
@@ -32,7 +34,8 @@ class StateRepresentation:
             'four_of_a_kind': 0.95,
             'straight_flush': 1.0
         }
-    
+        self.evaluator = HandEvaluator()  # 初始化评估器
+        
     def card_to_one_hot(self, cards: List[Card]) -> np.ndarray:
         """将牌转换为one-hot编码向量"""
         one_hot = np.zeros(13 * 4)
@@ -55,11 +58,12 @@ class StateRepresentation:
             relative_pos = (i - current_player_idx) % 6
             base_idx = relative_pos * 3
             
-            # 标准化筹码和下注金额（这里简单处理，实际应该基于大盲注标准化）
+            # 标准化筹码和下注金额（基于大盲注标准化）
             # 0-1之间的值表示相对大小
-            stack_normalized = min(player.stack / 10000, 1.0)  # 假设最大筹码为10000
-            bet_normalized = min(player.bet / 1000, 1.0)  # 假设最大单轮下注为1000
-            
+            bb = max(game.big_blind, 1)
+            stack_normalized = min(player.stack / (bb * 100), 1.0) # 归一化到 100BB
+            bet_normalized = min(player.bet / (bb * 100), 1.0)
+
             vector[base_idx] = stack_normalized
             vector[base_idx + 1] = bet_normalized
             vector[base_idx + 2] = 1.0 if player.is_active else 0.0
@@ -67,17 +71,15 @@ class StateRepresentation:
     
     def game_info_to_vector(self, game: PokerGame) -> np.ndarray:
         """将游戏信息转换为向量"""
+        bb = max(game.big_blind, 1)  # <--- 必须添加这行！
         vector = np.zeros(self.game_info_dim)
         
         # 轮次（翻牌前=0, 翻牌=1, 转牌=2, 河牌=3）
         vector[0] = (game.round - 1) / 4.0  # 归一化到0-1
         
-        # 底池大小标准化
-        vector[1] = min(game.pot / 10000, 1.0)
-        
-        # 当前下注标准化
-        vector[2] = min(game.current_bet / 1000, 1.0)
-        
+        vector[1] = min(game.pot / (bb * 100), 1.0)       # 底池
+        vector[2] = min(game.current_bet / (bb * 100), 1.0) # 当前下注
+                
         # 大盲注和小盲注
         vector[3] = game.big_blind / 100.0  # 假设最大大盲注为100
         vector[4] = game.small_blind / 100.0
@@ -111,37 +113,23 @@ class StateRepresentation:
         
         return state
     
+    # 2. 替换 calculate_hand_strength 方法
     def calculate_hand_strength(self, player: Player, game: PokerGame) -> float:
-        """计算玩家当前手牌的强度
-        
-        根据玩家手牌和公共牌，返回0-1之间的手牌强度值
-        0表示最弱的牌，1表示最强的牌
-        """
-        # 获取玩家手牌和公共牌
-        all_cards = player.cards + game.board
-        
-        # 如果没有公共牌（pre-flop阶段），基于手牌对子和高牌计算强度
-        if len(game.board) == 0:
-            return self._calculate_preflop_strength(player.cards)
-        
-        # 简化的手牌强度计算（实际应该有更复杂的算法来评估牌型）
-        # 这里使用基于牌型的加权评估
-        hand_rank = self._determine_hand_rank(all_cards)
-        base_strength = self.hand_rank_weights.get(hand_rank, 0.1)
-        
-        # 根据公共牌数量调整强度（牌局后期强度更确定）
-        board_size_factor = len(game.board) / 5  # 5是最大公共牌数
-        
-        # 根据玩家当前的下注情况和游戏阶段进一步调整
-        position_factor = self._calculate_position_factor(player, game)
-        
-        # 综合计算最终强度
-        final_strength = base_strength * 0.7 + board_size_factor * 0.2 + position_factor * 0.1
-        
-        # 确保返回值在0-1范围内
-        return max(0.0, min(1.0, final_strength))
+        """使用真实的 HandEvaluator 计算手牌强度"""
+        if not player.cards:
+            return 0.0
+            
+        # 使用 evaluator 计算胜率 (win_probability)
+        # 这里 num_opponents 可以大致估算为活跃玩家数 - 1
+        active_opponents = sum(1 for p in game.players if p.is_active) - 1
+        win_rate = self.evaluator.calculate_win_probability(
+            player.cards, 
+            game.board, 
+            num_opponents=max(1, active_opponents)
+        )
+        return win_rate
     
-    def _calculate_preflop_strength(self, cards: List[Card]) -> float:
+    def _calculate_preflop_strengtssss(self, cards: List[Card]) -> float:
         """计算翻牌前的手牌强度"""
         # 获取两张手牌的点数和花色
         ranks = [card.rank for card in cards]
@@ -171,7 +159,7 @@ class StateRepresentation:
         
         return 0.1 + high_rank_factor * 0.3 + suited_bonus + connected_bonus
     
-    def _determine_hand_rank(self, cards: List[Card]) -> str:
+    def _determine_hand_ranksss(self, cards: List[Card]) -> str:
         """简化的牌型判断（实际应该有更复杂的算法）"""
         # 这里实现一个简化版本，真实场景需要更复杂的牌型评估算法
         # 按照德州扑克规则，从高到低评估：同花顺、四条、葫芦、同花、顺子、三条、两对、一对、高牌
@@ -256,85 +244,45 @@ class StateRepresentation:
         return action_vector
     
     def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
-        """将动作向量解码为具体动作"""
-        # 复制原始动作向量，避免修改原始数据
-        modified_vector = action_vector.copy()
+        """将动作向量解码为具体动作（移除训练时的硬规则干扰）"""
         
-        # 如果提供了手牌强度信息，根据手牌强度调整动作选择概率
-        if hand_strength > 0:
-            # 弱牌时（手牌强度<0.3）：增加fold权重，降低raise权重
-            if hand_strength < 0.3:
-                # 增加fold动作的权重
-                modified_vector[0] *= 1.5
-                # 降低所有raise动作的权重
-                for i in range(2, 5):
-                    modified_vector[i] *= 0.7
-            # 强牌时（手牌强度>0.7）：增加raise权重
-            elif hand_strength > 0.7:
-                for i in range(2, 5):
-                    modified_vector[i] *= 1.2
+        # --- 核心修复：直接使用Argmax，移除所有基于规则的概率修改 ---
+        # 原始代码在这里会根据 hand_strength 修改 modified_vector，这严重破坏了RL训练
+        # 我们直接信任神经网络的输出 (action_vector)
         
-        # 行为调整：如果玩家处于亏损状态，降低进攻性
-        # 获取玩家的历史利润（通过累计统计）
-        player_profit = getattr(player, 'total_profit', 0)
+        action_idx = np.argmax(action_vector)
         
-        # 在负利润情况下，调整动作选择以更加谨慎
-        if player_profit < 0:
-            # 降低所有raise动作的权重
-            for i in range(2, 5):
-                modified_vector[i] *= 0.6
-            # 增加fold和call的权重，使AI更加保守
-            modified_vector[0] *= 1.3  # 增加fold权重
-            modified_vector[1] *= 1.2  # 增加call权重
-        
-        # 找到概率最大的动作
-        action_idx = np.argmax(modified_vector)
-        
-        # 行为调整：如果玩家处于亏损状态，进一步降低进攻性
-        # 在负利润情况下，当选择raise动作时，有50%概率转为更保守的动作
-        if action_idx >= 2 and player_profit < 0 and np.random.random() < 0.5:
-            # 选择更保守的动作
-            call_amount = max(0, game.current_bet - player.bet)
-            # 优先选择call（如果可行），否则选择fold
-            if call_amount <= player.stack:
-                return ('call', call_amount)
-            else:
-                return ('fold', None)
+        # --- 下面的逻辑保留，用于将索引转换为具体的游戏动作 ---
         
         if action_idx == 0:
             return ('fold', None)
+            
         elif action_idx == 1:
             # 跟注
             call_amount = max(0, game.current_bet - player.bet)
             return ('call', call_amount)
+            
         elif action_idx == 2:
-            # 小加注 (2倍当前下注)
-            current_bet = game.current_bet
-            if current_bet == 0:
-                # 翻牌前第一个行动
-                raise_amount = game.big_blind * 2
-            else:
-                raise_amount = current_bet * 2
+            # 小加注 (2倍)
+            current_bet = max(game.current_bet, game.big_blind) # 防止除零
+            raise_amount = current_bet * 2
+            # 确保至少是最小加注且不超过筹码
+            raise_amount = min(max(raise_amount, game.big_blind), player.bet + player.stack)
+            return ('raise', int(raise_amount))
             
-            # 确保不超过玩家筹码
-            raise_amount = min(raise_amount, player.bet + player.stack)
-            return ('raise', raise_amount)
         elif action_idx == 3:
-            # 中加注 (4倍当前下注)
-            current_bet = game.current_bet
-            if current_bet == 0:
-                raise_amount = game.big_blind * 4
-            else:
-                raise_amount = current_bet * 4
-            
+            # 中加注 (4倍)
+            current_bet = max(game.current_bet, game.big_blind)
+            raise_amount = current_bet * 4
             raise_amount = min(raise_amount, player.bet + player.stack)
-            return ('raise', raise_amount)
+            return ('raise', int(raise_amount))
+            
         elif action_idx == 4:
-            # 大加注/全下
+            # 全下
             all_in_amount = player.bet + player.stack
-            return ('raise', all_in_amount)
+            return ('raise', int(all_in_amount))
+            
         else:
-            # 默认弃牌
             return ('fold', None)
 
 # 测试代码

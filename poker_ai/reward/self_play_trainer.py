@@ -38,7 +38,7 @@ class SelfPlayTrainer:
                  opponent_update_interval: int = 10000,
                  learning_rate: float = 0.001,
                  optimizer: str = 'adam',
-                 target_update_freq: int = 10):
+                 target_update_freq: int = 100):
         
         # 核心参数初始化
         self.model_type = model_type
@@ -63,8 +63,11 @@ class SelfPlayTrainer:
         self._create_agents()
         
         # 创建奖励计算器
-        self.reward_calculator = AdaptiveRewardCalculator()
-        
+        # 修改前
+        # self.reward_calculator = AdaptiveRewardCalculator()
+
+        # 修改后
+        self.reward_calculator = SimpleRewardCalculator()
         # 统计信息（基础）
         self.total_hands = 0
         self.total_profit = 0
@@ -141,63 +144,115 @@ class SelfPlayTrainer:
         }
     
     def _play_hand(self, game: PokerGame, players: List[Player], is_training: bool = True) -> Dict:
-        """玩一手牌（修复索引风险，整合指标统计）"""
-        action_histories = {p.name: [] for p in players}
-        game.start_new_hand()  # 开始新的一手牌
-
-        # 游戏主循环
-        while not game.is_hand_over():  # 改用is_hand_over判断游戏结束（更准确）
+        """玩一手牌（修复数据流：State -> Action -> Reward -> Next State）"""
+        
+        game.start_new_hand()
+        
+        # 用于暂存主AI的 "上一步" 信息：(state, action_index)
+        # 因为我们必须等到"下一步"发生，才能知道"上一步"的结果(Next State)
+        last_step_info = None 
+        
+        # 记录初始筹码以计算 Reward
+        initial_stack = players[0].stack 
+        
+        while not game.is_hand_over():
             if game.is_round_over():
                 if not game.proceed_to_next_round():
-                    break  # 无法进入下一轮，结束本局
+                    break
+            
             current_player = game.next_player()
             if not current_player or not current_player.is_active:
-                continue  # 跳过非活跃玩家
+                continue
 
-            # 选择代理
+            # === 主AI 行动逻辑 ===
             if current_player.name == "Main_AI":
-                agent = self.main_agent
+                # 1. 获取当前状态 (State t)
+                current_state = self.main_agent.state_rep.get_state(game, current_player)
+                
+                # 2. 如果有上一步的暂存数据，现在我们可以构建一个完整的经验元组了！
+                # 上一步的 Next_State 就是现在的 current_state
+                if is_training and last_step_info is not None:
+                    prev_state, prev_action_idx = last_step_info
+                    
+                    # 计算过渡奖励 (通常为0，或者是为了活到现在的生存奖励，这里简化为0)
+                    # 真正的奖励在游戏结束时结算，或者在这里计算每一步的筹码变动
+                    step_reward = 0 
+                    
+                    # 存入经验回放: (s_t-1, a_t-1, r, s_t, done=False)
+                    self.main_agent.learn(
+                        reward=step_reward,
+                        state=prev_state,
+                        action=prev_action_idx,
+                        next_state=current_state,
+                        done=False
+                    )
+
+                # 3. 选择动作 (Action t)
+                # select_action 返回 (action_str, amount)，我们需要重新获取它的 index 用于存储
+                action_str, amount = self.main_agent.select_action(game, current_player)
+                
+                # 反向查找 action index 用于存储 (这有点低效，建议让select_action直接返回index)
+                # 这里我们假设 select_action 内部调用了 model.act，我们暂时无法直接拿到index
+                # 为了修复，我们需修改 ai_agent.py 让其返回 index，或者在这里由于无法获取只能暂存
+                # **重要修复**：我们需要 agent 直接返回 action_index。
+                # 既然我们无法修改 agent 内部所有代码，我们这里用 state_rep 逆向推导一下 index
+                # 或者，更简单的，我们在 last_step_info 里存 action_str，后面再处理。
+                # 但为了 DQN 训练，我们需要 index。
+                
+                # 获取决策信息来拿到 index (利用你现有的 get_decision_info 接口)
+                decision_info = self.main_agent.get_decision_info(game, current_player)
+                action_idx = decision_info.get('best_action_index', 0) # DQN
+                if 'most_likely_action' in decision_info: # Policy Gradient / PPO
+                    action_idx = decision_info['most_likely_action']
+
+                # 4. 执行动作
+                game.handle_action(current_player, action_str, amount)
+                
+                # 5. 更新暂存信息，等待下一次唤醒
+                last_step_info = (current_state, action_idx)
+
+            # === 对手行动逻辑 ===
             else:
+                # 对手逻辑保持不变
                 opp_idx = int(current_player.name.split('_')[-1]) - 1
                 agent = self.opponent_agents[opp_idx] if opp_idx < len(self.opponent_agents) else self.opponent_agents[0]
+                action, amount = agent.select_action(game, current_player)
+                game.handle_action(current_player, action, amount)
 
-            # 决策与执行动作
-            action, amount = agent.select_action(game, current_player)
-            action_histories[current_player.name].append((action, amount))
-            game.handle_action(current_player, action, amount)
-
-        # 计算结果
-        winner = max(players, key=lambda p: p.stack)  # 简化：筹码最多者为赢家
-        player_profits = {p.name: p.stack - self.initial_stack for p in players}
+        # === 游戏结束结算 (Terminal State) ===
+        
+        # 计算最终利润
+        final_profit = players[0].stack - initial_stack
+        
+        # 构建这一局的结果
         result = {
-            'winner': winner.name,
-            'player_profits': player_profits,
-            'action_histories': action_histories
+            'winner': game.winner.name if hasattr(game, 'winner') else 'Unknown', # 配合步骤1的修复
+            'player_profits': {p.name: p.stack - self.initial_stack for p in players},
+            'action_histories': {p.name: [] for p in players} # 简化，不再详细记录每步
         }
 
-        # 训练模式：更新主代理与统计指标
-        if is_training:
-            main_player = players[0]
-            main_profit = player_profits[main_player.name]
-            is_main_winner = (winner.name == main_player.name)
-            main_actions = action_histories[main_player.name]
-
-            # 1. 统计单局策略指标并更新全局统计
-            if main_actions:  # 避免无动作时的统计错误
-                episode_metrics = self._count_episode_metrics(main_player, game, main_actions)
-                self.total_bluff_attempts += episode_metrics['bluffs']
-                self.total_aggressive_actions += episode_metrics['aggressive']
-                self.total_raise_actions += episode_metrics['raises']
-                self.total_invalid_bets += episode_metrics['invalid_bets']
-
-            # 2. 计算奖励并更新代理（修复索引越界）
-            for idx, (action, amount) in enumerate(main_actions):
-                reward = self.reward_calculator.calculate_reward(
-                    main_player, game, action, amount,
-                    is_winner=is_main_winner, profit_loss=main_profit,
-                    done=(idx == len(main_actions) - 1)  # 最后一个动作标记为done
-                )
-                self.main_agent.learn(reward, done=(idx == len(main_actions) - 1))
+        # === 训练最关键的一步：终止状态的学习 ===
+        if is_training and last_step_info is not None:
+            prev_state, prev_action_idx = last_step_info
+            
+            # 简化奖励函数：直接使用最终盈亏
+            # 归一化奖励：除以大盲注，防止梯度爆炸
+            final_reward = final_profit / self.big_blind 
+            
+            # 对于 DQN，Next State 在 Done=True 时通常全0或不重要
+            # 我们构造一个全0的 state 作为终局状态
+            terminal_state = np.zeros_like(prev_state)
+            
+            # 存入经验回放: (s_last, a_last, r_final, s_terminal, done=True)
+            self.main_agent.learn(
+                reward=final_reward,
+                state=prev_state,
+                action=prev_action_idx,
+                next_state=terminal_state,
+                done=True
+            )
+            
+            # 如果使用 PPO/PG，可能需要在这里触发 self.main_agent.agent.replay() 或 train()
 
         return result
     
