@@ -100,7 +100,7 @@ class StateRepresentation:
         board_cards_vector = self.card_to_one_hot(game.board)
         
         # 3. 玩家信息向量
-        player_info_vector = self.player_info_to_vector(game.players, current_player_idx)
+        player_info_vector = self.player_info_to_vector(game.players, current_player_idx, game)
         
         # 4. 游戏信息向量
         game_info_vector = self.game_info_to_vector(game)
