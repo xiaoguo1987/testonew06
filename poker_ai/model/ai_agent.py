@@ -114,8 +114,14 @@ class PokerAIAgent:
         return decision_info
     
     def load_model(self, filepath: str) -> bool:
-        """兼容性接口：调用 load_model"""
-        return self.load_model(filepath)   # 添加 return
+        """加载模型权重"""
+        try:
+            # 必须调用 self.agent.load，而不是 self.load_model
+            self.agent.load(filepath) 
+            return True
+        except Exception as e:
+            logger.error(f"加载模型失败: {e}")
+            return False
     
     def save_model(self, filepath: str) -> None:
         """保存模型权重"""
