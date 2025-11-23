@@ -336,7 +336,9 @@ class StateRepresentation:
                 # 3. 仅限同色 (Suited) 的连张或强牌
                 # 如果你只想玩同色的 AK，可以不把 ('A','K') 放在上面，而是单独判断 is_suited
             }
-            
+            # 检查基本白名单
+            if key in allowed_hands:
+                return True
             # 特殊处理：同花连张或特定同花牌
             # 比如：QJs, JTs, T9s 等
             if is_suited:
@@ -353,10 +355,9 @@ class StateRepresentation:
                 if rank1 == 'A':
                     return True
 
-            # 检查基本白名单
-            if key in allowed_hands:
-                return True
+            
             # === 新增：放宽范围，允许玩所有同花牌和连张 ===
+            
             # 只要是同花 (Suited)，不管多小都玩，增加入局率
             if is_suited:
                 return True
@@ -367,7 +368,7 @@ class StateRepresentation:
                 return True
                 
             # 只要有一张是 A 或 K
-            if ranks[0] in ['A', 'K'] or ranks[1] in ['A', 'K']:
+            if rank1 in ['A', 'K'] or rank2 in ['A', 'K']:
                 return True
 
             return False
