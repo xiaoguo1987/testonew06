@@ -19,7 +19,7 @@ from ..game.poker_game import PokerGame, Player
 from ..model.ai_agent import PokerAIAgent, EnsembleAgent
 from ..reward.reward_calculator import RewardCalculator, AdaptiveRewardCalculator
 from ..utils.checkpoint import save_checkpoint, load_checkpoint, find_latest_checkpoint
-
+from ..reward.simple_reward_calculator import SimpleRewardCalculator
 
 class SelfPlayTrainer:
     """德州扑克自我对弈训练器（整合策略指标统计与自适应奖励调整）"""

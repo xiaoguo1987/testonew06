@@ -142,7 +142,7 @@ python train.py --mode train --use-self-play --opponent-update-interval 10000 --
 ```bash
 python evaluate.py --model-path ./checkpoints/best_agent_dqn.h5 --num-games 100 --opponent-type previous --generate-plots
 ```
-
+ssh -p 12272 root@connect.cqa1.seetacloud.com 
 评估报告将生成在`./eval_reports`目录下，包含胜率、收益分布、动作选择分布等详细信息。
 
 ## 模型优化技巧
