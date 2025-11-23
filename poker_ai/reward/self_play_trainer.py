@@ -379,18 +379,25 @@ class SelfPlayTrainer:
             self.main_agent.load_model(filepath)
             logger.info(f"加载检查点: {filepath}")
             # 加载状态
-            state_path = filepath.replace('.pkl', '_state.pkl')
-            if os.path.exists(state_path):
-                with open(state_path, 'rb') as f:
-                    state = pickle.load(f)
-                    self.total_hands = state.get('total_hands', 0)
-                    self.total_profit = state.get('total_profit', 0)
-                    self.best_score = state.get('best_score', -float('inf'))
-                    self.performance_history = state.get('performance_history', [])
-                    # 恢复策略指标
-                    strat_metrics = state.get('strategy_metrics', {})
-                    self.total_bluff_attempts = strat_metrics.get('bluff_attempts', 0)
-                    self.total_aggressive_actions = strat_metrics.get('aggressive_actions', 0)
+            # state_path = filepath.replace('.pkl', '_state.pkl')
+            # if os.path.exists(state_path):
+            #     with open(state_path, 'rb') as f:
+            #         state = pickle.load(f)
+            #         self.total_hands = state.get('total_hands', 0)
+            #         self.total_profit = state.get('total_profit', 0)
+            #         self.best_score = state.get('best_score', -float('inf'))
+            #         self.performance_history = state.get('performance_history', [])
+            #         # 恢复策略指标
+            #         strat_metrics = state.get('strategy_metrics', {})
+            #         self.total_bluff_attempts = strat_metrics.get('bluff_attempts', 0)
+            #         self.total_aggressive_actions = strat_metrics.get('aggressive_actions', 0)
+            # return True
+            # 简单粗暴：直接手动设置 total_hands
+            # === 新增：手动恢复接力进度 ===
+            if "75000" in filepath:  # 如果加载的是 75000 的模型
+                logger.info("检测到接力训练，手动恢复 total_hands 为 75000")
+                self.total_hands = 75000
+            # ===========================
             return True
         except Exception as e:
             logger.error(f"加载检查点失败: {e}")
