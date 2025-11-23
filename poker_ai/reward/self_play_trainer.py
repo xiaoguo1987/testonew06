@@ -357,7 +357,7 @@ class SelfPlayTrainer:
         except Exception as e:
             logger.error(f"保存检查点失败: {e}")
     
-    def load_checkpoint(self, filepath: Optional[str] = None) -> bool:
+    def load_checkpointold(self, filepath: Optional[str] = None) -> bool:
         """加载检查点（不自动加载最新检查点）"""
         # 不自动加载最新检查点，只在指定路径时加载
         if filepath is None:
@@ -402,7 +402,86 @@ class SelfPlayTrainer:
         except Exception as e:
             logger.error(f"加载检查点失败: {e}")
             return False
-    
+
+    def load_checkpoint(self, filepath: Optional[str] = None) -> bool:
+        """加载检查点（带详细调试日志版）"""
+        import traceback # 引入堆栈追踪工具
+        
+        if filepath is None:
+            logger.warning("未指定检查点路径，不自动加载最新检查点")
+            return False
+        
+        logger.info(f"🔍 [DEBUG] 准备加载检查点，原始路径: {filepath}")
+        
+        try:
+            # 1. 验证文件是否存在
+            if not os.path.exists(filepath):
+                logger.warning(f"⚠️ [DEBUG] 文件不存在: {filepath}")
+                # 尝试智能补全后缀
+                if os.path.exists(filepath + '.weights.h5'):
+                    filepath = filepath + '.weights.h5'
+                    logger.info(f"✅ [DEBUG] 找到替代文件 (h5): {filepath}")
+                elif os.path.exists(filepath + '.pkl'):
+                    filepath = filepath + '.pkl'
+                    logger.info(f"✅ [DEBUG] 找到替代文件 (pkl): {filepath}")
+                else:
+                    logger.error(f"❌ [DEBUG] 无法找到检查点文件: {filepath}")
+                    return False
+            
+            # 2. 加载模型权重
+            logger.info(f"▶️ [DEBUG] 正在调用 main_agent.load_model({filepath})...")
+            # 注意：main_agent.load_model 内部会处理 .weights.h5 的后缀逻辑
+            self.main_agent.load_model(filepath)
+            logger.info("✅ [DEBUG] main_agent.load_model 执行完成")
+
+            # 3. 加载训练状态 (这里是高危区域！)
+            # 逻辑修复：只有当 filepath 是 .pkl 结尾时，replace 才有意义。
+            # 如果 filepath 是 .weights.h5，replace 可能会失效，导致它去加载 h5 文件当做 pickle！
+            
+            state_path = None
+            if filepath.endswith('.pkl'):
+                state_path = filepath.replace('.pkl', '_state.pkl')
+            elif filepath.endswith('.weights.h5'):
+                # 如果是权重文件，我们需要猜测对应的 state 文件名
+                # 假设它是去掉 .weights.h5 后加上 _state.pkl
+                base_name = filepath.replace('.weights.h5', '')
+                state_path = base_name + '_state.pkl'
+            
+            logger.info(f"🔍 [DEBUG] 推算的训练状态文件路径: {state_path}")
+
+            if state_path and os.path.exists(state_path):
+                logger.info(f"▶️ [DEBUG] 正在尝试 Pickle 加载状态文件: {state_path}")
+                try:
+                    with open(state_path, 'rb') as f:
+                        state = pickle.load(f)
+                        # 这里的赋值逻辑保持不变
+                        self.total_hands = state.get('total_hands', 0)
+                        self.total_profit = state.get('total_profit', 0)
+                        self.best_score = state.get('best_score', -float('inf'))
+                        self.performance_history = state.get('performance_history', [])
+                        
+                        strat_metrics = state.get('strategy_metrics', {})
+                        self.total_bluff_attempts = strat_metrics.get('bluff_attempts', 0)
+                        self.total_aggressive_actions = strat_metrics.get('aggressive_actions', 0)
+                    logger.info("✅ [DEBUG] 训练状态加载成功")
+                except Exception as e:
+                    logger.warning(f"⚠️ [DEBUG] 状态文件存在但加载失败 (可能是旧格式): {e}")
+            else:
+                logger.info("ℹ️ [DEBUG] 未找到状态文件 (_state.pkl)，跳过状态加载")
+
+            # 4. 手动接力逻辑
+            if "75000" in filepath:
+                logger.info("🔧 [DEBUG] 检测到 75000 检查点，强制设置 total_hands = 75000")
+                self.total_hands = 75000
+                
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ [DEBUG] 加载检查点发生严重错误: {e}")
+            # 打印完整的堆栈信息，这样我们能知道到底是哪一行代码报的错
+            logger.error(traceback.format_exc()) 
+            return False
+
     def record_performance(self, profit_loss: float) -> None:
         """记录训练表现（计算策略指标比率，用于奖励调整）"""
         # 计算策略指标比率（避免除零错误）
