@@ -109,28 +109,21 @@ class DQNAgent:
         self.memory.append((state, action, reward, next_state, done))
     
     def act(self, state: np.ndarray, game: Optional[PokerGame] = None, player: Optional[Player] = None) -> Tuple[str, Optional[int]]:
-        """根据当前状态选择动作"""
-        # 探索与利用
+        """根据当前状态选择动作 (极速版)"""
+        
+        # 1. 探索 (Random Exploration)
         if np.random.rand() <= self.epsilon:
-            # 随机选择动作
             action_idx = random.randint(0, self.action_dim - 1)
-            if game is None or player is None:
-                # 如果没有游戏信息，返回简单动作索引
-                return action_idx, None
-            else:
-                # 计算手牌强度
-                hand_strength = self.state_rep.calculate_hand_strength(player, game)
-                # 解码为具体动作
-                action_vector = np.zeros(self.action_dim)
-                action_vector[action_idx] = 1
-                return self.state_rep.decode_action(action_vector, game, player, hand_strength)
         
-        # 2. 利用 (Exploitation) - 使用加速后的模型推理
-        state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
-        q_values_tensor = self.predict_fn(state_tensor)  # 使用预编译函数
-        q_values = q_values_tensor.numpy()[0]
-        action_idx = np.argmax(q_values)
+        # 2. 利用 (Exploitation) - 使用加速推理
+        else:
+            state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
+            # 使用我们在 __init__ 里定义的 tf.function 加速器
+            q_values_tensor = self.predict_fn(state_tensor)
+            q_values = q_values_tensor.numpy()[0]
+            action_idx = np.argmax(q_values)
         
+        # 3. 解码动作 (通用逻辑)
         if game is None or player is None:
             return action_idx, None
         else:
@@ -138,7 +131,8 @@ class DQNAgent:
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
             return self.state_rep.decode_action(action_vector, game, player, hand_strength)
-    # ==========================================
+            
+            # ==========================================
     # 🔥 核心修改 2: replay 方法 (加快训练梯度更新速度)
     # ==========================================
     def replay(self) -> None:
@@ -185,26 +179,62 @@ class DQNAgent:
             self.update_target_model()
 
     def load(self, name: str) -> None:
-        """加载模型权重"""
+        """加载模型权重 (自动适配新旧格式)"""
+        import os
         import pickle
-        if name.endswith('.pkl') or os.path.exists(name + '.pkl'):
-            # 使用pickle加载整个模型
-            filepath = name if name.endswith('.pkl') else name + '.pkl'
-            with open(filepath, 'rb') as f:
-                loaded_model = pickle.load(f)
-                # 将加载的模型属性复制到当前模型
-                for key, value in loaded_model.__dict__.items():
-                    if not key.startswith('_') or key in ['_model', '_target_model']:
-                        setattr(self, key, value)
-            self.update_target_model()
-        else:
-            # 尝试使用Keras加载权重
+        
+        # 1. 尝试加载 .weights.h5 (新标准格式)
+        h5_path = name
+        if name.endswith('.pkl'):
+            h5_path = name.replace('.pkl', '.weights.h5')
+        elif not name.endswith('.weights.h5'):
+            h5_path = name + '.weights.h5'
+            
+        if os.path.exists(h5_path):
+            try:
+                self.model.load_weights(h5_path)
+                self.update_target_model()
+                print(f"成功加载权重: {h5_path}")
+                return
+            except Exception as e:
+                print(f"尝试加载 .weights.h5 失败: {e}")
+
+        # 2. 后备：尝试加载旧的 pickle 格式
+        # 注意：由于引入了 tf.function，旧的 pickle 加载可能会失败
+        pkl_path = name if name.endswith('.pkl') else name + '.pkl'
+        if os.path.exists(pkl_path):
+            try:
+                with open(pkl_path, 'rb') as f:
+                    loaded_model = pickle.load(f)
+                    for key, value in loaded_model.__dict__.items():
+                        if not key.startswith('_') or key in ['_model', '_target_model', 'predict_fn']:
+                            setattr(self, key, value)
+                self.update_target_model()
+                print(f"成功加载 Pickle 模型: {pkl_path}")
+                return
+            except Exception as e:
+                print(f"加载 Pickle 失败: {e}")
+        
+        # 3. 最后尝试直接加载原名
+        try:
             self.model.load_weights(name)
             self.update_target_model()
+        except Exception:
+            pass # 忽略，由外部处理错误
     
     def save(self, name: str) -> None:
-        """保存模型权重"""
-        self.model.save_weights(name)
+        """保存模型权重 (修复文件扩展名问题)"""
+        # Keras 3+ 强制要求 save_weights 使用 .weights.h5 扩展名
+        if name.endswith('.pkl'):
+            name = name.replace('.pkl', '.weights.h5')
+        elif not name.endswith('.weights.h5'):
+            name = name + '.weights.h5'
+            
+        try:
+            self.model.save_weights(name)
+            # logger.info(f"模型权重已保存: {name}") # 如果有logger可以加上
+        except Exception as e:
+            print(f"保存模型权重失败: {e}")
     
     def get_q_values(self, state: np.ndarray) -> np.ndarray:
         """获取状态的Q值 (优化版)"""
@@ -260,35 +290,21 @@ class PolicyGradientAgent:
     # 🔥 核心修改 1: act 方法 (极大提升每手牌速度)
     # ==========================================
     def act(self, state: np.ndarray, game: Optional[PokerGame] = None, player: Optional[Player] = None) -> Tuple[str, Optional[int]]:
-        """根据当前状态选择动作"""
-        # 探索与利用
-        if np.random.rand() <= self.epsilon:
-            action_idx = random.randint(0, self.action_dim - 1)
-            if game is None or player is None:
-                return action_idx, None
-            else:
-                hand_strength = self.state_rep.calculate_hand_strength(player, game)
-                action_vector = np.zeros(self.action_dim)
-                action_vector[action_idx] = 1
-                return self.state_rep.decode_action(action_vector, game, player, hand_strength)
+        """根据当前状态选择动作 (Policy Gradient 版)"""
         
-        # 利用模型选择最优动作
-        # --- 原代码 (慢) ---
-        # q_values = self.model.predict(state.reshape(1, -1), verbose=0)[0]
-        
-        # --- 新代码 (快) ---
-        # 1. 将numpy数组转换为Tensor，避免重复转换开销
+        # 1. 获取动作概率分布
+        # 优化：使用 __call__ 而不是 predict 来加速
         state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
+        action_probs = self.policy_network(state_tensor, training=False).numpy()[0]
         
-        # 2. 直接调用模型 (__call__)，training=False 表示推理模式 (不使用Dropout等)
-        q_values_tensor = self.model(state_tensor, training=False)
+        # 2. 根据概率随机抽样动作
+        action_idx = np.random.choice(self.action_dim, p=action_probs)
         
-        # 3. 转回 numpy 获取最大值索引
-        q_values = q_values_tensor.numpy()[0]
-        # ------------------
+        # 3. 记录经验 (用于回合更新)
+        self.states.append(state)
+        self.actions.append(action_idx)
         
-        action_idx = np.argmax(q_values)
-        
+        # 4. 解码动作
         if game is None or player is None:
             return action_idx, None
         else:
@@ -296,7 +312,7 @@ class PolicyGradientAgent:
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
             return self.state_rep.decode_action(action_vector, game, player, hand_strength)
-
+            
     def discount_rewards(self, rewards: List[float]) -> np.ndarray:
         """计算折扣奖励"""
         discounted = np.zeros_like(rewards, dtype=float)
