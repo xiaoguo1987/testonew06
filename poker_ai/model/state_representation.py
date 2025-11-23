@@ -49,9 +49,11 @@ class StateRepresentation:
             one_hot[position] = 1
         return one_hot
     
-    def player_info_to_vector(self, players: List[Player], current_player_idx: int) -> np.ndarray:
+    def player_info_to_vector(self, players: List[Player], current_player_idx: int,game: PokerGame) -> np.ndarray:
         """将玩家信息转换为向量"""
         vector = np.zeros(self.player_info_dim)
+        # 确保这里能访问到 game
+        bb = max(game.big_blind, 1)
         for i, player in enumerate(players):
             # 计算相对于当前玩家的位置（考虑到庄家位置的循环性）
             # 0: 当前玩家, 1-5: 其他玩家按行动顺序
@@ -60,7 +62,7 @@ class StateRepresentation:
             
             # 标准化筹码和下注金额（基于大盲注标准化）
             # 0-1之间的值表示相对大小
-            bb = max(game.big_blind, 1)
+            
             stack_normalized = min(player.stack / (bb * 100), 1.0) # 归一化到 100BB
             bet_normalized = min(player.bet / (bb * 100), 1.0)
 
