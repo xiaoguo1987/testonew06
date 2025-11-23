@@ -30,7 +30,9 @@ class HandEvaluator:
         'one_pair': 1,
         'high_card': 0
     }
-    
+    # 在类里添加一个简单的缓存字典
+    _preflop_cache = {}
+
     def __init__(self):
         """
         初始化手牌评估器
@@ -288,9 +290,35 @@ class HandEvaluator:
     
     def calculate_win_probability(self, hole_cards: List[Card], community_cards: List[Card], 
                                  num_opponents: int = 1, simulations: int = 100) -> float:
-        """
-        计算获胜概率（真实的蒙特卡洛模拟版）
-        """
+        """计算获胜概率（查表 + 模拟混合模式）"""
+        # === 优化：翻牌前直接查表或返回估算值，跳过模拟 ===
+        # === 优化：翻牌前直接查表或返回估算值，跳过模拟 ===
+        if not community_cards:
+            # 1. 生成缓存键 (Key)
+            sorted_cards = sorted(hole_cards, key=lambda c: c.value, reverse=True)
+            # 键的格式例如: "AKs" (同色) 或 "AKo" (杂色)
+            suffix = 's' if sorted_cards[0].suit == sorted_cards[1].suit else 'o'
+            cache_key = f"{sorted_cards[0].rank}{sorted_cards[1].rank}{suffix}"
+            
+            # 2. 尝试从缓存读取 (Read)
+            if cache_key in self._preflop_cache:
+                return self._preflop_cache[cache_key]
+            
+            # 3. 如果缓存没命中，则进行计算
+            score = sorted_cards[0].value * 2
+            if sorted_cards[0].value == sorted_cards[1].value: score += 10 # 对子
+            if suffix == 's': score += 4
+            gap = sorted_cards[0].value - sorted_cards[1].value
+            if gap < 3: score += (3 - gap)
+            
+            win_rate = min(0.9, max(0.1, score / 40.0))
+            
+            # 4. 存入缓存 (Write)
+            self._preflop_cache[cache_key] = win_rate
+            
+            return win_rate
+        # === 翻牌后继续使用蒙特卡洛 ===
+
         import copy
         import random
         from ..game.cards import Deck, Card

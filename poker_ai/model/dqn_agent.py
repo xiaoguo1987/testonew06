@@ -11,6 +11,8 @@ import random
 from typing import List, Tuple, Dict, Optional
 from .state_representation import StateRepresentation
 from ..game.poker_game import Player, PokerGame
+import logging
+logger = logging.getLogger("DQNAgent")
 
 class DQNAgent:
     """德州扑克DQN智能代理"""
@@ -52,7 +54,18 @@ class DQNAgent:
         
         # 记录训练步数
         self.training_steps = 0
+
+        # === 新增：预编译的推理函数 ===
+        # input_signature 告诉 TF 输入数据的形状，能进一步加速
+        self.predict_fn = tf.function(
+            self._predict_internal,
+            input_signature=[tf.TensorSpec(shape=(None, self.state_dim), dtype=tf.float32)]
+        )
     
+    # 定义内部计算逻辑
+    def _predict_internal(self, state_tensor):
+        return self.model(state_tensor, training=False)
+
     def _build_model(self) -> Model:
         """构建神经网络模型"""
         model = Sequential([
@@ -112,19 +125,19 @@ class DQNAgent:
                 action_vector[action_idx] = 1
                 return self.state_rep.decode_action(action_vector, game, player, hand_strength)
         
-        # 利用模型选择最优动作
-        q_values = self.model.predict(state.reshape(1, -1), verbose=0)[0]
+        # 2. 利用 (Exploitation) - 使用加速后的模型推理
+        state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
+        q_values_tensor = self.predict_fn(state_tensor)  # 使用预编译函数
+        q_values = q_values_tensor.numpy()[0]
         action_idx = np.argmax(q_values)
         
         if game is None or player is None:
             return action_idx, None
         else:
-            # 计算手牌强度
             hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
             return self.state_rep.decode_action(action_vector, game, player, hand_strength)
-    
     # ==========================================
     # 🔥 核心修改 2: replay 方法 (加快训练梯度更新速度)
     # ==========================================
