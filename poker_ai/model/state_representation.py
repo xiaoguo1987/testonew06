@@ -266,7 +266,7 @@ class StateRepresentation:
             if cost_to_call > 0 and not self._is_valid_preflop_hand(player.cards):
                 return ('fold', None)
         # ==========================================
-        
+
         # --- 下面的逻辑保留，用于将索引转换为具体的游戏动作 ---
         
         if action_idx == 0:
@@ -342,7 +342,9 @@ class StateRepresentation:
             if is_suited:
                 suited_connectors = [
                     ('Q', 'J'), ('J', 'T'), ('T', '9'), ('9', '8'), 
-                    ('8', '7'), ('7', '6'), ('6', '5'), ('5', '4')
+                    ('8', '7'), ('7', '6'), ('6', '5'), ('5', '4'),
+                    ('Q', 'T')
+
                 ]
                 if key in suited_connectors:
                     return True
