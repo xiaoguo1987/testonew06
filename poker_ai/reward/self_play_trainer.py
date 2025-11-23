@@ -92,18 +92,25 @@ class SelfPlayTrainer:
                 optimizer=self.optimizer
             )
         
-        # 对手代理（数量=玩家数-1）
-        self.opponent_agents = []
-        for i in range(self.num_players - 1):
-            if self.use_ensemble:
-                self.opponent_agents.append(EnsembleAgent())
-            else:
-                self.opponent_agents.append(PokerAIAgent(
-                    agent_type=self.model_type, 
-                    target_update_freq=self.target_update_freq, 
-                    learning_rate=self.learning_rate, 
-                    optimizer=self.optimizer
-                ))
+        # 前 4 个对手是正常的 DQN (历史版本)
+        for i in range(self.num_players - 2):
+            self.opponent_agents.append(PokerAIAgent(
+                agent_type=self.model_type,
+                target_update_freq=self.target_update_freq,
+                learning_rate=self.learning_rate,
+                optimizer=self.optimizer
+            ))
+            
+        # 🔥 关键修改：加入第 5 个对手作为“鱼” (Random Player)
+        # 我们给它设置极高的 epsilon，让它永远在乱打
+        fish_agent = PokerAIAgent(agent_type=self.model_type) # 默认参数
+        # 强制修改这个 agent 的 epsilon 为 1.0 (全随机)
+        if hasattr(fish_agent.agent, 'epsilon'):
+            fish_agent.agent.epsilon = 1.0 
+            fish_agent.agent.epsilon_min = 1.0
+            fish_agent.agent.epsilon_decay = 0.0 # 不衰减
+        
+        self.opponent_agents.append(fish_agent)
     
     def _create_game(self) -> Tuple[PokerGame, List[Player]]:
         """创建游戏实例和玩家（复用逻辑，避免重复初始化）"""
@@ -267,7 +274,7 @@ class SelfPlayTrainer:
         )
         self.performance_history.append(eval_result)
         return eval_result
-        
+
     def update_opponents(self) -> None:
         """更新对手代理（内存复制版：极速且无递归风险）"""
         if not self.opponent_agents:

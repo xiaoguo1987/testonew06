@@ -356,7 +356,20 @@ class StateRepresentation:
             # 检查基本白名单
             if key in allowed_hands:
                 return True
+            # === 新增：放宽范围，允许玩所有同花牌和连张 ===
+            # 只要是同花 (Suited)，不管多小都玩，增加入局率
+            if is_suited:
+                return True
                 
+            # 只要是连张 (Connectors)，比如 56, 78, 9T
+            rank_diff = abs(val1 - val2)
+            if rank_diff == 1:
+                return True
+                
+            # 只要有一张是 A 或 K
+            if ranks[0] in ['A', 'K'] or ranks[1] in ['A', 'K']:
+                return True
+
             return False
 # 测试代码
 if __name__ == "__main__":
