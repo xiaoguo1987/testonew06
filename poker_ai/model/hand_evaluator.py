@@ -287,50 +287,60 @@ class HandEvaluator:
         return sorted(kickers, reverse=True)
     
     def calculate_win_probability(self, hole_cards: List[Card], community_cards: List[Card], 
-                                 num_opponents: int = 1, simulations: int = 10000) -> float:
+                                 num_opponents: int = 1, simulations: int = 100) -> float:
         """
-        计算获胜概率（简化版本，实际游戏中需要更复杂的蒙特卡洛模拟）
+        计算获胜概率（真实的蒙特卡洛模拟版）
+        """
+        import copy
+        import random
+        from ..game.cards import Deck, Card
         
-        Args:
-            hole_cards: 玩家的两张底牌
-            community_cards: 当前的公共牌
-            num_opponents: 对手数量
-            simulations: 模拟次数
+        wins = 0
+        # 创建一副新牌，移除已知牌
+        base_deck = Deck()
+        known_cards = set(hole_cards + community_cards)
+        base_deck.cards = [c for c in base_deck.cards if c not in known_cards]
+        
+        # 需要发出的公共牌数量
+        needed_community = 5 - len(community_cards)
+        
+        for _ in range(simulations):
+            # 复制牌堆，用于本次模拟
+            # 优化：为了速度，不深度复制整个对象，只打乱列表
+            deck_cards = list(base_deck.cards)
+            random.shuffle(deck_cards)
             
-        Returns:
-            float: 获胜概率（0-1之间）
-        """
-        # 这里实现一个简化的胜率计算
-        # 在实际项目中，应该使用更复杂的蒙特卡洛模拟
-        #logger.info(f"计算胜率: 底牌={hole_cards}, 公共牌={community_cards}, 对手数={num_opponents}")
-        
-        # 基于当前牌型给出一个估计的胜率
-        hand_type, _ = self.evaluate_hand(hole_cards, community_cards)
-        
-        # 简化的胜率估计（基于当前牌型）
-        base_win_rates = {
-            'royal_flush': 0.99,
-            'straight_flush': 0.95,
-            'four_of_a_kind': 0.90,
-            'full_house': 0.85,
-            'flush': 0.70,
-            'straight': 0.65,
-            'three_of_a_kind': 0.60,
-            'two_pair': 0.45,
-            'one_pair': 0.30,
-            'high_card': 0.15
-        }
-        
-        base_rate = base_win_rates.get(hand_type, 0.15)
-        
-        # 根据对手数量调整胜率
-        opponent_penalty = 0.05 * num_opponents
-        adjusted_rate = max(0.01, min(0.99, base_rate - opponent_penalty))
-        
-        # 根据已发的公共牌数量调整（公共牌越多，胜率越确定）
-        # 翻牌前(0张公共牌)、翻牌(3张)、转牌(4张)、河牌(5张)
-        community_factor = len(community_cards) / 5
-        final_rate = adjusted_rate * 0.5 + adjusted_rate * 0.5 * community_factor
-        
-        #logger.info(f"估计胜率: {final_rate:.2%}")
-        return final_rate
+            # 1. 补全公共牌
+            sim_community = list(community_cards)
+            for _ in range(needed_community):
+                sim_community.append(deck_cards.pop())
+                
+            # 2. 为对手发牌
+            opponents_hands = []
+            for _ in range(num_opponents):
+                hand = [deck_cards.pop(), deck_cards.pop()]
+                opponents_hands.append(hand)
+                
+            # 3. 比较大小
+            # 获取我的牌力
+            _, my_score = self.evaluate_hand(hole_cards, sim_community)
+            
+            # 检查是否击败所有对手
+            win = True
+            for opp_hand in opponents_hands:
+                _, opp_score = self.evaluate_hand(opp_hand, sim_community)
+                
+                # 比较牌力 (score: [type_rank, kicker1, kicker2...])
+                # Python 列表比较是按顺序比较元素的，这正好符合我们的需求
+                if opp_score > my_score:
+                    win = False
+                    break
+                elif opp_score == my_score:
+                    # 平局算赢一半（简化为算输，或者你可以加 0.5）
+                    win = False # 严格获胜才算赢
+                    break
+            
+            if win:
+                wins += 1
+                
+        return wins / simulations

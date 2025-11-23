@@ -125,12 +125,14 @@ class DQNAgent:
             action_vector[action_idx] = 1
             return self.state_rep.decode_action(action_vector, game, player, hand_strength)
     
+    # ==========================================
+    # 🔥 核心修改 2: replay 方法 (加快训练梯度更新速度)
+    # ==========================================
     def replay(self) -> None:
         """从经验回放中学习"""
         if len(self.memory) < self.batch_size:
             return
         
-        # 从记忆中随机采样批次
         minibatch = random.sample(self.memory, self.batch_size)
         
         states = np.array([exp[0] for exp in minibatch])
@@ -139,9 +141,19 @@ class DQNAgent:
         next_states = np.array([exp[3] for exp in minibatch])
         dones = np.array([exp[4] for exp in minibatch])
         
-        # 计算目标Q值
-        target_q = self.model.predict(states, verbose=0)
-        next_q = self.target_model.predict(next_states, verbose=0)
+        # --- 原代码 (慢) ---
+        # target_q = self.model.predict(states, verbose=0)
+        # next_q = self.target_model.predict(next_states, verbose=0)
+        
+        # --- 新代码 (快) ---
+        # 转换为 Tensor
+        states_tensor = tf.convert_to_tensor(states, dtype=tf.float32)
+        next_states_tensor = tf.convert_to_tensor(next_states, dtype=tf.float32)
+        
+        # 直接调用模型
+        target_q = self.model(states_tensor, training=False).numpy()
+        next_q = self.target_model(next_states_tensor, training=False).numpy()
+        # ------------------
         
         for i in range(self.batch_size):
             if dones[i]:
@@ -149,18 +161,16 @@ class DQNAgent:
             else:
                 target_q[i, actions[i]] = rewards[i] + self.gamma * np.max(next_q[i])
         
-        # 训练模型
+        # 训练模型 (fit 内部已经优化，通常不需要改为 GradientTape，除非追求极致)
         self.model.fit(states, target_q, epochs=1, verbose=0, batch_size=self.batch_size)
         
-        # 衰减探索率
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
         
-        # 更新目标网络
         self.training_steps += 1
         if self.training_steps % self.target_update_freq == 0:
             self.update_target_model()
-    
+
     def load(self, name: str) -> None:
         """加载模型权重"""
         import pickle
@@ -184,9 +194,10 @@ class DQNAgent:
         self.model.save_weights(name)
     
     def get_q_values(self, state: np.ndarray) -> np.ndarray:
-        """获取状态的Q值"""
-        return self.model.predict(state.reshape(1, -1), verbose=0)[0]
-
+        """获取状态的Q值 (优化版)"""
+        state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
+        return self.model(state_tensor, training=False).numpy()[0]
+        
 # 策略梯度代理 (Policy Gradient Agent)
 class PolicyGradientAgent:
     """基于策略梯度的德州扑克代理"""
@@ -232,27 +243,47 @@ class PolicyGradientAgent:
         
         return model
     
+    # ==========================================
+    # 🔥 核心修改 1: act 方法 (极大提升每手牌速度)
+    # ==========================================
     def act(self, state: np.ndarray, game: Optional[PokerGame] = None, player: Optional[Player] = None) -> Tuple[str, Optional[int]]:
         """根据当前状态选择动作"""
-        # 预测动作概率
-        action_probs = self.policy_network.predict(state.reshape(1, -1), verbose=0)[0]
+        # 探索与利用
+        if np.random.rand() <= self.epsilon:
+            action_idx = random.randint(0, self.action_dim - 1)
+            if game is None or player is None:
+                return action_idx, None
+            else:
+                hand_strength = self.state_rep.calculate_hand_strength(player, game)
+                action_vector = np.zeros(self.action_dim)
+                action_vector[action_idx] = 1
+                return self.state_rep.decode_action(action_vector, game, player, hand_strength)
         
-        # 基于概率采样动作
-        action_idx = np.random.choice(self.action_dim, p=action_probs)
+        # 利用模型选择最优动作
+        # --- 原代码 (慢) ---
+        # q_values = self.model.predict(state.reshape(1, -1), verbose=0)[0]
         
-        # 记录状态和动作
-        self.states.append(state)
-        self.actions.append(action_idx)
+        # --- 新代码 (快) ---
+        # 1. 将numpy数组转换为Tensor，避免重复转换开销
+        state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
+        
+        # 2. 直接调用模型 (__call__)，training=False 表示推理模式 (不使用Dropout等)
+        q_values_tensor = self.model(state_tensor, training=False)
+        
+        # 3. 转回 numpy 获取最大值索引
+        q_values = q_values_tensor.numpy()[0]
+        # ------------------
+        
+        action_idx = np.argmax(q_values)
         
         if game is None or player is None:
             return action_idx, None
         else:
-            # 计算手牌强度
             hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
             return self.state_rep.decode_action(action_vector, game, player, hand_strength)
-    
+
     def discount_rewards(self, rewards: List[float]) -> np.ndarray:
         """计算折扣奖励"""
         discounted = np.zeros_like(rewards, dtype=float)
