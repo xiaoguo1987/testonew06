@@ -267,8 +267,30 @@ class SelfPlayTrainer:
         )
         self.performance_history.append(eval_result)
         return eval_result
-    
+        
     def update_opponents(self) -> None:
+        """更新对手代理（内存复制版：极速且无递归风险）"""
+        if not self.opponent_agents:
+            return
+            
+        try:
+            # 随机选择一个对手进行更新
+            opp_idx = random.randint(0, len(self.opponent_agents) - 1)
+            
+            # 1. 从主代理获取权重 (内存操作)
+            weights = self.main_agent.get_weights()
+            
+            if weights is not None:
+                # 2. 复制给对手代理 (内存操作)
+                self.opponent_agents[opp_idx].set_weights(weights)
+                logger.info(f"更新对手 {opp_idx + 1} 模型 (内存复制)")
+            else:
+                logger.warning("主代理不支持权重获取，跳过对手更新")
+                
+        except Exception as e:
+            logger.error(f"更新对手失败: {e}")
+
+    def update_opponentsold(self) -> None:
         """更新对手代理（优化文件操作安全性）"""
         if not self.opponent_agents:
             return

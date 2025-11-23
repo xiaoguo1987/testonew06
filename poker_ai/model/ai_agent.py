@@ -131,6 +131,17 @@ class PokerAIAgent:
         self.load_model(filepath)
     # ============================================
 
+    def get_weights(self):
+        """获取代理权重"""
+        if hasattr(self.agent, 'get_weights'):
+            return self.agent.get_weights()
+        return None
+
+    def set_weights(self, weights):
+        """设置代理权重"""
+        if hasattr(self.agent, 'set_weights'):
+            self.agent.set_weights(weights)
+
     def update_target_model(self) -> None:
         """更新目标模型（DQN特定）"""
         if self.agent_type == 'dqn':

@@ -136,6 +136,15 @@ class DQNAgent:
         """存储经验到回放缓冲区"""
         self.memory.append((state, action, reward, next_state, done))
     
+    def get_weights(self):
+        """获取神经网络权重"""
+        return self.model.get_weights()
+
+    def set_weights(self, weights):
+        """设置神经网络权重"""
+        self.model.set_weights(weights)
+        self.update_target_model() # 别忘了同步更新目标网络
+
     def act(self, state: np.ndarray, game: Optional[PokerGame] = None, player: Optional[Player] = None) -> Tuple[str, Optional[int]]:
         """根据当前状态选择动作 (极速版)"""
         
@@ -206,7 +215,7 @@ class DQNAgent:
         
         # 2. 直接调用编译好的训练函数
         self.train_step(states_tensor, target_q_tensor)
-        
+
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
         
