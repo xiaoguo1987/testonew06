@@ -61,11 +61,39 @@ class DQNAgent:
             self._predict_internal,
             input_signature=[tf.TensorSpec(shape=(None, self.state_dim), dtype=tf.float32)]
         )
-    
+        # === 新增：预编译的训练函数 (替代 model.fit) ===
+        self.train_step = tf.function(
+            self._train_step_internal,
+            input_signature=[
+                tf.TensorSpec(shape=(None, self.state_dim), dtype=tf.float32), # states
+                tf.TensorSpec(shape=(None, self.action_dim), dtype=tf.float32) # target_q
+            ]
+        )
     # 定义内部计算逻辑
     def _predict_internal(self, state_tensor):
         return self.model(state_tensor, training=False)
 
+    def _train_step_internal(self, states, target_q):
+        """
+        底层的梯度下降步骤。
+        使用 @tf.function 编译后，这里会直接在 GPU 上运行，没有任何 Python 开销。
+        """
+        with tf.GradientTape() as tape:
+            # 1. 前向传播 (计算预测值)
+            # training=True 很重要，它会启用 Dropout 层
+            predictions = self.model(states, training=True)
+            
+            # 2. 计算损失 (MSE)
+            # 这里的损失函数需要和你 compile 时的一致
+            loss = tf.keras.losses.MeanSquaredError()(target_q, predictions)
+            
+        # 3. 反向传播 (计算梯度)
+        gradients = tape.gradient(loss, self.model.trainable_variables)
+        
+        # 4. 更新权重
+        self.model.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
+        
+        return loss
     def _build_model(self) -> Model:
         """构建神经网络模型"""
         model = Sequential([
@@ -168,8 +196,16 @@ class DQNAgent:
             else:
                 target_q[i, actions[i]] = rewards[i] + self.gamma * np.max(next_q[i])
         
-        # 训练模型 (fit 内部已经优化，通常不需要改为 GradientTape，除非追求极致)
-        self.model.fit(states, target_q, epochs=1, verbose=0, batch_size=self.batch_size)
+        # 原代码 (慢，这就是 SnakeViz 里的瓶颈):
+        # self.model.fit(states, target_q, epochs=1, verbose=0, batch_size=self.batch_size)
+        
+        # 新代码 (极速):
+        # 1. 转换数据为 Tensor
+        states_tensor = tf.convert_to_tensor(states, dtype=tf.float32)
+        target_q_tensor = tf.convert_to_tensor(target_q, dtype=tf.float32)
+        
+        # 2. 直接调用编译好的训练函数
+        self.train_step(states_tensor, target_q_tensor)
         
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -312,7 +348,7 @@ class PolicyGradientAgent:
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
             return self.state_rep.decode_action(action_vector, game, player, hand_strength)
-            
+
     def discount_rewards(self, rewards: List[float]) -> np.ndarray:
         """计算折扣奖励"""
         discounted = np.zeros_like(rewards, dtype=float)
