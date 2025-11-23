@@ -254,6 +254,18 @@ class StateRepresentation:
         # 我们直接信任神经网络的输出 (action_vector)
         
         action_idx = np.argmax(action_vector)
+        # ==========================================
+        # 🔒 强制起手牌范围限制 (Action Masking)
+        # ==========================================
+        # 规则：如果是翻牌前 (round == 1) 且 手牌不在白名单中
+        # 且 当前不是免费看牌的情况（即如果要花钱才能玩下去）
+        if game.round == 1:
+            cost_to_call = max(0, game.current_bet - player.bet)
+            
+            # 如果需要花钱跟注，且手牌烂，直接弃牌
+            if cost_to_call > 0 and not self._is_valid_preflop_hand(player.cards):
+                return ('fold', None)
+        # ==========================================
         
         # --- 下面的逻辑保留，用于将索引转换为具体的游戏动作 ---
         
@@ -288,6 +300,62 @@ class StateRepresentation:
         else:
             return ('fold', None)
 
+    def _is_valid_preflop_hand(self, cards: List[Card]) -> bool:
+            """
+            检查手牌是否在允许游玩的白名单中（翻牌前）
+            基于 RewardCalculator 中的 hand_strength_map 逻辑
+            """
+            if len(cards) != 2:
+                return False
+                
+            rank1, rank2 = cards[0].rank, cards[1].rank
+            # 排序：大的在前，小的在后，确保查表一致性
+            # 这里的 ranking 顺序需要和你定义的 RANK_VALUES 一致
+            val1 = RANK_VALUES[rank1]
+            val2 = RANK_VALUES[rank2]
+            
+            if val1 < val2:
+                rank1, rank2 = rank2, rank1
+                
+            is_suited = cards[0].suit == cards[1].suit
+            key = (rank1, rank2)
+            
+            # === 白名单定义 (基于你提供的 RewardCalculator) ===
+            # 这里只列出你希望 AI 玩的牌，不在这个列表里的都会被强制弃牌
+            allowed_hands = {
+                # 1. 对子
+                ('A', 'A'), ('K', 'K'), ('Q', 'Q'), ('J', 'J'), ('T', 'T'),
+                ('9', '9'), ('8', '8'), ('7', '7'), ('6', '6'), ('5', '5'),
+                ('4', '4'), ('3', '3'), ('2', '2'),
+                
+                # 2. 强高牌 (同色/杂色)
+                ('A', 'K'), ('A', 'Q'), ('A', 'J'), ('A', 'T'),
+                ('K', 'Q'), ('K', 'J'), ('K', 'T'),
+                ('Q', 'J'), 
+                
+                # 3. 仅限同色 (Suited) 的连张或强牌
+                # 如果你只想玩同色的 AK，可以不把 ('A','K') 放在上面，而是单独判断 is_suited
+            }
+            
+            # 特殊处理：同花连张或特定同花牌
+            # 比如：QJs, JTs, T9s 等
+            if is_suited:
+                suited_connectors = [
+                    ('Q', 'J'), ('J', 'T'), ('T', '9'), ('9', '8'), 
+                    ('8', '7'), ('7', '6'), ('6', '5'), ('5', '4')
+                ]
+                if key in suited_connectors:
+                    return True
+                    
+                # 只要是同花 A 带任何牌 (Axs)
+                if rank1 == 'A':
+                    return True
+
+            # 检查基本白名单
+            if key in allowed_hands:
+                return True
+                
+            return False
 # 测试代码
 if __name__ == "__main__":
     from ..game.poker_game import Player, PokerGame
