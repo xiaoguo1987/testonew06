@@ -1,4 +1,4 @@
-# 德州扑克DQN代理模型 (修正版)
+# 德州扑克DQN代理模型 (最终完整版)
 
 import os
 import numpy as np
@@ -12,8 +12,12 @@ from typing import List, Tuple, Dict, Optional
 from .state_representation import StateRepresentation
 from ..game.poker_game import Player, PokerGame
 import logging
+
 logger = logging.getLogger("DQNAgent")
 
+# ==========================================
+# 1. DQN Agent (已修复优化器和保存逻辑)
+# ==========================================
 class DQNAgent:
     """德州扑克DQN智能代理"""
     
@@ -44,7 +48,7 @@ class DQNAgent:
         # 经验回放缓冲区
         self.memory = deque(maxlen=memory_size)
         
-        # === 修正1: 显式初始化优化器 ===
+        # 显式初始化优化器
         self.optimizer = self._get_optimizer()
         
         # 创建主网络和目标网络
@@ -88,7 +92,6 @@ class DQNAgent:
             loss = tf.keras.losses.MeanSquaredError()(target_q, predictions)
         
         gradients = tape.gradient(loss, self.model.trainable_variables)
-        # === 修正2: 使用 self.optimizer 而不是 model.optimizer ===
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
         return loss
 
@@ -102,8 +105,6 @@ class DQNAgent:
             Dense(64, activation='relu'),
             Dense(self.action_dim, activation='linear')
         ])
-        # 这里不需要 compile 了，因为我们自定义了训练循环
-        # 但为了 summary() 能看，或者以防万一，compile 一下也没坏处
         model.compile(optimizer=self.optimizer, loss='mse') 
         return model
     
@@ -173,7 +174,6 @@ class DQNAgent:
 
     def load(self, name: str) -> None:
         """加载模型权重 (安全版)"""
-        # 只处理 .weights.h5 和 .pkl 的文件名映射，不进行 pickle 反序列化
         h5_path = name
         if name.endswith('.pkl'):
             h5_path = name.replace('.pkl', '.weights.h5')
@@ -192,7 +192,6 @@ class DQNAgent:
     
     def save(self, name: str) -> None:
         """保存模型权重"""
-        # 强制使用 .weights.h5
         if name.endswith('.pkl'):
             name = name.replace('.pkl', '.weights.h5')
         elif not name.endswith('.weights.h5'):
@@ -206,3 +205,119 @@ class DQNAgent:
     def get_q_values(self, state: np.ndarray) -> np.ndarray:
         state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
         return self.model(state_tensor, training=False).numpy()[0]
+
+
+# ==========================================
+# 2. Policy Gradient Agent (必须包含！)
+# ==========================================
+class PolicyGradientAgent:
+    """基于策略梯度的德州扑克代理"""
+    
+    def __init__(self,
+                 state_dim: int,
+                 action_dim: int = 5,
+                 learning_rate: float = 0.001,
+                 gamma: float = 0.95):
+        
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        
+        self.policy_network = self._build_policy_network()
+        self.state_rep = StateRepresentation()
+        
+        self.states = []
+        self.actions = []
+        self.rewards = []
+
+        # 同样使用 tf.function 预编译推理，保持一致的高性能
+        self.predict_fn = tf.function(
+            self._predict_internal,
+            input_signature=[tf.TensorSpec(shape=(None, self.state_dim), dtype=tf.float32)]
+        )
+
+    def _predict_internal(self, state_tensor):
+        return self.policy_network(state_tensor, training=False)
+    
+    def _build_policy_network(self) -> Model:
+        model = Sequential([
+            Input(shape=(self.state_dim,)),
+            Dense(256, activation='relu'),
+            Dropout(0.3),
+            Dense(128, activation='relu'),
+            Dropout(0.3),
+            Dense(64, activation='relu'),
+            Dense(self.action_dim, activation='softmax')
+        ])
+        model.compile(
+            optimizer=Adam(learning_rate=self.learning_rate),
+            loss='categorical_crossentropy'
+        )
+        return model
+    
+    def act(self, state: np.ndarray, game: Optional[PokerGame] = None, player: Optional[Player] = None) -> Tuple[str, Optional[int]]:
+        # 使用预编译函数加速
+        state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
+        action_probs = self.predict_fn(state_tensor).numpy()[0]
+        
+        action_idx = np.random.choice(self.action_dim, p=action_probs)
+        
+        self.states.append(state)
+        self.actions.append(action_idx)
+        
+        if game is None or player is None:
+            return action_idx, None
+        else:
+            hand_strength = self.state_rep.calculate_hand_strength(player, game)
+            action_vector = np.zeros(self.action_dim)
+            action_vector[action_idx] = 1
+            return self.state_rep.decode_action(action_vector, game, player, hand_strength)
+
+    def discount_rewards(self, rewards: List[float]) -> np.ndarray:
+        discounted = np.zeros_like(rewards, dtype=float)
+        running_add = 0
+        for t in reversed(range(len(rewards))):
+            running_add = running_add * self.gamma + rewards[t]
+            discounted[t] = running_add
+        
+        if len(discounted) > 0 and np.std(discounted) > 0:
+            discounted = (discounted - np.mean(discounted)) / np.std(discounted)
+        return discounted
+    
+    def train(self) -> float:
+        if len(self.states) == 0:
+            return 0.0
+        
+        discounted_rewards = self.discount_rewards(self.rewards)
+        states = np.array(self.states)
+        actions = np.array(self.actions)
+        
+        action_labels = np.zeros((len(actions), self.action_dim))
+        for i, action in enumerate(actions):
+            action_labels[i, action] = discounted_rewards[i]
+        
+        loss = self.policy_network.train_on_batch(states, action_labels)
+        
+        self.states = []
+        self.actions = []
+        self.rewards = []
+        return loss
+    
+    def remember_reward(self, reward: float) -> None:
+        self.rewards.append(reward)
+    
+    def load(self, name: str) -> None:
+        if not name.endswith('.weights.h5'):
+             name += '.weights.h5'
+        if os.path.exists(name):
+             self.policy_network.load_weights(name)
+    
+    def save(self, name: str) -> None:
+        if not name.endswith('.weights.h5'):
+             name += '.weights.h5'
+        self.policy_network.save_weights(name)
+    
+    def get_action_probs(self, state: np.ndarray) -> np.ndarray:
+        state_tensor = tf.convert_to_tensor(state.reshape(1, -1), dtype=tf.float32)
+        return self.policy_network(state_tensor, training=False).numpy()[0]
