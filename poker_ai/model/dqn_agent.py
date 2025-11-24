@@ -98,9 +98,9 @@ class DQNAgent:
         """构建神经网络模型"""
         model = Sequential([
             Input(shape=(self.state_dim,)),
-            Dense(256, activation='relu'),
+            Dense(512, activation='relu'),
             Dropout(0.3),
-            Dense(128, activation='relu'),
+            Dense(256, activation='relu'),
             Dropout(0.3),
             Dense(64, activation='relu'),
             Dense(self.action_dim, activation='linear')  # 输出Q值
