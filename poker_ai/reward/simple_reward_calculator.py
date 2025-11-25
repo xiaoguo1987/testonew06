@@ -18,14 +18,14 @@ class SimpleRewardCalculator:
         """
         if not done:
             return 0.0
-            
+        reward = 0.0    
         # 归一化：以大盲注为单位
         # 赢 10BB 就是 +10 分，输 10BB 就是 -10 分
         if game.big_blind > 0:
-            reward = profit_loss / game.big_blind
-        else:
-            reward = profit_loss # 防止除零
+            reward += profit_loss / game.big_blind
         
+        if is_winner:
+            reward += 2.0
         # 裁剪奖励防止梯度爆炸 (-5 到 +5 之间)
         return max(-5.0, min(5.0, reward))
 
