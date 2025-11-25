@@ -1,4 +1,4 @@
-# state_representation.py (6-Max 专用增强版)
+# state_representation.py (修复动作无效 & 智能过牌版)
 
 import numpy as np
 from typing import List, Dict, Optional
@@ -11,22 +11,11 @@ class StateRepresentation:
     
     def __init__(self):
         # === 维度定义 ===
-        # 1. 玩家手牌 (13*4 = 52)
         self.player_cards_dim = 52
-        
-        # 2. 公共牌 (13*4 = 52)
         self.board_cards_dim = 52
-        
-        # 3. 所有玩家详细信息 (6个玩家 * 3个特征: Stack, Bet, Active) = 18
         self.player_info_dim = 6 * 3
-        
-        # 4. 游戏全局信息 (Round, Pot, Bet, BB, SB) = 5
         self.game_info_dim = 5
-        
-        # 5. [新增] Hero绝对位置 One-Hot (BTN, SB, BB, UTG, MP, CO) = 6维
         self.position_one_hot_dim = 6
-        
-        # 6. [新增] 活跃玩家数量 (归一化数值) = 1维
         self.active_count_dim = 1
         
         self.total_state_dim = (
@@ -42,7 +31,6 @@ class StateRepresentation:
         self._preflop_cache = {}
 
     def card_to_one_hot(self, cards: List[Card]) -> np.ndarray:
-        """将牌转换为one-hot编码"""
         one_hot = np.zeros(52)
         for card in cards:
             suit_idx = ['♥', '♦', '♣', '♠'].index(card.suit)
@@ -52,88 +40,48 @@ class StateRepresentation:
         return one_hot
     
     def player_info_to_vector(self, players: List[Player], current_player_idx: int, game: PokerGame) -> np.ndarray:
-        """玩家状态向量，保持相对位置顺序，让AI总是在第一个位置看到自己"""
         vector = np.zeros(self.player_info_dim)
         bb = max(game.big_blind, 1)
         
-        for i in range(6): # 固定循环6次，确保维度固定
-            # 这里的逻辑是：将当前玩家(Hero)放在向量的开头(i=0)，其他人顺时针排列
-            # 这样 AI 永远知道 vector[0:3] 是自己的信息
+        for i in range(6):
             target_idx = (current_player_idx + i) % len(players)
-            
             if target_idx < len(players):
                 player = players[target_idx]
                 base_idx = i * 3
-                
-                # 归一化特征
-                stack_normalized = min(player.stack / (bb * 100), 1.0)
-                bet_normalized = min(player.bet / (bb * 100), 1.0)
-                is_active = 1.0 if player.is_active else 0.0
-                
-                vector[base_idx] = stack_normalized
-                vector[base_idx + 1] = bet_normalized
-                vector[base_idx + 2] = is_active
-                
+                vector[base_idx] = min(player.stack / (bb * 100), 1.0)
+                vector[base_idx + 1] = min(player.bet / (bb * 100), 1.0)
+                vector[base_idx + 2] = 1.0 if player.is_active else 0.0
         return vector
     
     def get_position_vector(self, game: PokerGame, current_player: Player) -> np.ndarray:
-        """
-        [新增] 获取 Hero 的绝对位置 One-Hot 向量
-        6-Max 位置定义相对于庄家 (Dealer):
-        0: BTN (Dealer)
-        1: SB
-        2: BB
-        3: UTG (Under the Gun)
-        4: MP (Middle Position / Hijack)
-        5: CO (Cutoff)
-        """
         hero_idx = game.players.index(current_player)
         dealer_idx = game.dealer_pos
-        num_players = len(game.players) # 应该是6
-        
-        # 计算相对于庄家的位置距离
-        # 距离 0 = BTN, 1 = SB, 2 = BB ...
+        num_players = len(game.players)
         dist_from_dealer = (hero_idx - dealer_idx + num_players) % num_players
         
-        # 创建 One-Hot
         pos_vector = np.zeros(self.position_one_hot_dim)
-        # 保护一下防止 num_players 变动导致越界
         if dist_from_dealer < self.position_one_hot_dim:
             pos_vector[dist_from_dealer] = 1.0
-            
         return pos_vector
 
     def get_active_count_vector(self, game: PokerGame) -> np.ndarray:
-        """[新增] 获取活跃玩家数量特征"""
         active_count = sum(1 for p in game.players if p.is_active)
-        # 归一化：(活跃人数 - 1) / 5.0。 
-        # 结果范围 0.0 (Heads-up) 到 1.0 (6人全在)
         normalized = (active_count - 1) / 5.0 if active_count > 0 else 0
         return np.array([normalized])
 
     def get_state(self, game: PokerGame, current_player: Player) -> np.ndarray:
-        """获取完整的游戏状态向量"""
         current_player_idx = game.players.index(current_player)
-        
-        # 组合所有特征
         state = np.concatenate([
-            # 1. 自身手牌
             self.card_to_one_hot(current_player.cards),
-            # 2. 公共牌
             self.card_to_one_hot(game.board),
-            # 3. 所有玩家状态 (Hero排在最前)
             self.player_info_to_vector(game.players, current_player_idx, game),
-            # 4. 游戏全局信息
             self.game_info_to_vector(game),
-            # 5. [新增] 绝对位置信息 (至关重要)
             self.get_position_vector(game, current_player),
-            # 6. [新增] 活跃人数信息
             self.get_active_count_vector(game)
         ])
         return state
     
     def game_info_to_vector(self, game: PokerGame) -> np.ndarray:
-        # 保持之前的优化逻辑
         bb = max(game.big_blind, 1)
         vector = np.zeros(self.game_info_dim)
         vector[0] = (game.round - 1) / 4.0
@@ -143,11 +91,7 @@ class StateRepresentation:
         vector[4] = game.small_blind / 100.0
         return vector
 
-    # ==========================================
-    # 保持之前的性能优化 (calculate_hand_strength 等)
-    # ==========================================
     def calculate_hand_strength(self, player: Player, game: PokerGame) -> float:
-        # 直接复用刚才那个高性能版本的代码
         if not player.cards: return 0.0
         if not game.board: return self._quick_preflop_strength(player.cards)
         
@@ -159,7 +103,6 @@ class StateRepresentation:
         return win_rate
 
     def _quick_preflop_strength(self, cards: List[Card]) -> float:
-        # 复用刚才的高性能版本代码
         if len(cards) != 2: return 0.0
         c1, c2 = sorted(cards, key=lambda x: x.value, reverse=True)
         is_suited = c1.suit == c2.suit
@@ -185,7 +128,6 @@ class StateRepresentation:
         return strength
 
     def encode_action(self, action: str, amount: Optional[int] = None, game: Optional[PokerGame] = None) -> np.ndarray:
-        # 复用之前的逻辑
         action_vector = np.zeros(5)
         if action == 'fold': action_vector[0] = 1
         elif action == 'call': action_vector[1] = 1
@@ -198,29 +140,53 @@ class StateRepresentation:
         return action_vector
     
     def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
-        # 复用之前的逻辑
+        """
+        将神经网络输出的动作向量解码为具体的游戏动作
+        已修复：无效加注金额 和 自动过牌逻辑
+        """
         action_idx = np.argmax(action_vector)
         
-        # 6-Max 翻牌前策略增强：如果你想训练得更快，可以这里加一点规则
-        # 例如：在 UTG 位置 (Pos=3)，如果手牌强度 < 0.4，强制弃牌
-        # 但这属于 Hard-coding，为了让 AI 自己学，暂时保持原来的逻辑即可
-        if game.round == 1:
-            cost_to_call = max(0, game.current_bet - player.bet)
-            if cost_to_call > 0 and hand_strength < 0.15 and action_idx != 0:
-                 return ('fold', None)
+        # 计算跟注成本
+        cost_to_call = max(0, game.current_bet - player.bet)
+        
+        # === 动作 0: Fold (弃牌) ===
+        if action_idx == 0:
+            # 🔥 智能过牌逻辑：如果不需要跟注（免费看牌），则强制改为 Call (即 Check)
+            if cost_to_call == 0:
+                return ('call', 0)
+            return ('fold', None)
 
-        if action_idx == 0: return ('fold', None)
+        # === 动作 1: Call (跟注) ===
         elif action_idx == 1:
-            call_amount = max(0, game.current_bet - player.bet)
-            return ('call', call_amount)
-        elif action_idx == 2:
-            current_bet = max(game.current_bet, game.big_blind)
-            amt = min(current_bet * 2, player.bet + player.stack)
+            return ('call', cost_to_call)
+
+        # === 加注逻辑计算 (Raise) ===
+        # 1. 计算合法的最小加注总额 (Min Raise Total)
+        # 规则：通常是 current_bet * 2，或者是 current_bet + big_blind (如果 current_bet=0)
+        if game.current_bet > 0:
+            min_raise_total = game.current_bet * 2
+        else:
+            min_raise_total = game.big_blind
+
+        # 确保 min_raise_total 至少是大盲
+        min_raise_total = max(min_raise_total, game.big_blind)
+
+        # === 动作 2: Min Raise (最小加注) ===
+        if action_idx == 2:
+            amt = min_raise_total
+            # All-in 保护：如果算出来的金额超过筹码，那就是 All-in
+            amt = min(amt, player.bet + player.stack)
             return ('raise', int(amt))
+
+        # === 动作 3: Mid Raise (中等加注 - 比如 4BB 或 2倍当前下注的较大者) ===
         elif action_idx == 3:
-            current_bet = max(game.current_bet, game.big_blind)
-            amt = min(current_bet * 4, player.bet + player.stack)
+            # 目标：更大一点的加注，例如 current_bet + 4BB
+            target_amt = max(min_raise_total, game.current_bet + 4 * game.big_blind)
+            amt = min(target_amt, player.bet + player.stack)
             return ('raise', int(amt))
+
+        # === 动作 4: All-in (全下) ===
         elif action_idx == 4:
             return ('raise', int(player.bet + player.stack))
+
         return ('fold', None)
