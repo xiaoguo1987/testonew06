@@ -70,9 +70,9 @@ def parse_arguments():
     parser.add_argument('--batch-size', type=int, default=64, help='批处理大小')
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamax', 'rmsprop', 'sgd'], help='优化器类型')
-    parser.add_argument('--eval-interval', type=int, default=100, help='评估间隔（局数）')
-    parser.add_argument('--checkpoint-interval', type=int, default=500, help='保存检查点间隔（局数）')
-    parser.add_argument('--num-eval-games', type=int, default=50, help='每次评估的游戏局数')
+    parser.add_argument('--eval-interval', type=int, default=200, help='评估间隔（局数）')
+    parser.add_argument('--checkpoint-interval', type=int, default=1000, help='保存检查点间隔（局数）')
+    parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
     
     # 游戏参数
     parser.add_argument('--small-blind', type=int, default=5, help='小盲注')
@@ -97,7 +97,7 @@ def parse_arguments():
     
     # 自我对弈参数
     parser.add_argument('--use-self-play', action='store_true', default=True, help='启用自我对弈训练')
-    parser.add_argument('--opponent-update-interval', type=int, default=10000, help='对手更新间隔（局数）')
+    parser.add_argument('--opponent-update-interval', type=int, default=5000, help='对手更新间隔（局数）')
     
     # 探索参数
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')

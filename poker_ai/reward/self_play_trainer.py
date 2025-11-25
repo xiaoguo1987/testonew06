@@ -32,11 +32,11 @@ class SelfPlayTrainer:
                  big_blind: int = 10,
                  initial_stack: int = 1000,
                  num_players: int = 6,  # 默认必须是6
-                 eval_interval: int = 100,
-                 checkpoint_interval: int = 500,
-                 num_eval_games: int = 50,
+                 eval_interval: int = 200,
+                 checkpoint_interval: int = 1000,
+                 num_eval_games: int = 100,
                  use_ensemble: bool = False,
-                 opponent_update_interval: int = 10000,
+                 opponent_update_interval: int = 5000,
                  learning_rate: float = 0.001,
                  optimizer: str = 'adam',
                  target_update_freq: int = 100):
@@ -67,8 +67,9 @@ class SelfPlayTrainer:
         # 创建AI代理
         self._create_agents()
         
-        # 创建奖励计算器 (使用极简版以加速训练)
-        self.reward_calculator = SimpleRewardCalculator()
+        # 使用更复杂的奖励计算器，提供中间步骤奖励
+        # 这有助于AI学习更精细的策略，而不仅是最终结果
+        self.reward_calculator = RewardCalculator()
 
         # 统计信息（基础）
         self.total_hands = 0
@@ -417,26 +418,41 @@ class SelfPlayTrainer:
 
     def record_performance(self, profit_loss: float) -> None:
         """记录训练表现"""
-        # 简单版只打印日志，不调用 adjust_rewards (因为 SimpleRewardCalculator 不支持)
+        # 计算策略指标
+        bluff_rate = self.total_bluff_attempts / self.total_aggressive_actions if self.total_aggressive_actions > 0 else 0.0
+        invalid_bet_rate = self.total_invalid_bets / self.total_raise_actions if self.total_raise_actions > 0 else 0.0
+        
+        # 详细日志记录
         logger.info(
             f"训练统计 - 总手牌: {self.total_hands}, "
-            f"累计利润: {self.total_profit:.2f}"
+            f"累计利润: {self.total_profit:.2f}, "
+            f"当前手牌利润: {profit_loss:.2f}, "
+            f"诈唬率: {bluff_rate:.3f}, "
+            f"无效下注率: {invalid_bet_rate:.3f}"
         )
         
-        # 如果确实用了自适应计算器（为了兼容性保留代码）
-        if isinstance(self.reward_calculator, AdaptiveRewardCalculator):
-             # 仅当使用了 AdaptiveRewardCalculator 时才调用
-             bluff_rate = self.total_bluff_attempts / self.total_aggressive_actions if self.total_aggressive_actions > 0 else 0.0
-             invalid_bet_rate = self.total_invalid_bets / self.total_raise_actions if self.total_raise_actions > 0 else 0.0
-             
-             self.reward_calculator.record_performance(
-                profit_loss=profit_loss,
-                hands_played=1,
-                bluff_rate=bluff_rate,
-                invalid_bet_rate=invalid_bet_rate
-             )
-             if self.total_hands % 10 == 0:
-                self.reward_calculator.adjust_rewards()
+        # 为所有奖励计算器类型提供兼容支持
+        # 如果是RewardCalculator，记录额外的性能指标
+        if hasattr(self.reward_calculator, 'record_performance'):
+            try:
+                self.reward_calculator.record_performance(
+                    profit_loss=profit_loss,
+                    hands_played=1,
+                    bluff_rate=bluff_rate,
+                    invalid_bet_rate=invalid_bet_rate
+                )
+            except Exception as e:
+                logger.warning(f"奖励计算器记录性能失败: {e}")
+        
+        # 记录到性能历史，方便后续分析
+        performance_data = {
+            'hands': self.total_hands,
+            'total_profit': self.total_profit,
+            'current_profit': profit_loss,
+            'bluff_rate': bluff_rate,
+            'invalid_bet_rate': invalid_bet_rate
+        }
+        logger.debug(f"性能数据: {performance_data}")
 
     def train(self, num_hands: int) -> None:
         """主训练循环"""
@@ -451,7 +467,7 @@ class SelfPlayTrainer:
             self.total_hands += 1
             self.total_profit += result['player_profits']['Main_AI']
             
-            if self.total_hands % 100 == 0:
+            if self.total_hands % 200 == 0:
                self.record_performance(result['player_profits']['Main_AI'])
             
             if self.total_hands % self.eval_interval == 0:

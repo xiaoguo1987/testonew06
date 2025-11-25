@@ -201,13 +201,9 @@ class StateRepresentation:
         # 复用之前的逻辑
         action_idx = np.argmax(action_vector)
         
-        # 6-Max 翻牌前策略增强：如果你想训练得更快，可以这里加一点规则
-        # 例如：在 UTG 位置 (Pos=3)，如果手牌强度 < 0.4，强制弃牌
-        # 但这属于 Hard-coding，为了让 AI 自己学，暂时保持原来的逻辑即可
-        if game.round == 1:
-            cost_to_call = max(0, game.current_bet - player.bet)
-            if cost_to_call > 0 and hand_strength < 0.15 and action_idx != 0:
-                 return ('fold', None)
+        # 移除强制弃牌逻辑，允许AI根据学习自行决定动作
+        # 这使AI能够尝试用弱手牌到达摊牌阶段，有助于学习完整的扑克策略
+        pass
 
         if action_idx == 0: return ('fold', None)
         elif action_idx == 1:
