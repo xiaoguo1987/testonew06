@@ -277,9 +277,14 @@ class SelfPlayTrainer:
         for _ in range(self.num_eval_games):
             game, players = self._create_game()
             result = self._play_hand(game, players, is_training=False)
-            total_profit += result['player_profits']['Main_AI']
-            if result['winner'] == 'Main_AI':
+            # 获取 Main_AI 的当局利润
+            main_ai_profit = result['player_profits']['Main_AI']
+            total_profit += main_ai_profit
+            
+            # === 🔥 核心修改：只要利润大于0就算赢 (比字符串匹配更靠谱) ===
+            if main_ai_profit > 0:
                 wins += 1
+            # ==========================================================
             
             main_actions = result['action_histories']['Main_AI']
             if main_actions:
