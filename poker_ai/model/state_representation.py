@@ -142,7 +142,7 @@ class StateRepresentation:
     def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
         """
         将神经网络输出的动作向量解码为具体的游戏动作
-        已修复：无效加注金额 和 自动过牌逻辑
+        已修复：无效加注自动转跟注 (Auto-Convert Raise to Call)
         """
         action_idx = np.argmax(action_vector)
         
@@ -151,7 +151,7 @@ class StateRepresentation:
         
         # === 动作 0: Fold (弃牌) ===
         if action_idx == 0:
-            # 🔥 智能过牌逻辑：如果不需要跟注（免费看牌），则强制改为 Call (即 Check)
+            # 智能过牌：如果不需要跟注，强制改为 Call (Check)
             if cost_to_call == 0:
                 return ('call', 0)
             return ('fold', None)
@@ -161,8 +161,7 @@ class StateRepresentation:
             return ('call', cost_to_call)
 
         # === 加注逻辑计算 (Raise) ===
-        # 1. 计算合法的最小加注总额 (Min Raise Total)
-        # 规则：通常是 current_bet * 2，或者是 current_bet + big_blind (如果 current_bet=0)
+        # 1. 计算合法的最小加注总额
         if game.current_bet > 0:
             min_raise_total = game.current_bet * 2
         else:
@@ -171,22 +170,28 @@ class StateRepresentation:
         # 确保 min_raise_total 至少是大盲
         min_raise_total = max(min_raise_total, game.big_blind)
 
-        # === 动作 2: Min Raise (最小加注) ===
-        if action_idx == 2:
+        # === 动作 2/3/4: 加注 ===
+        amt = 0
+        if action_idx == 2: # Min Raise
             amt = min_raise_total
-            # All-in 保护：如果算出来的金额超过筹码，那就是 All-in
-            amt = min(amt, player.bet + player.stack)
-            return ('raise', int(amt))
-
-        # === 动作 3: Mid Raise (中等加注 - 比如 4BB 或 2倍当前下注的较大者) ===
-        elif action_idx == 3:
-            # 目标：更大一点的加注，例如 current_bet + 4BB
+        elif action_idx == 3: # Mid Raise
             target_amt = max(min_raise_total, game.current_bet + 4 * game.big_blind)
-            amt = min(target_amt, player.bet + player.stack)
-            return ('raise', int(amt))
+            amt = target_amt
+        elif action_idx == 4: # All-in
+            amt = player.bet + player.stack
 
-        # === 动作 4: All-in (全下) ===
-        elif action_idx == 4:
-            return ('raise', int(player.bet + player.stack))
-
-        return ('fold', None)
+        # === 🔥 核心修复：加注金额修正与合法性检查 🔥 ===
+        
+        # 1. All-in 保护：不能超过玩家拥有的总筹码
+        max_possible = player.bet + player.stack
+        amt = min(amt, max_possible)
+        
+        # 2. 自动降级逻辑 (Auto-Downgrade)
+        # 如果算出来的加注额 <= 当前下注额 (game.current_bet)
+        # 这意味着玩家筹码不够进行最小加注，或者已经是 All-in 状态
+        # 在这种情况下，动作必须由 'raise' 降级为 'call'
+        if amt <= game.current_bet:
+            # 如果是 All-in 情况 (amt == max_possible)，这就是一个 Call All-in
+            return ('call', cost_to_call)
+            
+        return ('raise', int(amt))
