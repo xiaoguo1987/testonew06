@@ -196,6 +196,11 @@ class SelfPlayTrainer:
                 success = game.handle_action(current_player, action_str, amount)
                 
                 if not success:
+                    # === 新增：打印为什么失败 ===
+                    if current_player.name == "Main_AI":
+                        logger.warning(f"⚠️ 动作无效被强制弃牌! 动作: {action_str}, 金额: {amount}, "
+                                       f"当前下注: {game.current_bet}, 筹码: {current_player.stack}")
+                    # ==========================
                     game.handle_action(current_player, 'fold', None)
                     # 动作无效惩罚
                     if is_training and last_step_info is not None:
