@@ -17,6 +17,10 @@ class SimpleRewardCalculator:
         过程中的奖励为 0。
         """
         if not done:
+            if action in ['call', 'raise']:
+                return 0.1  # 只要进池就给 0.1 分
+            if action == 'fold':
+                return -0.05 # 弃牌扣分
             return 0.0
         reward = 0.0    
         # 归一化：以大盲注为单位
@@ -25,9 +29,13 @@ class SimpleRewardCalculator:
             reward += profit_loss / game.big_blind
         
         if is_winner:
-            reward += 2.0
+            reward += 5.0
+            # 4. 输牌安慰奖 (防止它因为怕输而不敢玩)
+        # 如果输了但输得不多，稍微补偿一点，鼓励它参与
+        if not is_winner and profit_loss < 0:
+            reward += 0.2
         # 裁剪奖励防止梯度爆炸 (-5 到 +5 之间)
-        return max(-5.0, min(5.0, reward))
+        return max(-10.0, min(10.0, reward))
 
     # --- 以下是为了兼容 Trainer 日志统计而补全的辅助方法 ---
 

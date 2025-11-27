@@ -180,6 +180,15 @@ class SelfPlayTrainer:
                 current_state = self.main_agent.state_rep.get_state(game, current_player)
                 
                 # 生存奖励 (微小)
+                # === 🔥 新增调试日志 🔥 ===
+                # 只有在训练模式下，且每 100 手打印一次，避免日志爆炸
+                if is_training and self.total_hands % 100 == 0:
+                    hand_str = str([str(c) for c in current_player.cards])
+                    board_str = str([str(c) for c in game.board])
+                    logger.info(f"🔍 [DEBUG] 手牌: {hand_str} | 公共牌: {board_str} | "
+                                f"动作: {action_str} | 金额: {amount} | "
+                                f"当前底池: {game.pot} | 胜率预测(如有): N/A")
+                # ==========================
                 if is_training and last_step_info is not None:
                     prev_state, prev_action_idx = last_step_info
                     self.main_agent.learn(0.001, prev_state, prev_action_idx, current_state, False)
