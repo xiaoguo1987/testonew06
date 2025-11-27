@@ -181,7 +181,8 @@ class SelfPlayTrainer:
             # === 主AI 行动逻辑 ===
             if current_player.name == "Main_AI":
                 current_state = self.main_agent.state_rep.get_state(game, current_player)
-                
+                # 1. 🔥【移到这里】先让 AI 决定动作，这样才有 action_str 和 amount 变量
+                action_str, amount = self.main_agent.select_action(game, current_player)
                 # 生存奖励 (微小)
                 # === 🔥 新增调试日志 🔥 ===
                 # 只有在训练模式下，且每 100 手打印一次，避免日志爆炸
