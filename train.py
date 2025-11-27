@@ -147,6 +147,7 @@ def train_model(args):
             use_ensemble=args.use_ensemble,
             opponent_update_interval=args.opponent_update_interval,
             learning_rate=args.learning_rate,
+            batch_size=args.batch_size,
             optimizer=args.optimizer
         )
         

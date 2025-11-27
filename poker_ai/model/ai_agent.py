@@ -15,7 +15,7 @@ class PokerAIAgent:
     """德州扑克AI代理统一接口"""
     
     def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None, target_update_freq: int = 10, 
-                 learning_rate: float = 0.001, optimizer: str = 'adam'):
+                 learning_rate: float = 0.001, optimizer: str = 'adam', batch_size: int = 64):
         """
         初始化AI代理
         agent_type: 'dqn'、'policy_gradient' 或 'ppo'
@@ -23,6 +23,7 @@ class PokerAIAgent:
         target_update_freq: DQN目标网络更新频率（仅DQN代理有效）
         learning_rate: 学习率
         optimizer: 优化器类型
+        batch_size: 训练批次大小（仅DQN代理有效）
         """
         self.state_rep = StateRepresentation()
         
@@ -33,7 +34,7 @@ class PokerAIAgent:
         # 根据类型创建相应的代理
         if agent_type == 'dqn':
             self.agent = DQNAgent(state_dim=state_dim, target_update_freq=target_update_freq, 
-                                 learning_rate=learning_rate, optimizer=optimizer)
+                                 learning_rate=learning_rate, optimizer=optimizer,batch_size=batch_size)
         elif agent_type == 'policy_gradient':
             self.agent = PolicyGradientAgent(state_dim=state_dim)
         elif agent_type == 'ppo':

@@ -31,6 +31,7 @@ class SelfPlayTrainer:
                  small_blind: int = 5,
                  big_blind: int = 10,
                  initial_stack: int = 1000,
+                 batch_size: int = 64,
                  num_players: int = 6,  # 默认必须是6
                  eval_interval: int = 100,
                  checkpoint_interval: int = 500,
@@ -60,6 +61,7 @@ class SelfPlayTrainer:
         self.target_update_freq = target_update_freq
         self.learning_rate = learning_rate
         self.optimizer = optimizer
+        self.batch_size = batch_size
         
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -91,7 +93,8 @@ class SelfPlayTrainer:
                 agent_type=self.model_type, 
                 target_update_freq=self.target_update_freq, 
                 learning_rate=self.learning_rate, 
-                optimizer=self.optimizer
+                optimizer=self.optimizer,
+                batch_size=self.batch_size
             )
         
         self.opponent_agents = []
