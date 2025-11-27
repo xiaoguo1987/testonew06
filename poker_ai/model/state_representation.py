@@ -141,57 +141,63 @@ class StateRepresentation:
     
     def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
         """
-        将神经网络输出的动作向量解码为具体的游戏动作
-        已修复：无效加注自动转跟注 (Auto-Convert Raise to Call)
+        将神经网络输出解码为动作 (增强版：自动修正非法加注)
         """
         action_idx = np.argmax(action_vector)
-        
-        # 计算跟注成本
         cost_to_call = max(0, game.current_bet - player.bet)
         
-        # === 动作 0: Fold (弃牌) ===
+        # === 1. Fold (弃牌) ===
         if action_idx == 0:
-            # 智能过牌：如果不需要跟注，强制改为 Call (Check)
+            # 智能过牌保护：如果不需要花钱就能看牌 (Check)，那就别 Fold
             if cost_to_call == 0:
                 return ('call', 0)
             return ('fold', None)
 
-        # === 动作 1: Call (跟注) ===
+        # === 2. Call (跟注) ===
         elif action_idx == 1:
             return ('call', cost_to_call)
 
-        # === 加注逻辑计算 (Raise) ===
-        # 1. 计算合法的最小加注总额
-        if game.current_bet > 0:
-            min_raise_total = game.current_bet * 2
-        else:
-            min_raise_total = game.big_blind
-
-        # 确保 min_raise_total 至少是大盲
-        min_raise_total = max(min_raise_total, game.big_blind)
-
-        # === 动作 2/3/4: 加注 ===
+        # === 3. Raise (加注) ===
+        # 即使 AI 选了加注，我们也要确保金额合法
+        
+        # 计算合法的加注范围
+        # 最小加注：通常是当前下注的两倍，或者是大盲注
+        min_legal_raise = max(game.current_bet * 2, game.big_blind)
+        
+        # 玩家最大能拿出的钱 (All-in)
+        max_stack = player.bet + player.stack
+        
+        # 确定意向金额
         amt = 0
         if action_idx == 2: # Min Raise
-            amt = min_raise_total
-        elif action_idx == 3: # Mid Raise
-            target_amt = max(min_raise_total, game.current_bet + 4 * game.big_blind)
-            amt = target_amt
+            amt = min_legal_raise
+        elif action_idx == 3: # Mid Raise (比如半池或 3倍大盲)
+            amt = max(min_legal_raise, game.current_bet + 4 * game.big_blind)
         elif action_idx == 4: # All-in
-            amt = player.bet + player.stack
+            amt = max_stack
 
-        # === 🔥 核心修复：加注金额修正与合法性检查 🔥 ===
+        # --- 🔥 关键修复逻辑：自动纠错 🔥 ---
         
-        # 1. All-in 保护：不能超过玩家拥有的总筹码
-        max_possible = player.bet + player.stack
-        amt = min(amt, max_possible)
+        # 修正 A: 如果算出来的金额超过了身家，就只能 All-in
+        if amt >= max_stack:
+            amt = max_stack
         
-        # 2. 自动降级逻辑 (Auto-Downgrade)
-        # 如果算出来的加注额 <= 当前下注额 (game.current_bet)
-        # 这意味着玩家筹码不够进行最小加注，或者已经是 All-in 状态
-        # 在这种情况下，动作必须由 'raise' 降级为 'call'
-        if amt <= game.current_bet:
-            # 如果是 All-in 情况 (amt == max_possible)，这就是一个 Call All-in
-            return ('call', cost_to_call)
+        # 修正 B: 如果修整后的金额 < 最小加注额
+        if amt < min_legal_raise:
+            # 情况 B1: 如果玩家真的没钱了 (All-in 都不够最小加注)，那就允许 All-in 加注
+            if amt == max_stack:
+                pass # 合法，这是短筹码全下规则
             
+            # 情况 B2: 玩家有钱，但 AI 算少了 -> 强制提升到最小加注
+            elif max_stack >= min_legal_raise:
+                amt = min_legal_raise
+            
+            # 情况 B3: 实在不行，就转为跟注 (Call)
+            else:
+                return ('call', cost_to_call)
+
+        # 修正 C: 再次检查，如果加注额 <= 当前下注额，这其实就是跟注
+        if amt <= game.current_bet:
+             return ('call', cost_to_call)
+
         return ('raise', int(amt))
