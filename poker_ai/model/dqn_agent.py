@@ -166,7 +166,8 @@ class DQNAgent:
         self.train_step(states_tensor, target_q_tensor)
 
         if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+            self.epsilon -= self.epsilon_decay  # <--- 改成减法 (线性衰减)
+            self.epsilon = max(self.epsilon, self.epsilon_min) # 确保不低于最小值
         
         self.training_steps += 1
         if self.training_steps % self.target_update_freq == 0:
