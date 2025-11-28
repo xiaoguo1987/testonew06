@@ -145,7 +145,33 @@ class StateRepresentation:
         """
         action_idx = np.argmax(action_vector)
         cost_to_call = max(0, game.current_bet - player.bet)
+        # 基础动作定义
+        # 0: Fold, 1: Call, 2: Min Raise, 3: Mid Raise, 4: All-in
         
+        # === 🔥 专家规则：翻牌前全下限制 🔥 ===
+        # 如果 AI 想要 All-in (action_idx == 4) 且处于翻牌前 (round == 1)
+        if action_idx == 4 and game.round == 1:
+            is_premium_monster = False
+            # 检查是否是 AA 或 KK
+            if len(player.cards) == 2:
+                # 获取两张牌的点数值 (2-14)
+                ranks = [c.value for c in player.cards] # 假设 Card 对象有 value 属性 (2-14)
+                # 检查对子
+                if ranks[0] == ranks[1]:
+                    # 14=Ace, 13=King. 只有 AA 或 KK 允许
+                    if ranks[0] >= 13:
+                        is_premium_monster = True
+            
+            # 如果不是 AA/KK，禁止全下，强制降级为 Mid Raise (3) 或 Call (1)
+            if not is_premium_monster:
+                # 如果手牌还行 (>0.7)，降级为普通加注 (Action 3)
+                # 否则降级为跟注 (Action 1)
+                # 这里的 hand_strength 是外部传入的预估值
+                if hand_strength > 0.7:
+                    action_idx = 3 # 降级为普通加注
+                else:
+                    action_idx = 1 # 降级为跟注/看牌
+                    
         # === 1. Fold (弃牌) ===
         if action_idx == 0:
             # 智能过牌保护：如果不需要花钱就能看牌 (Check)，那就别 Fold
