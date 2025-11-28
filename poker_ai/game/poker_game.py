@@ -227,6 +227,7 @@ class PokerGame:
             return True
         elif self.round == 4:  # 河牌 -> 摊牌
             self._showdown()
+            self.round = 5
             return True
         
         return False
