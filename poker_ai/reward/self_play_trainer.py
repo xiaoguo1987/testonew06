@@ -271,7 +271,19 @@ class SelfPlayTrainer:
             
             terminal_state = np.zeros_like(prev_state)
             self.main_agent.learn(final_reward, prev_state, prev_action_idx, terminal_state, True)
-
+        # =======================================================
+        # 🔥🔥🔥 新增：局终打印公共牌 (无论输赢都能看到) 🔥🔥🔥
+        # =======================================================
+        if is_training and self.total_hands % 100 == 0: # 频率与上面保持一致
+            board_str = str([str(c) for c in game.board])
+            my_hand_str = str([str(c) for c in players[0].cards])
+            winner_name = game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown'
+            
+            logger.info(f"🏁 [局终结算] 公共牌: {board_str} | "
+                        f"AI手牌: {my_hand_str} | "
+                        f"赢家: {winner_name} | "
+                        f"AI最终盈亏: {final_profit}")
+        # =======================================================
         result = {
             'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
             'player_profits': {p.name: p.stack - self.initial_stack for p in players},
