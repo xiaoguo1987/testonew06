@@ -214,14 +214,17 @@ class PokerGame:
             self.board.extend([self.deck.deal() for _ in range(3)])
             self.round = 2
             self._setup_round_start()
+            return True
         elif self.round == 2:  # 翻牌 -> 转牌
             self.board.append(self.deck.deal())
             self.round = 3
             self._setup_round_start()
+            return True
         elif self.round == 3:  # 转牌 -> 河牌
             self.board.append(self.deck.deal())
             self.round = 4
             self._setup_round_start()
+            return True
         elif self.round == 4:  # 河牌 -> 摊牌
             self._showdown()
             return True
