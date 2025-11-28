@@ -17,7 +17,10 @@ class SimpleRewardCalculator:
         过程中的奖励为 0。
         """
         if not done:
-            # 🔥 懦夫惩罚：如果手牌很好 (>0.6) 却弃牌，给予重罚
+            strength = self.calculate_hand_strength(player, game)
+            # 🔥 浪打惩罚：牌烂还要玩
+            if action in ['call', 'raise'] and strength < 0.4:
+                return -0.2  # 惩罚浪打
             # 注意：这里需要调用 calculate_hand_strength，确保该方法在类里可用
             if action == 'fold':
                 strength = self.calculate_hand_strength(player, game)
@@ -32,7 +35,12 @@ class SimpleRewardCalculator:
         # 归一化：以大盲注为单位
         # 赢 10BB 就是 +10 分，输 10BB 就是 -10 分
         if game.big_blind > 0:
-            reward += profit_loss / game.big_blind
+            # 赢钱给奖励
+            if profit_loss > 0:
+                reward += (profit_loss / game.big_blind) * 1.0 
+            # 输钱加倍惩罚！让它知道痛！
+            else:
+                reward += (profit_loss / game.big_blind) * 1.5
         
         if is_winner:
             # 以前是固定 +5.0，现在改为 +2.0 加上底池比例奖励
@@ -40,10 +48,6 @@ class SimpleRewardCalculator:
             pot_bonus = (game.pot / game.big_blind) * 0.1
             reward += (2.0 + pot_bonus)
             # 4. 输牌安慰奖 (防止它因为怕输而不敢玩)
-        # 输家安慰奖 (仅当输得少时)
-        # 如果不是赢家，但也没输太多 (比如只是输了盲注)，给一点点安慰，防止它太害怕
-        if not is_winner and profit_loss > -(game.big_blind * 2):
-            reward += 0.1
         # 裁剪奖励防止梯度爆炸 (-5 到 +5 之间)
         return max(-10.0, min(10.0, reward))
 
