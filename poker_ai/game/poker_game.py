@@ -205,6 +205,7 @@ class PokerGame:
         # 如果只剩一个玩家，直接结束游戏
         active_players = [p for p in self.players if p.is_active]
         if len(active_players) == 1:
+            self.winner = active_players[0]  # <--- 添加这一行
             self._award_pot(active_players[0])
             return True
         
