@@ -62,6 +62,7 @@ class SelfPlayTrainer:
         self.learning_rate = learning_rate
         self.optimizer = optimizer
         self.batch_size = batch_size
+        self.step_counter = 0
         
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -186,19 +187,24 @@ class SelfPlayTrainer:
                 # 生存奖励 (微小)
                 # === 🔥 新增调试日志 🔥 ===
                 # 只有在训练模式下，且每 100 手打印一次，避免日志爆炸
-                if is_training and self.total_hands % 100 == 0:
-                    hand_str = str([str(c) for c in current_player.cards])
-                    board_str = str([str(c) for c in game.board])
-                    logger.info(f"🔍 [DEBUG] 手牌: {hand_str} | 公共牌: {board_str} | "
-                                f"动作: {action_str} | 金额: {amount} | "
-                                f"当前底池: {game.pot} | 胜率预测(如有): N/A")
-                # ==========================
+                # if is_training and self.total_hands % 100 == 0:
+                #     hand_str = str([str(c) for c in current_player.cards])
+                #     board_str = str([str(c) for c in game.board])
+                #     logger.info(f"🔍 [DEBUG] 手牌: {hand_str} | 公共牌: {board_str} | "
+                #                 f"动作: {action_str} | 金额: {amount} | "
+                #                 f"当前底池: {game.pot} | 胜率预测(如有): N/A")
+                # # ==========================
+                self.step_counter += 1
                 if is_training and last_step_info is not None:
                     prev_state, prev_action_idx = last_step_info
-                    self.main_agent.learn(0.001, prev_state, prev_action_idx, current_state, False)
+                    # 先只存入经验回放区 (Remember)，但不立刻 Replay
+                    self.main_agent.agent.remember(prev_state, prev_action_idx, 0.001, current_state, False)
+                    
+                    # 每 10 步触发一次真正的神经网络训练
+                    if self.step_counter % 10 == 0:
+                        self.main_agent.agent.replay()
 
                 action_str, amount = self.main_agent.select_action(game, current_player)
-                
                 decision_info = self.main_agent.get_decision_info(game, current_player)
                 action_idx = decision_info.get('best_action_index', 0)
                 if 'most_likely_action' in decision_info:
@@ -274,7 +280,7 @@ class SelfPlayTrainer:
         # =======================================================
         # 🔥🔥🔥 新增：局终打印公共牌 (无论输赢都能看到) 🔥🔥🔥
         # =======================================================
-        if is_training and self.total_hands % 100 == 0: # 频率与上面保持一致
+        if is_training and self.total_hands % 2000 == 0: # 频率与上面保持一致
             board_str = str([str(c) for c in game.board])
             my_hand_str = str([str(c) for c in players[0].cards])
             winner_name = game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown'
