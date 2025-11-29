@@ -68,7 +68,7 @@ class PokerGame:
         self.current_bet = 0
         self.action_count = 0
         self.winner = None  # <--- 显式重置
-        
+
         # 重置玩家状态
         for player in self.players:
             player.reset_for_new_round()
@@ -136,6 +136,14 @@ class PokerGame:
         if action == 'fold':
             player.is_active = False
             self.action_count += 1
+            # === 🔥 新增：立即检查是否只剩唯一的赢家 🔥 ===
+            active_players = [p for p in self.players if p.is_active]
+            if len(active_players) == 1:
+                self.winner = active_players[0]
+                self._award_pot(active_players[0])
+                # 这里不需要 return True 或 False 来控制游戏结束，
+                # 因为外层的 is_hand_over() 会检测到 active_players <= 1
+            # ============================================
             return True
         
         elif action == 'call':
