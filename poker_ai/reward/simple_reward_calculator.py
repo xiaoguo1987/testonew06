@@ -25,7 +25,7 @@ class SimpleRewardCalculator:
             if action == 'fold':
                 strength = self.calculate_hand_strength(player, game)
                 if strength > 0.7:  # 强牌弃牌 -> 重罚
-                    return -1.2
+                    return -1.0
                 elif strength > 0.5: # 中等牌弃牌 -> 轻罚
                     return -0.5
                 else:
@@ -46,7 +46,7 @@ class SimpleRewardCalculator:
             # 以前是固定 +5.0，现在改为 +2.0 加上底池比例奖励
             # 这样鼓励它赢大底池，而不是只赢盲注
             pot_bonus = (game.pot / game.big_blind) * 0.1
-            reward += (3.5 + pot_bonus)
+            reward += (5 + pot_bonus)
             # 4. 输牌安慰奖 (防止它因为怕输而不敢玩)
         # 裁剪奖励防止梯度爆炸 (-5 到 +5 之间)
         return max(-10.0, min(10.0, reward))

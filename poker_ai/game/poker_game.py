@@ -67,6 +67,7 @@ class PokerGame:
         self.pot = 0
         self.current_bet = 0
         self.action_count = 0
+        self.winner = None  # <--- 显式重置
         
         # 重置玩家状态
         for player in self.players:
