@@ -121,7 +121,8 @@ class PokerGame:
 
         # === 🔥 优化：确定起始行动玩家 (需跳过弃牌/全下玩家) 🔥 ===
         num_players = len(self.players)
-
+        # 初始化 start_pos (防止报错)
+        start_pos = 0
         # 确定起始行动玩家
         if self.round == 1:  # 翻牌前
             # 从大盲注后的玩家开始
@@ -141,7 +142,7 @@ class PokerGame:
             if player.is_active and not player.is_all_in:
                 self.current_player = idx
                 break
-            
+
     def handle_action(self, player: Player, action: str, amount: Optional[int] = None) -> bool:
         """
         处理玩家行动
