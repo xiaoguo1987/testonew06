@@ -169,8 +169,16 @@ class SelfPlayTrainer:
         last_step_info = None 
         initial_stack = players[0].stack 
         action_records = {p.name: [] for p in players}
+        step_safety_count = 0
+        max_steps_per_hand = 100  
 
         while not game.is_hand_over():
+            # === 🔥 新增：熔断检查 🔥 ===
+            step_safety_count += 1
+            if step_safety_count > max_steps_per_hand:
+                logger.error(f"⚠️ [严重警告] 检测到死循环！强制结束本局。Round: {game.round}, Pot: {game.pot}")
+                break  # 强制跳出循环，进入结算
+            # ===========================
             if game.is_round_over():
                 if not game.proceed_to_next_round():
                     break
@@ -408,7 +416,12 @@ class SelfPlayTrainer:
     def load_checkpoint(self, filepath: Optional[str] = None) -> bool:
         """加载检查点（优化健壮性版）"""
         if filepath is None:
-            logger.warning("未指定检查点路径，不自动加载最新检查点")
+            # 尝试自动查找
+            filepath = find_latest_checkpoint(self.checkpoint_dir)
+            if not filepath:
+                logger.warning("未指定路径且未找到最新检查点，将从头开始训练")
+                return False
+            logger.info(f"🔄 自动定位到最新检查点: {filepath}")
             return False
         
         logger.info(f"🔍 [DEBUG] 准备加载检查点: {filepath}")

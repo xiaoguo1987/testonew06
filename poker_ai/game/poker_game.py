@@ -17,7 +17,8 @@ class Player:
         self.is_ai = is_ai  # 是否是AI玩家
         self.position = -1  # 座位位置
         self.total_profit = 0  # 累计利润，用于测试和分析
-    
+        self.winner = None
+        
     def add_bet(self, amount: int) -> None:
         """添加下注金额"""
         if amount > self.stack:
