@@ -18,7 +18,7 @@ class Player:
         self.position = -1  # 座位位置
         self.total_profit = 0  # 累计利润，用于测试和分析
         self.winner = None
-        
+
     def add_bet(self, amount: int) -> None:
         """添加下注金额"""
         if amount > self.stack:
@@ -116,7 +116,12 @@ class PokerGame:
         """设置轮次开始时的状态"""
         self.current_bet = 0
         self.action_count = 0
-        
+        for p in self.players:
+            p.current_round_bet = 0 # 确保这里清零了本轮注额
+
+        # === 🔥 优化：确定起始行动玩家 (需跳过弃牌/全下玩家) 🔥 ===
+        num_players = len(self.players)
+
         # 确定起始行动玩家
         if self.round == 1:  # 翻牌前
             # 从大盲注后的玩家开始
@@ -125,6 +130,18 @@ class PokerGame:
             # 翻牌后从庄家位置的下一位开始
             self.current_player = (self.dealer_pos + 1) % len(self.players)
     
+        # 寻找第一个活跃且未全下的玩家
+        # 我们最多遍历一圈，防止死循环
+        self.current_player = start_pos
+        for i in range(num_players):
+            idx = (start_pos + i) % num_players
+            player = self.players[idx]
+            
+            # 只有活跃且没有全下的玩家才需要行动
+            if player.is_active and not player.is_all_in:
+                self.current_player = idx
+                break
+            
     def handle_action(self, player: Player, action: str, amount: Optional[int] = None) -> bool:
         """
         处理玩家行动
