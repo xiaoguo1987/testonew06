@@ -246,7 +246,7 @@ class SelfPlayTrainer:
                 player=players[0],
                 game=game,
                 action="end", # 占位符
-                amount=0,
+                action_amount=0,
                 is_winner=is_winner,
                 profit_loss=final_profit,
                 done=True

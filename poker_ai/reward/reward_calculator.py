@@ -355,14 +355,14 @@ class RewardCalculator:
         for idx, (action, amount) in enumerate(action_history):
             done = idx == len(action_history) - 1  # 最后一个动作标记为局结束
             immediate_reward = self.calculate_reward(
-                player, game, action, amount, is_winner=False, profit_loss=0.0, done=done
+                player, game, action, action_amount=amount, is_winner=False, profit_loss=0.0, done=done
             )
             rewards.append(immediate_reward)
         
         # 最后动作叠加最终奖励（赢牌/筹码变化）
         if rewards:
             final_reward = self.calculate_reward(
-                player, game, action_history[-1][0], action_history[-1][1],
+                player, game, action_history[-1][0], action_amount=action_history[-1][1],
                 is_winner, profit_loss, done=True
             )
             rewards[-1] += final_reward
