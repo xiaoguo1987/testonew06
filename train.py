@@ -57,8 +57,8 @@ def parse_arguments():
                         default='train', help='运行模式: train(训练), eval(评估), demo(演示)')
     
     # 模型参数
-    parser.add_argument('--model-type', type=str, choices=['dqn', 'policy_gradient'],
-                        default='dqn', help='模型类型')
+    parser.add_argument('--model-type', type=str, choices=['dqn', 'policy_gradient', 'ppo'],
+                        default='ppo', help='模型类型')
     parser.add_argument('--model-path', type=str, default=None,
                         help='预训练模型路径，用于继续训练或评估')
     parser.add_argument('--checkpoint-dir', type=str, default='./checkpoints',

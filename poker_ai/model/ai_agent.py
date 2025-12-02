@@ -75,10 +75,48 @@ class PokerAIAgent:
         elif self.agent_type == 'ppo':
             # PPO代理需要完整的经验元组
             if all(v is not None for v in [state, action, next_state, done]):
-                # 对于PPO，我们可能需要累积一批经验后再训练
-                # 这里简化处理，直接调用训练方法
-                self.agent.train(np.array([state]), np.array([action]), np.array([reward]), 
-                                np.array([done]), np.array([1.0]))  # 简化处理
+                # 对于PPO，累积经验
+                if not hasattr(self, 'ppo_buffer'):
+                    # 初始化PPO经验缓冲区
+                    self.ppo_buffer = {
+                        'states': [],
+                        'actions': [],
+                        'rewards': [],
+                        'dones': [],
+                        'old_probs': []
+                    }
+                
+                # 获取旧动作概率
+                old_probs, _ = self.agent.predict(state)
+                old_prob = old_probs[action]
+                
+                # 添加到缓冲区
+                self.ppo_buffer['states'].append(state)
+                self.ppo_buffer['actions'].append(action)
+                self.ppo_buffer['rewards'].append(reward)
+                self.ppo_buffer['dones'].append(done)
+                self.ppo_buffer['old_probs'].append(old_prob)
+                
+                # 如果是回合结束，训练PPO模型
+                if done and len(self.ppo_buffer['states']) > 0:
+                    # 将缓冲区转换为numpy数组
+                    states = np.array(self.ppo_buffer['states'])
+                    actions = np.array(self.ppo_buffer['actions'])
+                    rewards = np.array(self.ppo_buffer['rewards'])
+                    dones = np.array(self.ppo_buffer['dones'])
+                    old_probs = np.array(self.ppo_buffer['old_probs'])
+                    
+                    # 训练PPO模型
+                    self.agent.train(states, actions, rewards, dones, old_probs)
+                    
+                    # 清空缓冲区
+                    self.ppo_buffer = {
+                        'states': [],
+                        'actions': [],
+                        'rewards': [],
+                        'dones': [],
+                        'old_probs': []
+                    }
     
     def get_decision_info(self, game: PokerGame, player: Player) -> Dict:
         """

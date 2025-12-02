@@ -266,3 +266,28 @@ class PPOModel:
             self.critic.load_weights(critic_path)
         except Exception as e:
             raise ValueError(f"PPO模型权重加载失败：{str(e)}")
+    
+    def set_weights(self, weights):
+        """设置模型权重"""
+        # 这里需要根据PPO的具体实现来设置权重
+        if len(weights) >= 2:
+            self.actor.set_weights(weights[0])
+            self.critic.set_weights(weights[1])
+    
+    def get_weights(self):
+        """获取模型权重"""
+        return [self.actor.get_weights(), self.critic.get_weights()]
+    
+    def set_epsilon(self, value: float, min_value: Optional[float] = None, decay_rate: Optional[float] = None) -> None:
+        """设置探索参数
+        
+        Args:
+            value: 当前探索率值
+            min_value: 最小探索率值（可选）
+            decay_rate: 衰减率值（可选）
+        """
+        self.epsilon = max(0.0, min(1.0, value))
+        if min_value is not None:
+            self.epsilon_min = max(0.0, min(1.0, min_value))
+        if decay_rate is not None:
+            self.epsilon_decay = max(0.0, min(1.0, decay_rate))
