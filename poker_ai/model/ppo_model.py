@@ -182,13 +182,6 @@ class PPOModel:
         advantages = self._compute_gae(rewards, values, dones)
         returns = advantages + values  # 目标回报
 
-        # 转换为TensorFlow张量
-        states = tf.convert_to_tensor(states, dtype=tf.float32)
-        actions = tf.convert_to_tensor(actions, dtype=tf.int32)
-        old_action_probs = tf.convert_to_tensor(old_action_probs, dtype=tf.float32)
-        advantages = tf.convert_to_tensor(advantages, dtype=tf.float32)
-        returns = tf.convert_to_tensor(returns, dtype=tf.float32)
-
         # 多轮更新策略
         total_actor_loss = 0.0
         total_critic_loss = 0.0
@@ -200,12 +193,19 @@ class PPOModel:
                 end = start + self.batch_size
                 batch_indices = indices[start:end]
 
-                # 批次数据
-                batch_states = states[batch_indices]
-                batch_actions = actions[batch_indices]
-                batch_old_probs = old_action_probs[batch_indices]
-                batch_advantages = advantages[batch_indices]
-                batch_returns = returns[batch_indices]
+                # 先使用NumPy数组进行索引，再转换为TensorFlow张量
+                batch_states_np = states[batch_indices]
+                batch_actions_np = actions[batch_indices]
+                batch_old_probs_np = old_action_probs[batch_indices]
+                batch_advantages_np = advantages[batch_indices]
+                batch_returns_np = returns[batch_indices]
+                
+                # 转换为TensorFlow张量
+                batch_states = tf.convert_to_tensor(batch_states_np, dtype=tf.float32)
+                batch_actions = tf.convert_to_tensor(batch_actions_np, dtype=tf.int32)
+                batch_old_probs = tf.convert_to_tensor(batch_old_probs_np, dtype=tf.float32)
+                batch_advantages = tf.convert_to_tensor(batch_advantages_np, dtype=tf.float32)
+                batch_returns = tf.convert_to_tensor(batch_returns_np, dtype=tf.float32)
 
                 # 更新策略网络（Actor）
                 with tf.GradientTape() as tape:
