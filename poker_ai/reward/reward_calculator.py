@@ -363,7 +363,7 @@ class RewardCalculator:
         if rewards:
             final_reward = self.calculate_reward(
                 player, game, action_history[-1][0], action_amount=action_history[-1][1],
-                is_winner, profit_loss, done=True
+                is_winner=is_winner, profit_loss=profit_loss, done=True
             )
             rewards[-1] += final_reward
 
