@@ -18,9 +18,6 @@ class PPOModel:
         lambda_: float = 0.95,  # GAE参数
         update_epochs: int = 10,  # 每批数据更新轮次
         batch_size: int = 64,  # 批次大小
-        epsilon: float = 0.1,  # 探索率（兼容DQN接口）
-        epsilon_min: float = 0.01,
-        epsilon_decay: float = 0.995
     ):
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -30,10 +27,13 @@ class PPOModel:
         self.update_epochs = update_epochs
         self.batch_size = batch_size
         self.last_loss = 0.0  # 记录最新损失（用于TensorBoard）
-        self.epsilon = epsilon  # 探索率
-        self.epsilon_min = epsilon_min
-        self.epsilon_decay = epsilon_decay
         self.state_rep = StateRepresentation()  # 状态表示器
+        
+        # 学习率衰减相关
+        self.initial_lr = lr
+        self.current_lr = lr
+        self.lr_decay_rate = 0.999  # 学习率衰减率
+        self.lr_min = 1e-6  # 最小学习率
 
         # 构建策略网络（Actor）和价值网络（Critic）
         self.actor = self._build_actor()
@@ -94,13 +94,10 @@ class PPOModel:
         return action_probs[0], value[0][0]
 
     def get_action(self, state: np.ndarray, epsilon: float = 0.0) -> Tuple[int, float]:
-        """采样动作（含探索机制）"""
+        """采样动作（PPO使用策略网络概率分布，epsilon参数保留仅用于兼容）"""
         action_probs, _ = self.predict(state)
-        # epsilon-贪婪探索
-        if np.random.random() < epsilon:
-            action = np.random.choice(self.output_dim)
-        else:
-            action = np.random.choice(self.output_dim, p=action_probs)
+        # PPO直接从策略网络的概率分布中采样动作
+        action = np.random.choice(self.output_dim, p=action_probs)
         return action, action_probs[action]
     
     def act(self, state: np.ndarray, game: Optional[PokerGame] = None, player: Optional[Player] = None) -> Tuple[str, Optional[int]]:
@@ -114,14 +111,9 @@ class PPOModel:
         Returns:
             (动作类型, 动作金额)
         """
-        # 探索与利用
-        if np.random.rand() <= self.epsilon:
-            # 随机选择动作
-            action_idx = np.random.randint(0, self.output_dim)
-        else:
-            # 使用PPO模型选择动作
-            action_probs, _ = self.predict(state)
-            action_idx = np.random.choice(self.output_dim, p=action_probs)
+        # PPO直接从策略网络的概率分布中采样动作，不使用ε-贪婪探索
+        action_probs, _ = self.predict(state)
+        action_idx = np.random.choice(self.output_dim, p=action_probs)
         
         if game is None or player is None:
             # 如果没有游戏信息，返回动作索引
@@ -186,11 +178,22 @@ class PPOModel:
         total_actor_loss = 0.0
         total_critic_loss = 0.0
 
+        # 动态调整批次大小
+        buffer_size = len(states)
+        # 确保批次大小不超过缓冲区大小，且为2的幂次方
+        dynamic_batch_size = min(self.batch_size, buffer_size)
+        # 如果缓冲区太小，直接使用整个缓冲区
+        if dynamic_batch_size < 32:
+            dynamic_batch_size = buffer_size
+        else:
+            # 调整为最接近的2的幂次方，提高GPU利用率
+            dynamic_batch_size = 2 ** int(np.log2(dynamic_batch_size))
+
         for _ in range(self.update_epochs):
             # 随机打乱数据（分批训练）
-            indices = np.random.permutation(len(states))
-            for start in range(0, len(states), self.batch_size):
-                end = start + self.batch_size
+            indices = np.random.permutation(buffer_size)
+            for start in range(0, buffer_size, dynamic_batch_size):
+                end = start + dynamic_batch_size
                 batch_indices = indices[start:end]
 
                 # 先使用NumPy数组进行索引，再转换为TensorFlow张量
@@ -225,6 +228,8 @@ class PPOModel:
                     )
 
                 actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
+                # 梯度裁剪，防止梯度爆炸
+                actor_grads = [tf.clip_by_norm(grad, 0.5) for grad in actor_grads]
                 self.actor_optimizer.apply_gradients(
                     zip(actor_grads, self.actor.trainable_variables)
                 )
@@ -235,6 +240,8 @@ class PPOModel:
                     critic_loss = tf.reduce_mean(tf.square(batch_values - batch_returns[:, None]))
 
                 critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
+                # 梯度裁剪，防止梯度爆炸
+                critic_grads = [tf.clip_by_norm(grad, 0.5) for grad in critic_grads]
                 self.critic_optimizer.apply_gradients(
                     zip(critic_grads, self.critic.trainable_variables)
                 )
@@ -246,6 +253,12 @@ class PPOModel:
         avg_actor_loss = total_actor_loss / (self.update_epochs * (len(states) // self.batch_size + 1))
         avg_critic_loss = total_critic_loss / (self.update_epochs * (len(states) // self.batch_size + 1))
         self.last_loss = (avg_actor_loss + avg_critic_loss) / 2  # 记录总损失
+
+        # 学习率衰减
+        self.current_lr = max(self.lr_min, self.current_lr * self.lr_decay_rate)
+        # 更新优化器学习率
+        self.actor_optimizer.learning_rate.assign(self.current_lr)
+        self.critic_optimizer.learning_rate.assign(self.current_lr)
 
         return self.last_loss
 
@@ -277,17 +290,3 @@ class PPOModel:
     def get_weights(self):
         """获取模型权重"""
         return [self.actor.get_weights(), self.critic.get_weights()]
-    
-    def set_epsilon(self, value: float, min_value: Optional[float] = None, decay_rate: Optional[float] = None) -> None:
-        """设置探索参数
-        
-        Args:
-            value: 当前探索率值
-            min_value: 最小探索率值（可选）
-            decay_rate: 衰减率值（可选）
-        """
-        self.epsilon = max(0.0, min(1.0, value))
-        if min_value is not None:
-            self.epsilon_min = max(0.0, min(1.0, min_value))
-        if decay_rate is not None:
-            self.epsilon_decay = max(0.0, min(1.0, decay_rate))
