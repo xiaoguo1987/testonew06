@@ -264,7 +264,8 @@ def evaluate_model(args):
     if not success:
         logger.error("无法加载模型，请使用 --model-path 参数指定有效的模型路径")
         return False
-        
+    
+    try:
         # 执行评估
         logger.info(f"执行评估，共进行 {args.num_eval_games} 局游戏...")
         eval_results = trainer.evaluate()
