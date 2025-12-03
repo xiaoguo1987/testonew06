@@ -239,30 +239,31 @@ def evaluate_model(args):
     """
     logger.info("开始评估德州扑克AI模型")
     
-    if not args.model_path:
-        logger.error("评估模式需要指定模型路径，请使用 --model-path 参数")
-        return False
+    # 创建训练器用于评估
+    trainer = SelfPlayTrainer(
+        model_type=args.model_type,
+        checkpoint_dir=args.checkpoint_dir,
+        small_blind=args.small_blind,
+        big_blind=args.big_blind,
+        initial_stack=args.initial_stack,
+        num_players=args.num_players,
+        num_eval_games=args.num_eval_games,
+        target_update_freq=args.target_update,
+        learning_rate=args.learning_rate,
+        optimizer=args.optimizer
+    )
     
-    try:
-        # 创建训练器用于评估
-        trainer = SelfPlayTrainer(
-            model_type=args.model_type,
-            checkpoint_dir=args.checkpoint_dir,
-            small_blind=args.small_blind,
-            big_blind=args.big_blind,
-            initial_stack=args.initial_stack,
-            num_players=args.num_players,
-            num_eval_games=args.num_eval_games,
-            target_update_freq=args.target_update,
-            learning_rate=args.learning_rate,
-            optimizer=args.optimizer
-        )
-        
-        # 加载模型
+    # 加载模型
+    if args.model_path:
+        logger.info(f"使用指定的模型路径: {args.model_path}")
         success = trainer.load_checkpoint(args.model_path)
-        if not success:
-            logger.error(f"无法加载模型: {args.model_path}")
-            return False
+    else:
+        logger.info("未指定模型路径，尝试加载最近的检查点...")
+        success = trainer.load_checkpoint()
+    
+    if not success:
+        logger.error("无法加载模型，请使用 --model-path 参数指定有效的模型路径")
+        return False
         
         # 执行评估
         logger.info(f"执行评估，共进行 {args.num_eval_games} 局游戏...")
