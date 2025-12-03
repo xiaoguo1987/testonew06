@@ -377,11 +377,36 @@ class SelfPlayTrainer:
             logger.error(f"保存检查点失败: {e}")
             logger.error(traceback.format_exc())
 
+    def _find_latest_checkpoint(self) -> Optional[str]:
+        """查找最新的检查点文件"""
+        if not os.path.exists(self.checkpoint_dir):
+            logger.warning(f"检查点目录不存在: {self.checkpoint_dir}")
+            return None
+        
+        # 获取所有检查点文件
+        checkpoint_files = []
+        for file in os.listdir(self.checkpoint_dir):
+            if file.endswith('.weights.h5') or file.endswith('.pkl'):
+                # 排除状态文件
+                if not file.endswith('_state.pkl'):
+                    checkpoint_files.append(os.path.join(self.checkpoint_dir, file))
+        
+        if not checkpoint_files:
+            logger.warning(f"在 {self.checkpoint_dir} 中未找到检查点文件")
+            return None
+        
+        # 按修改时间排序，返回最新的文件
+        latest_file = max(checkpoint_files, key=os.path.getmtime)
+        logger.info(f"找到最新的检查点文件: {latest_file}")
+        return latest_file
+    
     def load_checkpoint(self, filepath: Optional[str] = None) -> bool:
         """加载检查点（优化健壮性版）"""
         if filepath is None:
-            logger.warning("未指定检查点路径，不自动加载最新检查点")
-            return False
+            logger.info("未指定检查点路径，尝试自动查找最新检查点...")
+            filepath = self._find_latest_checkpoint()
+            if filepath is None:
+                return False
         
         logger.info(f"🔍 [DEBUG] 准备加载检查点: {filepath}")
         
