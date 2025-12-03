@@ -467,7 +467,7 @@ class SelfPlayTrainer:
             self.total_hands += 1
             self.total_profit += result['player_profits']['Main_AI']
             
-            if self.total_hands % 200 == 0:
+            if self.total_hands % 50 == 0:
                self.record_performance(result['player_profits']['Main_AI'])
             
             if self.total_hands % self.eval_interval == 0:

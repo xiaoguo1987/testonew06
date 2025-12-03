@@ -150,6 +150,10 @@ def train_model(args):
             optimizer=args.optimizer
         )
         
+        # 如果启用详细日志，更新日志级别
+        if args.verbose:
+            logger.setLevel(logging.DEBUG)
+            
         # 设置探索参数 - 使用增强的set_epsilon方法
         if hasattr(trainer, 'main_agent') and trainer.main_agent:
             # 使用增强的set_epsilon方法一次性设置所有探索参数
