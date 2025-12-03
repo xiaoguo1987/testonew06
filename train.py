@@ -119,6 +119,22 @@ def setup_environment(args):
             handler.setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
     
+    # 记录硬件使用情况
+    try:
+        import tensorflow as tf
+        gpus = tf.config.list_physical_devices('GPU')
+        cpus = tf.config.list_physical_devices('CPU')
+        logger.info(f"TensorFlow版本: {tf.__version__}")
+        logger.info(f"可用GPU数量: {len(gpus)}")
+        for i, gpu in enumerate(gpus):
+            logger.info(f"GPU {i}: {gpu.name}")
+        logger.info(f"可用CPU数量: {len(cpus)}")
+        logger.info(f"训练将使用: {'GPU' if gpus else 'CPU'}")
+    except ImportError:
+        logger.warning("TensorFlow未安装，无法检测硬件信息")
+    except Exception as e:
+        logger.warning(f"检测硬件信息时出错: {e}")
+    
     logger.info(f"环境设置完成: 检查点目录={args.checkpoint_dir}")
     logger.info(f"当前运行模式: {args.mode}")
     logger.info(f"使用模型类型: {args.model_type}")
@@ -189,11 +205,22 @@ def train_model(args):
         
         # 开始训练
         logger.info(f"开始训练 {args.num_hands} 手牌...")
+        
+        # 添加训练进度日志
+        start_hand = trainer.total_hands if hasattr(trainer, 'total_hands') else 0
+        logger.info(f"初始手牌数: {start_hand}, 目标手牌数: {start_hand + args.num_hands}")
+        
+        # 开始训练过程
         trainer.train(args.num_hands)
         
         # 计算训练时间
         end_time = time.time()
         training_time = end_time - start_time
+        
+        # 计算实际训练的手牌数
+        if hasattr(trainer, 'total_hands'):
+            actual_hands = trainer.total_hands - start_hand
+            logger.info(f"实际训练手牌数: {actual_hands}")
         
         logger.info(f"训练完成！总耗时: {training_time:.2f} 秒")
         logger.info(f"平均每手耗时: {training_time / args.num_hands:.4f} 秒")

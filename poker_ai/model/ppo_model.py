@@ -169,6 +169,9 @@ class PPOModel:
         old_action_probs: np.ndarray
     ) -> float:
         """训练模型：PPO核心逻辑"""
+        import logging
+        logger = logging.getLogger('PPOModel')
+        
         # 计算状态价值和优势
         values = self.critic.predict(states, verbose=0).flatten()
         advantages = self._compute_gae(rewards, values, dones)
@@ -188,8 +191,10 @@ class PPOModel:
         else:
             # 调整为最接近的2的幂次方，提高GPU利用率
             dynamic_batch_size = 2 ** int(np.log2(dynamic_batch_size))
+        
+        logger.debug(f"训练批次: 状态数量={buffer_size}, 批次大小={dynamic_batch_size}, 更新轮次={self.update_epochs}")
 
-        for _ in range(self.update_epochs):
+        for epoch in range(self.update_epochs):
             # 随机打乱数据（分批训练）
             indices = np.random.permutation(buffer_size)
             for start in range(0, buffer_size, dynamic_batch_size):
@@ -250,8 +255,9 @@ class PPOModel:
                 total_critic_loss += critic_loss.numpy()
 
         # 计算平均损失
-        avg_actor_loss = total_actor_loss / (self.update_epochs * (len(states) // self.batch_size + 1))
-        avg_critic_loss = total_critic_loss / (self.update_epochs * (len(states) // self.batch_size + 1))
+        num_batches = len(states) // self.batch_size + 1
+        avg_actor_loss = total_actor_loss / (self.update_epochs * num_batches)
+        avg_critic_loss = total_critic_loss / (self.update_epochs * num_batches)
         self.last_loss = (avg_actor_loss + avg_critic_loss) / 2  # 记录总损失
 
         # 学习率衰减
@@ -259,6 +265,8 @@ class PPOModel:
         # 更新优化器学习率
         self.actor_optimizer.learning_rate.assign(self.current_lr)
         self.critic_optimizer.learning_rate.assign(self.current_lr)
+        
+        logger.debug(f"训练完成: Actor损失={avg_actor_loss:.6f}, Critic损失={avg_critic_loss:.6f}, 总损失={self.last_loss:.6f}, 当前学习率={self.current_lr:.6f}")
 
         return self.last_loss
 

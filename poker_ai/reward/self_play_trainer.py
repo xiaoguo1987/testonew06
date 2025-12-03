@@ -269,8 +269,14 @@ class SelfPlayTrainer:
         wins = 0
         eval_bluffs = 0
         eval_aggressive = 0
+        eval_raises = 0
+        eval_invalid_bets = 0
 
-        for _ in range(self.num_eval_games):
+        for eval_idx in range(self.num_eval_games):
+            # 每10局评估记录一次进度
+            if (eval_idx + 1) % 10 == 0:
+                logger.debug(f"评估进度: {eval_idx + 1}/{self.num_eval_games} 局")
+                
             game, players = self._create_game()
             result = self._play_hand(game, players, is_training=False)
             total_profit += result['player_profits']['Main_AI']
@@ -282,10 +288,14 @@ class SelfPlayTrainer:
                 metrics = self._count_episode_metrics(players[0], game, main_actions)
                 eval_bluffs += metrics['bluffs']
                 eval_aggressive += metrics['aggressive']
+                eval_raises += metrics['raises']
+                eval_invalid_bets += metrics['invalid_bets']
 
         avg_profit = total_profit / self.num_eval_games
         win_rate = wins / self.num_eval_games
         bluff_rate = eval_bluffs / eval_aggressive if eval_aggressive > 0 else 0.0
+        raise_rate = eval_raises / (eval_aggressive + 1e-8) if eval_aggressive > 0 else 0.0
+        invalid_bet_rate = eval_invalid_bets / (eval_raises + 1e-8) if eval_raises > 0 else 0.0
         
         eval_result = {
             'avg_profit': avg_profit, 
@@ -293,12 +303,14 @@ class SelfPlayTrainer:
             'total_profit': total_profit, 
             'wins': wins,
             'bluff_rate': bluff_rate, 
+            'raise_rate': raise_rate,
+            'invalid_bet_rate': invalid_bet_rate,
             'total_hands': self.num_eval_games
         }
 
         logger.info(
             f"评估完成: 平均利润={avg_profit:.2f}, 胜率={win_rate:.2%}, "
-            f"诈唬率={bluff_rate:.3f}"
+            f"诈唬率={bluff_rate:.3f}, 加注率={raise_rate:.3f}, 无效下注率={invalid_bet_rate:.3f}"
         )
         self.performance_history.append(eval_result)
         return eval_result
@@ -460,15 +472,26 @@ class SelfPlayTrainer:
         logger.info("从当前模型状态开始训练")
         start_hand = self.total_hands
 
-        for _ in range(start_hand, start_hand + num_hands):
+        for hand_idx in range(num_hands):
             game, players = self._create_game()
             result = self._play_hand(game, players, is_training=True)
             
             self.total_hands += 1
             self.total_profit += result['player_profits']['Main_AI']
             
+            current_hand = start_hand + hand_idx + 1
+            progress = ((hand_idx + 1) / num_hands) * 100
+            
             if self.total_hands % 50 == 0:
                self.record_performance(result['player_profits']['Main_AI'])
+            
+            # 添加训练进度日志（每100手牌）
+            if (hand_idx + 1) % 100 == 0:
+                logger.info(f"训练进度: {current_hand}/{start_hand + num_hands} 手牌 ({progress:.1f}%)")
+            
+            # 记录详细手牌结果（每1000手牌）
+            if (hand_idx + 1) % 1000 == 0:
+                logger.debug(f"第 {current_hand} 手牌结果: {result}")
             
             if self.total_hands % self.eval_interval == 0:
                 eval_result = self.evaluate()
@@ -480,9 +503,11 @@ class SelfPlayTrainer:
                     logger.info(f"新最佳模型！得分: {current_score:.4f}")
             
             if self.total_hands % self.opponent_update_interval == 0:
+                logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
                 self.update_opponents()
             
             if self.total_hands % self.checkpoint_interval == 0:
+                logger.info(f"保存检查点，当前手牌数: {self.total_hands}")
                 self.save_checkpoint(is_best=False)
         
         logger.info(f"训练完成！总手牌: {self.total_hands}")
