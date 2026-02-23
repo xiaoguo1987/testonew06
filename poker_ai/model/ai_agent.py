@@ -14,8 +14,9 @@ logger = logging.getLogger('PokerAIAgent')
 class PokerAIAgent:
     """德州扑克AI代理统一接口"""
     
-    def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None, target_update_freq: int = 10, 
-                 learning_rate: float = 0.001, optimizer: str = 'adam'):
+    def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None, target_update_freq: int = 10,
+                 learning_rate: float = 0.001, optimizer: str = 'adam',
+                 ppo_clip_epsilon: Optional[float] = None, ppo_update_epochs: Optional[int] = None):
         """
         初始化AI代理
         agent_type: 'dqn'、'policy_gradient' 或 'ppo'
@@ -23,22 +24,25 @@ class PokerAIAgent:
         target_update_freq: DQN目标网络更新频率（仅DQN代理有效）
         learning_rate: 学习率
         optimizer: 优化器类型
+        ppo_clip_epsilon: PPO clip 参数（仅 PPO）
+        ppo_update_epochs: PPO 每批更新轮次（仅 PPO）
         """
         self.state_rep = StateRepresentation()
-        
-        # 如果没有指定状态维度，使用默认值
         if state_dim is None:
             state_dim = self.state_rep.total_state_dim
-        
-        # 根据类型创建相应的代理
+
         if agent_type == 'dqn':
-            self.agent = DQNAgent(state_dim=state_dim, target_update_freq=target_update_freq, 
+            self.agent = DQNAgent(state_dim=state_dim, target_update_freq=target_update_freq,
                                  learning_rate=learning_rate, optimizer=optimizer)
         elif agent_type == 'policy_gradient':
             self.agent = PolicyGradientAgent(state_dim=state_dim)
         elif agent_type == 'ppo':
-            # 创建PPO模型
-            self.agent = PPOModel(input_dim=state_dim, lr=learning_rate)
+            kwargs = dict(input_dim=state_dim, lr=learning_rate)
+            if ppo_clip_epsilon is not None:
+                kwargs['clip_epsilon'] = ppo_clip_epsilon
+            if ppo_update_epochs is not None:
+                kwargs['update_epochs'] = ppo_update_epochs
+            self.agent = PPOModel(**kwargs)
         else:
             raise ValueError(f"不支持的代理类型: {agent_type}")
         
@@ -73,50 +77,61 @@ class PokerAIAgent:
             if done:
                 self.agent.train()
         elif self.agent_type == 'ppo':
-            # PPO代理需要完整的经验元组
+            # PPO 使用轨迹级学习：由 append_step + finish_trajectory 驱动，此处仅兼容旧式单步 learn
             if all(v is not None for v in [state, action, next_state, done]):
-                # 对于PPO，累积经验
-                if not hasattr(self, 'ppo_buffer'):
-                    # 初始化PPO经验缓冲区
-                    self.ppo_buffer = {
-                        'states': [],
-                        'actions': [],
-                        'rewards': [],
-                        'dones': [],
-                        'old_probs': []
-                    }
-                
-                # 获取旧动作概率
+                self._ppo_ensure_buffer()
                 old_probs, _ = self.agent.predict(state)
-                old_prob = old_probs[action]
-                
-                # 添加到缓冲区
+                old_prob = float(np.clip(old_probs[action], 1e-8, 1.0))
                 self.ppo_buffer['states'].append(state)
                 self.ppo_buffer['actions'].append(action)
                 self.ppo_buffer['rewards'].append(reward)
                 self.ppo_buffer['dones'].append(done)
                 self.ppo_buffer['old_probs'].append(old_prob)
-                
-                # 如果是回合结束，训练PPO模型
                 if done and len(self.ppo_buffer['states']) > 0:
-                    # 将缓冲区转换为numpy数组
-                    states = np.array(self.ppo_buffer['states'])
-                    actions = np.array(self.ppo_buffer['actions'])
-                    rewards = np.array(self.ppo_buffer['rewards'])
-                    dones = np.array(self.ppo_buffer['dones'])
-                    old_probs = np.array(self.ppo_buffer['old_probs'])
-                    
-                    # 训练PPO模型
-                    self.agent.train(states, actions, rewards, dones, old_probs)
-                    
-                    # 清空缓冲区
-                    self.ppo_buffer = {
-                        'states': [],
-                        'actions': [],
-                        'rewards': [],
-                        'dones': [],
-                        'old_probs': []
-                    }
+                    self._ppo_train_from_buffer()
+                    self._ppo_clear_buffer()
+
+    def _ppo_ensure_buffer(self) -> None:
+        if not hasattr(self, 'ppo_buffer'):
+            self.ppo_buffer = {
+                'states': [], 'actions': [], 'rewards': [], 'dones': [], 'old_probs': []
+            }
+
+    def _ppo_clear_buffer(self) -> None:
+        self.ppo_buffer = {
+            'states': [], 'actions': [], 'rewards': [], 'dones': [], 'old_probs': []
+        }
+
+    def _ppo_train_from_buffer(self) -> None:
+        buf = self.ppo_buffer
+        states = np.array(buf['states'])
+        actions = np.array(buf['actions'])
+        rewards = np.array(buf['rewards'], dtype=np.float32)
+        dones = np.array(buf['dones'])
+        old_probs = np.array(buf['old_probs'], dtype=np.float32)
+        self.agent.train(states, actions, rewards, dones, old_probs)
+
+    def append_step(self, state: np.ndarray, action: int, old_prob: float) -> None:
+        """仅 PPO：每步将 (state, action, old_prob) 加入轨迹，不传 reward。"""
+        if self.agent_type != 'ppo':
+            return
+        self._ppo_ensure_buffer()
+        self.ppo_buffer['states'].append(state)
+        self.ppo_buffer['actions'].append(action)
+        self.ppo_buffer['old_probs'].append(float(np.clip(old_prob, 1e-8, 1.0)))
+
+    def finish_trajectory(self, final_reward: float) -> None:
+        """仅 PPO：一手牌结束时，用 final_reward 填 rewards/dones 并执行一次 PPO 更新。"""
+        if self.agent_type != 'ppo':
+            return
+        self._ppo_ensure_buffer()
+        n = len(self.ppo_buffer['states'])
+        if n == 0:
+            return
+        self.ppo_buffer['rewards'] = [0.0] * (n - 1) + [final_reward]
+        self.ppo_buffer['dones'] = [False] * (n - 1) + [True]
+        self._ppo_train_from_buffer()
+        self._ppo_clear_buffer()
     
     def get_decision_info(self, game: PokerGame, player: Player) -> Dict:
         """

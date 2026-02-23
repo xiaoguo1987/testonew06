@@ -60,14 +60,17 @@ def parse_arguments():
     parser.add_argument('--model-type', type=str, choices=['dqn', 'policy_gradient', 'ppo'],
                         default='ppo', help='模型类型')
     parser.add_argument('--model-path', type=str, default=None,
-                        help='预训练模型路径，用于继续训练或评估')
+                        help='预训练模型路径；PPO 为 base 路径（不含 .actor.weights.h5）')
     parser.add_argument('--checkpoint-dir', type=str, default='./checkpoints',
                         help='检查点保存目录')
-    
+
     # 训练参数
     parser.add_argument('--num-hands', type=int, default=10000, help='训练的手牌数量')
-    parser.add_argument('--learning-rate', type=float, default=0.001, help='学习率')
+    parser.add_argument('--learning-rate', type=float, default=3e-4, help='学习率（PPO 默认 3e-4）')
     parser.add_argument('--batch-size', type=int, default=64, help='批处理大小')
+    # PPO 专用
+    parser.add_argument('--ppo-clip', type=float, default=0.2, help='PPO clip_epsilon')
+    parser.add_argument('--ppo-epochs', type=int, default=10, help='PPO 每批轨迹更新轮次')
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamax', 'rmsprop', 'sgd'], help='优化器类型')
     parser.add_argument('--eval-interval', type=int, default=200, help='评估间隔（局数）')
@@ -163,7 +166,9 @@ def train_model(args):
             use_ensemble=args.use_ensemble,
             opponent_update_interval=args.opponent_update_interval,
             learning_rate=args.learning_rate,
-            optimizer=args.optimizer
+            optimizer=args.optimizer,
+            ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
+            ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
         )
         
         # 如果启用详细日志，更新日志级别
@@ -239,7 +244,6 @@ def evaluate_model(args):
     """
     logger.info("开始评估德州扑克AI模型")
     
-    # 创建训练器用于评估
     trainer = SelfPlayTrainer(
         model_type=args.model_type,
         checkpoint_dir=args.checkpoint_dir,
@@ -250,7 +254,9 @@ def evaluate_model(args):
         num_eval_games=args.num_eval_games,
         target_update_freq=args.target_update,
         learning_rate=args.learning_rate,
-        optimizer=args.optimizer
+        optimizer=args.optimizer,
+        ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
+        ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
     )
     
     # 加载模型

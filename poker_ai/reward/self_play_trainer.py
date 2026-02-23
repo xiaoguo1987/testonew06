@@ -39,7 +39,9 @@ class SelfPlayTrainer:
                  opponent_update_interval: int = 5000,
                  learning_rate: float = 0.001,
                  optimizer: str = 'adam',
-                 target_update_freq: int = 100):
+                 target_update_freq: int = 100,
+                 ppo_clip_epsilon: float = 0.2,
+                 ppo_update_epochs: int = 10):
         
         # --- 修正1: 强制检查 6-Max ---
         if num_players != 6:
@@ -60,7 +62,9 @@ class SelfPlayTrainer:
         self.target_update_freq = target_update_freq
         self.learning_rate = learning_rate
         self.optimizer = optimizer
-        
+        self.ppo_clip_epsilon = ppo_clip_epsilon
+        self.ppo_update_epochs = ppo_update_epochs
+
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
         
@@ -88,24 +92,29 @@ class SelfPlayTrainer:
         if self.use_ensemble:
             self.main_agent = EnsembleAgent()
         else:
-            self.main_agent = PokerAIAgent(
-                agent_type=self.model_type, 
-                target_update_freq=self.target_update_freq, 
-                learning_rate=self.learning_rate, 
-                optimizer=self.optimizer
-            )
-        
-        self.opponent_agents = []
-        
-        # 前 4 个对手是正常的 AI (历史版本)
-        # 注意：这里 range 是 num_players - 2，因为除了主AI，还有一个Fish，剩下4个位置
-        for i in range(self.num_players - 2):
-            self.opponent_agents.append(PokerAIAgent(
+            kwargs = dict(
                 agent_type=self.model_type,
                 target_update_freq=self.target_update_freq,
                 learning_rate=self.learning_rate,
-                optimizer=self.optimizer
-            ))
+                optimizer=self.optimizer,
+            )
+            if self.model_type == 'ppo':
+                kwargs['ppo_clip_epsilon'] = self.ppo_clip_epsilon
+                kwargs['ppo_update_epochs'] = self.ppo_update_epochs
+            self.main_agent = PokerAIAgent(**kwargs)
+
+        self.opponent_agents = []
+        for i in range(self.num_players - 2):
+            opp_kw = dict(
+                agent_type=self.model_type,
+                target_update_freq=self.target_update_freq,
+                learning_rate=self.learning_rate,
+                optimizer=self.optimizer,
+            )
+            if self.model_type == 'ppo':
+                opp_kw['ppo_clip_epsilon'] = self.ppo_clip_epsilon
+                opp_kw['ppo_update_epochs'] = self.ppo_update_epochs
+            self.opponent_agents.append(PokerAIAgent(**opp_kw))
             
         # 第 5 个对手作为“鱼” (Random Player)
         fish_agent = PokerAIAgent(agent_type=self.model_type)
@@ -179,35 +188,34 @@ class SelfPlayTrainer:
             # === 主AI 行动逻辑 ===
             if current_player.name == "Main_AI":
                 current_state = self.main_agent.state_rep.get_state(game, current_player)
-                
-                # 生存奖励 (微小)
-                if is_training and last_step_info is not None:
+                use_ppo_trajectory = getattr(self.main_agent, 'agent_type', None) == 'ppo'
+
+                if is_training and not use_ppo_trajectory and last_step_info is not None:
                     prev_state, prev_action_idx = last_step_info
                     self.main_agent.learn(0.001, prev_state, prev_action_idx, current_state, False)
 
                 action_str, amount = self.main_agent.select_action(game, current_player)
-                
                 decision_info = self.main_agent.get_decision_info(game, current_player)
                 action_idx = decision_info.get('best_action_index', 0)
                 if 'most_likely_action' in decision_info:
                     action_idx = decision_info['most_likely_action']
 
-                action_records[current_player.name].append((action_str, amount if amount else 0))
+                if is_training and use_ppo_trajectory:
+                    action_probs, _ = self.main_agent.agent.predict(current_state)
+                    old_prob = float(np.clip(action_probs[action_idx], 1e-8, 1.0))
+                    self.main_agent.append_step(current_state, action_idx, old_prob)
 
+                action_records[current_player.name].append((action_str, amount if amount else 0))
                 success = game.handle_action(current_player, action_str, amount)
-                
+
                 if not success:
                     game.handle_action(current_player, 'fold', None)
-                    # 动作无效惩罚
-                    if is_training and last_step_info is not None:
+                    if is_training and not use_ppo_trajectory and last_step_info is not None:
                         self.main_agent.learn(
-                            reward=-0.05, 
-                            state=prev_state,
-                            action=prev_action_idx,
-                            next_state=current_state,
-                            done=False
+                            reward=-0.05,
+                            state=last_step_info[0], action=last_step_info[1],
+                            next_state=current_state, done=False
                         )
-                
                 last_step_info = (current_state, action_idx)
 
             # === 对手行动逻辑 ===
@@ -239,21 +247,22 @@ class SelfPlayTrainer:
         
         # 训练结束时的最终学习
         if is_training and last_step_info is not None:
-            prev_state, prev_action_idx = last_step_info
-            
-            # 使用计算器计算最终奖励
             final_reward = self.reward_calculator.calculate_reward(
                 player=players[0],
                 game=game,
-                action="end", # 占位符
+                action="end",
                 action_amount=0,
                 is_winner=is_winner,
                 profit_loss=final_profit,
                 done=True
             )
-            
-            terminal_state = np.zeros_like(prev_state)
-            self.main_agent.learn(final_reward, prev_state, prev_action_idx, terminal_state, True)
+            use_ppo_trajectory = getattr(self.main_agent, 'agent_type', None) == 'ppo'
+            if use_ppo_trajectory:
+                self.main_agent.finish_trajectory(final_reward)
+            else:
+                prev_state, prev_action_idx = last_step_info
+                terminal_state = np.zeros_like(prev_state)
+                self.main_agent.learn(final_reward, prev_state, prev_action_idx, terminal_state, True)
 
         result = {
             'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
@@ -337,15 +346,16 @@ class SelfPlayTrainer:
             logger.error(f"更新对手失败: {e}")
 
     def save_checkpoint(self, is_best: bool = False) -> None:
-        """保存检查点"""
+        """保存检查点。PPO 使用 base 路径（无 .pkl），存 .actor.weights.h5 / .critic.weights.h5 / _state.pkl"""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            if is_best:
-                filename = f"best_agent_{self.model_type}_{timestamp}.pkl"
+            is_ppo = self.model_type == 'ppo'
+            if is_ppo:
+                base_name = f"best_agent_{self.model_type}_{timestamp}" if is_best else f"agent_{self.model_type}_{self.total_hands}"
             else:
-                filename = f"agent_{self.model_type}_{self.total_hands}.pkl"
-            filepath = os.path.join(self.checkpoint_dir, filename)
-            
+                base_name = f"best_agent_{self.model_type}_{timestamp}.pkl" if is_best else f"agent_{self.model_type}_{self.total_hands}.pkl"
+            filepath = os.path.join(self.checkpoint_dir, base_name)
+
             metadata = {
                 'total_hands': self.total_hands,
                 'total_profit': self.total_profit,
@@ -357,46 +367,54 @@ class SelfPlayTrainer:
                 },
                 'model_type': self.model_type
             }
-            
-            success = save_checkpoint(self.main_agent, filepath, metadata)
-            if success:
-                logger.info(f"保存检查点: {filename}")
-            else:
-                logger.warning("工具函数保存失败，使用后备方法")
-                self.main_agent.save_model(filepath)
-                # 兼容旧逻辑，顺便存个state文件
-                state_path = filepath.replace('.pkl', '') + '_state.pkl'
-                if filepath.endswith('.weights.h5'): # 处理特殊后缀
-                     state_path = filepath.replace('.weights.h5', '_state.pkl')
 
+            if is_ppo:
+                self.main_agent.save_model(filepath)
+                state_path = filepath + '_state.pkl'
                 with open(state_path, 'wb') as f:
                     pickle.dump(metadata, f)
-                logger.info(f"使用后备方法保存检查点: {filename}")
-                
+                logger.info(f"保存 PPO 检查点: {base_name}.actor.weights.h5 / .critic.weights.h5")
+            else:
+                success = save_checkpoint(self.main_agent, filepath, metadata)
+                if success:
+                    logger.info(f"保存检查点: {base_name}")
+                else:
+                    self.main_agent.save_model(filepath)
+                    state_path = filepath.replace('.pkl', '') + '_state.pkl'
+                    if filepath.endswith('.weights.h5'):
+                        state_path = filepath.replace('.weights.h5', '_state.pkl')
+                    with open(state_path, 'wb') as f:
+                        pickle.dump(metadata, f)
+                    logger.info(f"使用后备方法保存检查点: {base_name}")
         except Exception as e:
             logger.error(f"保存检查点失败: {e}")
             logger.error(traceback.format_exc())
 
     def _find_latest_checkpoint(self) -> Optional[str]:
-        """查找最新的检查点文件"""
+        """查找最新的检查点文件。PPO 按 .actor.weights.h5 找并返回 base 路径。"""
         if not os.path.exists(self.checkpoint_dir):
             logger.warning(f"检查点目录不存在: {self.checkpoint_dir}")
             return None
-        
-        # 获取所有检查点文件
-        checkpoint_files = []
-        for file in os.listdir(self.checkpoint_dir):
-            if file.endswith('.weights.h5') or file.endswith('.pkl'):
-                # 排除状态文件
-                if not file.endswith('_state.pkl'):
+
+        if self.model_type == 'ppo':
+            candidates = []
+            for file in os.listdir(self.checkpoint_dir):
+                if file.endswith('.actor.weights.h5'):
+                    base = os.path.join(self.checkpoint_dir, file.replace('.actor.weights.h5', ''))
+                    candidates.append((os.path.getmtime(base + '.actor.weights.h5'), base))
+            if not candidates:
+                logger.warning(f"在 {self.checkpoint_dir} 中未找到 PPO 检查点 (.actor.weights.h5)")
+                return None
+            latest_file = max(candidates, key=lambda x: x[0])[1]
+        else:
+            checkpoint_files = []
+            for file in os.listdir(self.checkpoint_dir):
+                if (file.endswith('.weights.h5') or file.endswith('.pkl')) and not file.endswith('_state.pkl'):
                     checkpoint_files.append(os.path.join(self.checkpoint_dir, file))
-        
-        if not checkpoint_files:
-            logger.warning(f"在 {self.checkpoint_dir} 中未找到检查点文件")
-            return None
-        
-        # 按修改时间排序，返回最新的文件
-        latest_file = max(checkpoint_files, key=os.path.getmtime)
+            if not checkpoint_files:
+                logger.warning(f"在 {self.checkpoint_dir} 中未找到检查点文件")
+                return None
+            latest_file = max(checkpoint_files, key=os.path.getmtime)
         logger.info(f"找到最新的检查点文件: {latest_file}")
         return latest_file
     
@@ -411,9 +429,13 @@ class SelfPlayTrainer:
         logger.info(f"🔍 [DEBUG] 准备加载检查点: {filepath}")
         
         try:
-            # 1. 验证文件是否存在 (支持模糊匹配)
             real_path = filepath
-            if not os.path.exists(real_path):
+            if self.model_type == 'ppo':
+                if not real_path.endswith('.actor.weights.h5') and not real_path.endswith('.critic.weights.h5'):
+                    if not os.path.exists(real_path + '.actor.weights.h5'):
+                        logger.error(f"❌ [DEBUG] 无法找到 PPO 权重: {filepath}.actor.weights.h5")
+                        return False
+            elif not os.path.exists(real_path):
                 if os.path.exists(real_path + '.weights.h5'):
                     real_path += '.weights.h5'
                 elif os.path.exists(real_path + '.pkl'):
@@ -427,12 +449,15 @@ class SelfPlayTrainer:
             logger.info("✅ [DEBUG] 模型权重加载成功")
 
             # 3. 加载训练状态 (state)
-            # 智能推断 state 文件路径
             state_path = None
-            if real_path.endswith('.pkl'):
+            if self.model_type == 'ppo':
+                state_path = real_path + '_state.pkl' if not real_path.endswith('_state.pkl') else real_path
+            elif real_path.endswith('.pkl'):
                 state_path = real_path.replace('.pkl', '_state.pkl')
             elif real_path.endswith('.weights.h5'):
                 state_path = real_path.replace('.weights.h5', '_state.pkl')
+            else:
+                state_path = real_path + '_state.pkl'
             
             if state_path and os.path.exists(state_path):
                 try:

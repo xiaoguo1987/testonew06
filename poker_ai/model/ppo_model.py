@@ -1,39 +1,52 @@
 import tensorflow as tf
 import numpy as np
+import os
 from typing import List, Tuple, Optional, Dict
 from tensorflow.keras import layers, models
 from tensorflow.keras.optimizers import Adam
 from ..game.poker_game import Player, PokerGame
 from .state_representation import StateRepresentation
+from ..config.ppo_config import PPOConfig, DEFAULT_PPO_CONFIG
+
+
+def _ppo_base_path(path: str) -> str:
+    """将任意 PPO 相关路径规范为 base 路径（无后缀），用于 actor/critic 文件名."""
+    path = path.replace(".actor.weights.h5", "").replace(".critic.weights.h5", "")
+    path = path.replace(".weights.h5", "").rstrip("/")
+    return path
+
 
 class PPOModel:
     """近端策略优化（PPO）模型，兼容德州扑克AI训练框架"""
     def __init__(
         self,
-        input_dim: int = 18,  # 状态输入维度（与DQN/PG一致）
-        output_dim: int = 5,  # 动作维度（与DQN保持一致）
-        lr: float = 3e-4,
-        clip_epsilon: float = 0.2,  # PPO Clip参数
-        gamma: float = 0.99,  # 折扣因子
-        lambda_: float = 0.95,  # GAE参数
-        update_epochs: int = 10,  # 每批数据更新轮次
-        batch_size: int = 64,  # 批次大小
+        input_dim: Optional[int] = None,
+        output_dim: int = 5,
+        lr: Optional[float] = None,
+        clip_epsilon: Optional[float] = None,
+        gamma: Optional[float] = None,
+        lambda_: Optional[float] = None,
+        update_epochs: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        config: Optional[PPOConfig] = None,
     ):
-        self.input_dim = input_dim
+        cfg = config or DEFAULT_PPO_CONFIG
+        self.input_dim = input_dim if input_dim is not None else cfg.input_dim
         self.output_dim = output_dim
-        self.clip_epsilon = clip_epsilon
-        self.gamma = gamma
-        self.lambda_ = lambda_
-        self.update_epochs = update_epochs
-        self.batch_size = batch_size
-        self.last_loss = 0.0  # 记录最新损失（用于TensorBoard）
-        self.state_rep = StateRepresentation()  # 状态表示器
-        
-        # 学习率衰减相关
-        self.initial_lr = lr
-        self.current_lr = lr
-        self.lr_decay_rate = 0.999  # 学习率衰减率
-        self.lr_min = 1e-6  # 最小学习率
+        self.clip_epsilon = clip_epsilon if clip_epsilon is not None else cfg.clip_epsilon
+        self.gamma = gamma if gamma is not None else cfg.gamma
+        self.lambda_ = lambda_ if lambda_ is not None else cfg.lambda_
+        self.update_epochs = update_epochs if update_epochs is not None else cfg.update_epochs
+        self.batch_size = batch_size if batch_size is not None else cfg.batch_size
+        self.max_grad_norm = getattr(cfg, "max_grad_norm", 0.5)
+        self.last_loss = 0.0
+        self.state_rep = StateRepresentation()
+
+        lr_val = lr if lr is not None else cfg.lr
+        self.initial_lr = lr_val
+        self.current_lr = lr_val
+        self.lr_decay_rate = getattr(cfg, "lr_decay_rate", 0.9999)
+        self.lr_min = getattr(cfg, "lr_min", 1e-6)
 
         # 构建策略网络（Actor）和价值网络（Critic）
         self.actor = self._build_actor()
@@ -233,8 +246,7 @@ class PPOModel:
                     )
 
                 actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
-                # 梯度裁剪，防止梯度爆炸
-                actor_grads = [tf.clip_by_norm(grad, 0.5) for grad in actor_grads]
+                actor_grads = [tf.clip_by_norm(grad, self.max_grad_norm) for grad in actor_grads]
                 self.actor_optimizer.apply_gradients(
                     zip(actor_grads, self.actor.trainable_variables)
                 )
@@ -245,8 +257,7 @@ class PPOModel:
                     critic_loss = tf.reduce_mean(tf.square(batch_values - batch_returns[:, None]))
 
                 critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
-                # 梯度裁剪，防止梯度爆炸
-                critic_grads = [tf.clip_by_norm(grad, 0.5) for grad in critic_grads]
+                critic_grads = [tf.clip_by_norm(grad, self.max_grad_norm) for grad in critic_grads]
                 self.critic_optimizer.apply_gradients(
                     zip(critic_grads, self.critic.trainable_variables)
                 )
@@ -271,22 +282,24 @@ class PPOModel:
         return self.last_loss
 
     def save_weights(self, path: str) -> None:
-        """保存模型权重（兼容现有checkpoint机制）"""
-        # 分别保存Actor和Critic权重
-        actor_path = path.replace(".weights.h5", ".actor.weights.h5")
-        critic_path = path.replace(".weights.h5", ".critic.weights.h5")
+        """保存模型权重。path 可为 base 路径或含 .weights.h5 的路径，统一存为 base.actor.weights.h5 / base.critic.weights.h5"""
+        base = _ppo_base_path(path)
+        actor_path = base + ".actor.weights.h5"
+        critic_path = base + ".critic.weights.h5"
         self.actor.save_weights(actor_path)
         self.critic.save_weights(critic_path)
 
     def load_weights(self, path: str) -> None:
-        """加载模型权重（兼容现有checkpoint机制）"""
-        try:
-            actor_path = path.replace(".weights.h5", ".actor.weights.h5")
-            critic_path = path.replace(".weights.h5", ".critic.weights.h5")
-            self.actor.load_weights(actor_path)
-            self.critic.load_weights(critic_path)
-        except Exception as e:
-            raise ValueError(f"PPO模型权重加载失败：{str(e)}")
+        """加载模型权重。path 可为 base、.actor.weights.h5 或 .weights.h5 等，自动解析为 base."""
+        base = _ppo_base_path(path)
+        actor_path = base + ".actor.weights.h5"
+        critic_path = base + ".critic.weights.h5"
+        if not os.path.exists(actor_path) or not os.path.exists(critic_path):
+            raise FileNotFoundError(
+                f"PPO 权重文件不存在: 需要 {actor_path} 与 {critic_path}"
+            )
+        self.actor.load_weights(actor_path)
+        self.critic.load_weights(critic_path)
     
     def set_weights(self, weights):
         """设置模型权重"""

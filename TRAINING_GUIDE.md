@@ -23,7 +23,15 @@ pip install -r requirements.txt
 
 ## 基本训练命令
 
-### 第一次训练
+### PPO 训练（推荐）
+
+```bash
+python train.py --mode train --model-type ppo --num-hands 100000 --learning-rate 3e-4 --ppo-clip 0.2 --ppo-epochs 10
+```
+
+PPO 使用轨迹级更新：每手牌收集 (state, action, old_prob)，牌局结束时用最终收益计算 GAE 并更新策略。检查点保存为 `base.actor.weights.h5`、`base.critic.weights.h5` 与 `base_state.pkl`，加载时指定 base 路径（如 `--model-path ./checkpoints/agent_ppo_1000`）。
+
+### DQN 训练
 
 ```bash
 python train.py --mode train --model-type dqn --num-hands 100000 --learning-rate 0.001 --batch-size 64
@@ -42,7 +50,7 @@ python train.py --mode train --resume --checkpoint-dir ./checkpoints
 | 参数 | 描述 | 默认值 | 推荐值 |
 |------|------|--------|--------|
 | `--mode` | 运行模式 | train | train/eval/demo |
-| `--model-type` | 模型类型 | dqn | dqn/policy_gradient |
+| `--model-type` | 模型类型 | ppo | ppo/dqn/policy_gradient |
 | `--num-hands` | 训练的手牌数量 | 100000 | 100000-1000000 |
 | `--learning-rate` | 学习率 | 0.001 | 0.0001-0.001 |
 | `--batch-size` | 批处理大小 | 64 | 32-128 |

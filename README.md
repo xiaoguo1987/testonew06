@@ -19,11 +19,13 @@ poker_ai/                   # 主项目目录
 │   ├── poker_game.py       # 德州扑克游戏核心实现
 │   ├── card.py             # 卡牌相关类
 │   └── player.py           # 玩家相关类
+├── config/                 # 配置模块
+│   └── ppo_config.py       # PPO 超参数配置
 ├── model/                  # AI模型模块
-│   ├── __init__.py
-│   ├── ai_agent.py         # AI代理实现
-│   ├── dqn_model.py        # DQN模型实现
-│   ├── pg_model.py         # 策略梯度模型实现
+│   ├── ai_agent.py         # AI代理统一接口
+│   ├── dqn_agent.py        # DQN/策略梯度实现
+│   ├── ppo_model.py        # PPO（近端策略优化）实现
+│   ├── state_representation.py # 状态表示
 │   └── hand_evaluator.py   # 手牌评估器
 ├── reward/                 # 奖励机制模块
 │   ├── __init__.py
@@ -67,13 +69,18 @@ pip install -r requirements.txt
 使用`train.py`脚本进行模型训练：
 
 ```bash
+# 使用 PPO 训练（推荐）
+python train.py --mode train --model-type ppo --num-hands 10000
+
+# 使用 DQN 训练
 python train.py --mode train --model-type dqn --num-hands 10000
 ```
+PPO 检查点保存为 `base.actor.weights.h5` 与 `base.critic.weights.h5`，加载时指定 base 路径即可（如 `--model-path ./checkpoints/agent_ppo_1000`）。
 
 ### 训练参数说明
 
 - `--mode`: 运行模式，可选'train'(训练)、'eval'(评估)、'demo'(演示)
-- `--model-type`: 模型类型，可选'dqn'或'policy_gradient'
+- `--model-type`: 模型类型，可选'dqn'、'policy_gradient'或'ppo'（推荐 PPO）
 - `--num-hands`: 训练的手牌数量
 - `--learning-rate`: 学习率（默认为0.001）
 - `--batch-size`: 批处理大小（默认为64）
@@ -89,10 +96,11 @@ python train.py --mode train --model-type dqn --num-hands 10000
 python train.py --mode train --resume
 ```
 
-或者指定具体的模型文件：
+或者指定具体的模型文件（PPO 使用 base 路径，不含 `.actor.weights.h5` 后缀）：
 
 ```bash
-python train.py --mode train --model-path ./checkpoints/best_agent_dqn_20231120_120000.h5
+python train.py --mode train --model-path ./checkpoints/best_agent_ppo_20231120_120000
+python train.py --mode train --model-path ./checkpoints/best_agent_dqn_20231120_120000.weights.h5
 ```
 
 ### 高级训练选项
