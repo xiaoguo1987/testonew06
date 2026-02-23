@@ -225,26 +225,35 @@ class PPOModel:
         total_critic_loss = 0.0
         num_batches_done = 0
 
+        state_dim = states.shape[1]
         for epoch in range(self.update_epochs):
             indices = np.random.permutation(buffer_size)
             for start in range(0, buffer_size, train_batch_size):
-                end = start + train_batch_size
+                end = min(start + train_batch_size, buffer_size)
                 batch_indices = indices[start:end]
-                # 若不足一整批，用有效索引填充到固定长度，后面用 mask 忽略填充
                 actual_len = len(batch_indices)
+                # 不足一整批时对数据做 padding 到 train_batch_size，保证 shape 一致
                 if actual_len < train_batch_size:
                     pad_len = train_batch_size - actual_len
-                    batch_indices = np.concatenate([batch_indices, indices[:pad_len]])
+                    batch_states_np = np.zeros((train_batch_size, state_dim), dtype=np.float32)
+                    batch_states_np[:actual_len] = states[batch_indices]
+                    batch_actions_np = np.zeros(train_batch_size, dtype=np.int32)
+                    batch_actions_np[:actual_len] = actions[batch_indices]
+                    batch_old_probs_np = np.zeros(train_batch_size, dtype=np.float32)
+                    batch_old_probs_np[:actual_len] = old_action_probs[batch_indices]
+                    batch_advantages_np = np.zeros(train_batch_size, dtype=np.float32)
+                    batch_advantages_np[:actual_len] = advantages[batch_indices]
+                    batch_returns_np = np.zeros(train_batch_size, dtype=np.float32)
+                    batch_returns_np[:actual_len] = returns[batch_indices]
                     mask = np.zeros(train_batch_size, dtype=np.float32)
                     mask[:actual_len] = 1.0
                 else:
+                    batch_states_np = states[batch_indices]
+                    batch_actions_np = actions[batch_indices]
+                    batch_old_probs_np = old_action_probs[batch_indices]
+                    batch_advantages_np = advantages[batch_indices]
+                    batch_returns_np = returns[batch_indices]
                     mask = np.ones(train_batch_size, dtype=np.float32)
-
-                batch_states_np = states[batch_indices]
-                batch_actions_np = actions[batch_indices]
-                batch_old_probs_np = old_action_probs[batch_indices]
-                batch_advantages_np = advantages[batch_indices]
-                batch_returns_np = returns[batch_indices]
 
                 batch_states = tf.convert_to_tensor(batch_states_np, dtype=tf.float32)
                 batch_actions = tf.convert_to_tensor(batch_actions_np, dtype=tf.int32)
