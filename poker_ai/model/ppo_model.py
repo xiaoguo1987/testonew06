@@ -173,6 +173,19 @@ class PPOModel:
         # PPO不使用目标网络，这里为空实现
         pass
 
+    def warmup(self) -> None:
+        """用固定 shape (1, dim) 和 (64, dim) 各跑一次 predict，预编译 tf.function，减少训练时的 retracing 警告。"""
+        if getattr(self, "_ppo_warmup_done", False):
+            return
+        bs = min(self.batch_size, 64)
+        dummy1 = np.zeros((1, self.input_dim), dtype=np.float32)
+        dummy64 = np.zeros((bs, self.input_dim), dtype=np.float32)
+        _ = self.actor.predict(dummy1, verbose=0)
+        _ = self.actor.predict(dummy64, verbose=0)
+        _ = self.critic.predict(dummy1, verbose=0)
+        _ = self.critic.predict(dummy64, verbose=0)
+        self._ppo_warmup_done = True
+
     def _predict_critic_fixed_batch(self, states: np.ndarray, chunk_size: int = 64) -> np.ndarray:
         """用固定 batch 形状调用 critic，避免不同 shape 触发 retracing。"""
         n = len(states)
@@ -211,13 +224,13 @@ class PPOModel:
         logger = logging.getLogger('PPOModel')
 
         buffer_size = len(states)
-        # 固定训练用的 batch 大小（只使用 64 或 self.batch_size），避免多种 shape 导致 retracing
         train_batch_size = min(self.batch_size, 64)
-
-        # 计算状态价值和优势（用固定 chunk 调用 critic）
+        # 计算状态价值和优势（仅用固定 chunk，避免 fallback 可变 shape 触发 retracing）
         values = self._predict_critic_fixed_batch(states, chunk_size=train_batch_size)
         if len(values) != buffer_size:
-            values = self.critic.predict(states, verbose=0).flatten()  # fallback
+            values = self._predict_critic_fixed_batch(states, chunk_size=64)
+        if len(values) != buffer_size:
+            values = np.zeros(buffer_size, dtype=np.float32)  # 极罕见时保底
         advantages = self._compute_gae(rewards, values, dones)
         returns = advantages + values  # 目标回报
 

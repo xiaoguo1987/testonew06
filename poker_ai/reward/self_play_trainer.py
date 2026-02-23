@@ -521,6 +521,8 @@ class SelfPlayTrainer:
         logger.info(f"开始训练，共{num_hands}手牌")
         logger.info("从当前模型状态开始训练")
         start_hand = self.total_hands
+        if self.model_type == "ppo" and hasattr(self.main_agent, "agent") and hasattr(self.main_agent.agent, "warmup"):
+            self.main_agent.agent.warmup()
 
         for hand_idx in range(num_hands):
             game, players = self._create_game()
