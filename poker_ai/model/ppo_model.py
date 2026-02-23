@@ -173,6 +173,31 @@ class PPOModel:
         # PPO不使用目标网络，这里为空实现
         pass
 
+    def _predict_critic_fixed_batch(self, states: np.ndarray, chunk_size: int = 64) -> np.ndarray:
+        """用固定 batch 形状调用 critic，避免不同 shape 触发 retracing。"""
+        n = len(states)
+        if n <= 0:
+            return np.array([], dtype=np.float32)
+        if n <= chunk_size:
+            # 单次调用，但 pad 到 chunk_size 以固定 shape
+            pad = chunk_size - n
+            padded = np.zeros((chunk_size, states.shape[1]), dtype=np.float32)
+            padded[:n] = states
+            out = self.critic.predict(padded, verbose=0).flatten()[:n]
+            return out
+        values_list = []
+        for start in range(0, n, chunk_size):
+            end = min(start + chunk_size, n)
+            chunk = states[start:end]
+            if len(chunk) < chunk_size:
+                padded = np.zeros((chunk_size, states.shape[1]), dtype=np.float32)
+                padded[: len(chunk)] = chunk
+                v = self.critic.predict(padded, verbose=0).flatten()[: len(chunk)]
+            else:
+                v = self.critic.predict(chunk, verbose=0).flatten()
+            values_list.append(v)
+        return np.concatenate(values_list, axis=0)
+
     def train(
         self,
         states: np.ndarray,
@@ -181,69 +206,66 @@ class PPOModel:
         dones: np.ndarray,
         old_action_probs: np.ndarray
     ) -> float:
-        """训练模型：PPO核心逻辑"""
+        """训练模型：PPO核心逻辑。使用固定 batch shape 减少 tf.function retracing。"""
         import logging
         logger = logging.getLogger('PPOModel')
-        
-        # 计算状态价值和优势
-        values = self.critic.predict(states, verbose=0).flatten()
+
+        buffer_size = len(states)
+        # 固定训练用的 batch 大小（只使用 64 或 self.batch_size），避免多种 shape 导致 retracing
+        train_batch_size = min(self.batch_size, 64)
+
+        # 计算状态价值和优势（用固定 chunk 调用 critic）
+        values = self._predict_critic_fixed_batch(states, chunk_size=train_batch_size)
+        if len(values) != buffer_size:
+            values = self.critic.predict(states, verbose=0).flatten()  # fallback
         advantages = self._compute_gae(rewards, values, dones)
         returns = advantages + values  # 目标回报
 
-        # 多轮更新策略
         total_actor_loss = 0.0
         total_critic_loss = 0.0
-
-        # 动态调整批次大小
-        buffer_size = len(states)
-        # 确保批次大小不超过缓冲区大小，且为2的幂次方
-        dynamic_batch_size = min(self.batch_size, buffer_size)
-        # 如果缓冲区太小，直接使用整个缓冲区
-        if dynamic_batch_size < 32:
-            dynamic_batch_size = buffer_size
-        else:
-            # 调整为最接近的2的幂次方，提高GPU利用率
-            dynamic_batch_size = 2 ** int(np.log2(dynamic_batch_size))
-        
-        logger.debug(f"训练批次: 状态数量={buffer_size}, 批次大小={dynamic_batch_size}, 更新轮次={self.update_epochs}")
+        num_batches_done = 0
 
         for epoch in range(self.update_epochs):
-            # 随机打乱数据（分批训练）
             indices = np.random.permutation(buffer_size)
-            for start in range(0, buffer_size, dynamic_batch_size):
-                end = start + dynamic_batch_size
+            for start in range(0, buffer_size, train_batch_size):
+                end = start + train_batch_size
                 batch_indices = indices[start:end]
+                # 若不足一整批，用有效索引填充到固定长度，后面用 mask 忽略填充
+                actual_len = len(batch_indices)
+                if actual_len < train_batch_size:
+                    pad_len = train_batch_size - actual_len
+                    batch_indices = np.concatenate([batch_indices, indices[:pad_len]])
+                    mask = np.zeros(train_batch_size, dtype=np.float32)
+                    mask[:actual_len] = 1.0
+                else:
+                    mask = np.ones(train_batch_size, dtype=np.float32)
 
-                # 先使用NumPy数组进行索引，再转换为TensorFlow张量
                 batch_states_np = states[batch_indices]
                 batch_actions_np = actions[batch_indices]
                 batch_old_probs_np = old_action_probs[batch_indices]
                 batch_advantages_np = advantages[batch_indices]
                 batch_returns_np = returns[batch_indices]
-                
-                # 转换为TensorFlow张量
+
                 batch_states = tf.convert_to_tensor(batch_states_np, dtype=tf.float32)
                 batch_actions = tf.convert_to_tensor(batch_actions_np, dtype=tf.int32)
                 batch_old_probs = tf.convert_to_tensor(batch_old_probs_np, dtype=tf.float32)
                 batch_advantages = tf.convert_to_tensor(batch_advantages_np, dtype=tf.float32)
                 batch_returns = tf.convert_to_tensor(batch_returns_np, dtype=tf.float32)
+                batch_mask = tf.convert_to_tensor(mask, dtype=tf.float32)
 
-                # 更新策略网络（Actor）
+                # 更新策略网络（Actor），用 mask 忽略填充样本
                 with tf.GradientTape() as tape:
                     batch_action_probs = self.actor(batch_states)
-                    # 提取选中动作的概率
                     action_masks = tf.one_hot(batch_actions, self.output_dim)
                     batch_current_probs = tf.reduce_sum(
                         batch_action_probs * action_masks, axis=1
                     )
-                    # PPO Clip损失
-                    ratio = batch_current_probs / (batch_old_probs + 1e-8)  # 避免除零
+                    ratio = batch_current_probs / (batch_old_probs + 1e-8)
                     clipped_ratio = tf.clip_by_value(
                         ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon
                     )
-                    actor_loss = -tf.reduce_mean(
-                        tf.minimum(ratio * batch_advantages, clipped_ratio * batch_advantages)
-                    )
+                    per_sample = tf.minimum(ratio * batch_advantages, clipped_ratio * batch_advantages)
+                    actor_loss = -tf.reduce_sum(per_sample * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
 
                 actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
                 actor_grads = [tf.clip_by_norm(grad, self.max_grad_norm) for grad in actor_grads]
@@ -251,10 +273,11 @@ class PPOModel:
                     zip(actor_grads, self.actor.trainable_variables)
                 )
 
-                # 更新价值网络（Critic）
+                # 更新价值网络（Critic），用 mask 忽略填充样本
                 with tf.GradientTape() as tape:
                     batch_values = self.critic(batch_states)
-                    critic_loss = tf.reduce_mean(tf.square(batch_values - batch_returns[:, None]))
+                    sq = tf.square(batch_values - batch_returns[:, None])
+                    critic_loss = tf.reduce_sum(sq * batch_mask[:, None]) / (tf.reduce_sum(batch_mask) + 1e-8)
 
                 critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
                 critic_grads = [tf.clip_by_norm(grad, self.max_grad_norm) for grad in critic_grads]
@@ -264,11 +287,11 @@ class PPOModel:
 
                 total_actor_loss += actor_loss.numpy()
                 total_critic_loss += critic_loss.numpy()
+                num_batches_done += 1
 
-        # 计算平均损失
-        num_batches = len(states) // self.batch_size + 1
-        avg_actor_loss = total_actor_loss / (self.update_epochs * num_batches)
-        avg_critic_loss = total_critic_loss / (self.update_epochs * num_batches)
+        num_batches_done = max(num_batches_done, 1)
+        avg_actor_loss = total_actor_loss / num_batches_done
+        avg_critic_loss = total_critic_loss / num_batches_done
         self.last_loss = (avg_actor_loss + avg_critic_loss) / 2  # 记录总损失
 
         # 学习率衰减
