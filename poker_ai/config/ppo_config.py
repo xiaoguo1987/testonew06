@@ -25,6 +25,7 @@ class PPOConfig:
     clip_epsilon: float = 0.2
     gamma: float = 0.99
     lambda_: float = 0.95
+    entropy_coef: float = 0.02
 
     # 每批轨迹更新轮次与批次
     update_epochs: int = 10
@@ -41,6 +42,7 @@ class PPOConfig:
             "clip_epsilon": self.clip_epsilon,
             "gamma": self.gamma,
             "lambda_": self.lambda_,
+            "entropy_coef": self.entropy_coef,
             "update_epochs": self.update_epochs,
             "batch_size": self.batch_size,
         }

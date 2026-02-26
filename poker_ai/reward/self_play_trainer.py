@@ -42,6 +42,7 @@ class SelfPlayTrainer:
                  target_update_freq: int = 100,
                  ppo_clip_epsilon: float = 0.2,
                  ppo_update_epochs: int = 10,
+                 ppo_entropy_coef: float = 0.02,
                  skip_final_eval: bool = False):
         
         # --- 修正1: 强制检查 6-Max ---
@@ -65,6 +66,7 @@ class SelfPlayTrainer:
         self.optimizer = optimizer
         self.ppo_clip_epsilon = ppo_clip_epsilon
         self.ppo_update_epochs = ppo_update_epochs
+        self.ppo_entropy_coef = ppo_entropy_coef
         self.skip_final_eval = skip_final_eval
 
         # 创建检查点目录
@@ -105,6 +107,7 @@ class SelfPlayTrainer:
             if self.model_type == 'ppo':
                 kwargs['ppo_clip_epsilon'] = self.ppo_clip_epsilon
                 kwargs['ppo_update_epochs'] = self.ppo_update_epochs
+                kwargs['ppo_entropy_coef'] = self.ppo_entropy_coef
             self.main_agent = PokerAIAgent(**kwargs)
 
         self.opponent_agents = []
@@ -118,6 +121,7 @@ class SelfPlayTrainer:
             if self.model_type == 'ppo':
                 opp_kw['ppo_clip_epsilon'] = self.ppo_clip_epsilon
                 opp_kw['ppo_update_epochs'] = self.ppo_update_epochs
+                opp_kw['ppo_entropy_coef'] = self.ppo_entropy_coef
             self.opponent_agents.append(PokerAIAgent(**opp_kw))
             
         # 第 5 个对手作为“鱼” (Random Player)
@@ -276,6 +280,10 @@ class SelfPlayTrainer:
                 profit_loss=final_profit,
                 done=True
             )
+            # 轻量反塌缩 shaping：若整手牌只有 fold 且直接输盲注，额外小惩罚，避免策略塌缩为“总弃牌”
+            main_actions = action_records.get("Main_AI", [])
+            if len(main_actions) == 1 and main_actions[0][0] == "fold" and final_profit <= 0:
+                final_reward -= 0.25
             use_ppo_trajectory = getattr(self.main_agent, 'agent_type', None) == 'ppo'
             if use_ppo_trajectory:
                 self.main_agent.finish_trajectory(final_reward)

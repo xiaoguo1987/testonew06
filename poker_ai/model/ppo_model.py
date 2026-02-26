@@ -26,6 +26,7 @@ class PPOModel:
         clip_epsilon: Optional[float] = None,
         gamma: Optional[float] = None,
         lambda_: Optional[float] = None,
+        entropy_coef: Optional[float] = None,
         update_epochs: Optional[int] = None,
         batch_size: Optional[int] = None,
         config: Optional[PPOConfig] = None,
@@ -36,6 +37,7 @@ class PPOModel:
         self.clip_epsilon = clip_epsilon if clip_epsilon is not None else cfg.clip_epsilon
         self.gamma = gamma if gamma is not None else cfg.gamma
         self.lambda_ = lambda_ if lambda_ is not None else cfg.lambda_
+        self.entropy_coef = entropy_coef if entropy_coef is not None else getattr(cfg, "entropy_coef", 0.02)
         self.update_epochs = update_epochs if update_epochs is not None else cfg.update_epochs
         self.batch_size = batch_size if batch_size is not None else cfg.batch_size
         self.max_grad_norm = getattr(cfg, "max_grad_norm", 0.5)
@@ -288,7 +290,13 @@ class PPOModel:
                         ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon
                     )
                     per_sample = tf.minimum(ratio * batch_advantages, clipped_ratio * batch_advantages)
-                    actor_loss = -tf.reduce_sum(per_sample * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
+                    policy_loss = -tf.reduce_sum(per_sample * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
+                    # 熵正则：抑制策略过早塌缩到单一动作（如全弃牌）
+                    entropy = -tf.reduce_sum(
+                        batch_action_probs * tf.math.log(batch_action_probs + 1e-8), axis=1
+                    )
+                    entropy_loss = -tf.reduce_sum(entropy * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
+                    actor_loss = policy_loss + self.entropy_coef * entropy_loss
 
                 actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
                 actor_grads = [tf.clip_by_norm(grad, self.max_grad_norm) for grad in actor_grads]

@@ -11,12 +11,54 @@ from ..game.poker_game import Player, PokerGame
 # 设置日志
 logger = logging.getLogger('PokerAIAgent')
 
+
+def _get_legal_action_mask(game: PokerGame, player: Player) -> np.ndarray:
+    """
+    5 维动作合法性掩码:
+    0 fold
+    1 call
+    2 raise x2
+    3 raise x4
+    4 all-in
+    """
+    mask = np.zeros(5, dtype=np.float32)
+    if not player.is_active or player.is_all_in:
+        mask[0] = 1.0
+        return mask
+
+    call_amount = max(0, game.current_bet - player.bet)
+    # fold / call 基本总是可用（call_amount=0 时等价于 check）
+    mask[0] = 1.0
+    if call_amount <= player.stack:
+        mask[1] = 1.0
+
+    current_bet = max(game.current_bet, game.big_blind)
+    raise2_total = int(current_bet * 2)
+    raise4_total = int(current_bet * 4)
+    all_in_total = int(player.bet + player.stack)
+    min_raise_total = max(game.current_bet * 2, game.big_blind)
+
+    if raise2_total > game.current_bet and raise2_total >= min_raise_total and (raise2_total - player.bet) <= player.stack:
+        mask[2] = 1.0
+    if raise4_total > game.current_bet and raise4_total >= min_raise_total and (raise4_total - player.bet) <= player.stack:
+        mask[3] = 1.0
+    if all_in_total > game.current_bet and all_in_total >= min_raise_total and player.stack > 0:
+        mask[4] = 1.0
+
+    if np.sum(mask) <= 0:
+        # 保底：至少允许 fold/call
+        mask[0] = 1.0
+        if call_amount <= player.stack:
+            mask[1] = 1.0
+    return mask
+
 class PokerAIAgent:
     """德州扑克AI代理统一接口"""
     
     def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None, target_update_freq: int = 10,
                  learning_rate: float = 0.001, optimizer: str = 'adam',
-                 ppo_clip_epsilon: Optional[float] = None, ppo_update_epochs: Optional[int] = None):
+                 ppo_clip_epsilon: Optional[float] = None, ppo_update_epochs: Optional[int] = None,
+                 ppo_entropy_coef: Optional[float] = None):
         """
         初始化AI代理
         agent_type: 'dqn'、'policy_gradient' 或 'ppo'
@@ -42,6 +84,8 @@ class PokerAIAgent:
                 kwargs['clip_epsilon'] = ppo_clip_epsilon
             if ppo_update_epochs is not None:
                 kwargs['update_epochs'] = ppo_update_epochs
+            if ppo_entropy_coef is not None:
+                kwargs['entropy_coef'] = ppo_entropy_coef
             self.agent = PPOModel(**kwargs)
         else:
             raise ValueError(f"不支持的代理类型: {agent_type}")
@@ -65,7 +109,14 @@ class PokerAIAgent:
         state = self.state_rep.get_state(game, player)
         if self.agent_type == 'ppo':
             action_probs, value = self.agent.predict(state)
-            action_idx = int(np.random.choice(len(action_probs), p=action_probs))
+            legal_mask = _get_legal_action_mask(game, player)
+            masked_probs = action_probs * legal_mask
+            prob_sum = float(np.sum(masked_probs))
+            if prob_sum <= 1e-8:
+                masked_probs = legal_mask / (np.sum(legal_mask) + 1e-8)
+            else:
+                masked_probs = masked_probs / prob_sum
+            action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
             hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(len(action_probs))
             action_vector[action_idx] = 1
@@ -73,8 +124,8 @@ class PokerAIAgent:
             info = {
                 'state': state,
                 'action_idx': action_idx,
-                'old_prob': float(np.clip(action_probs[action_idx], 1e-8, 1.0)),
-                'action_probabilities': action_probs,
+                'old_prob': float(np.clip(masked_probs[action_idx], 1e-8, 1.0)),
+                'action_probabilities': masked_probs,
                 'state_value': float(value),
             }
             return action, amount, info

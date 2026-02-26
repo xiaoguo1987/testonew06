@@ -71,6 +71,7 @@ def parse_arguments():
     # PPO 专用
     parser.add_argument('--ppo-clip', type=float, default=0.2, help='PPO clip_epsilon')
     parser.add_argument('--ppo-epochs', type=int, default=10, help='PPO 每批轨迹更新轮次')
+    parser.add_argument('--ppo-entropy-coef', type=float, default=0.02, help='PPO 熵正则系数，越大越鼓励探索')
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamax', 'rmsprop', 'sgd'], help='优化器类型')
     parser.add_argument('--eval-interval', type=int, default=200, help='评估间隔（局数）')
@@ -170,6 +171,7 @@ def train_model(args):
             optimizer=args.optimizer,
             ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
             ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
+            ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
             skip_final_eval=getattr(args, 'skip_final_eval', False),
         )
         
@@ -259,6 +261,7 @@ def evaluate_model(args):
         optimizer=args.optimizer,
         ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
         ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
+        ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
     )
     
     # 加载模型
