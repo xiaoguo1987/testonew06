@@ -54,11 +54,33 @@ class PokerAIAgent:
         根据当前游戏状态选择动作
         返回: (动作类型, 动作金额)
         """
-        # 获取当前状态
+        action, amount, _ = self.select_action_with_info(game, player)
+        return action, amount
+
+    def select_action_with_info(self, game: PokerGame, player: Player) -> Tuple[str, Optional[int], Dict]:
+        """
+        选择动作并返回训练所需的额外信息。
+        PPO 场景下可避免重复前向推理，并确保记录的是“实际执行动作”。
+        """
         state = self.state_rep.get_state(game, player)
-        
-        # 选择动作
-        return self.agent.act(state, game, player)
+        if self.agent_type == 'ppo':
+            action_probs, value = self.agent.predict(state)
+            action_idx = int(np.random.choice(len(action_probs), p=action_probs))
+            hand_strength = self.state_rep.calculate_hand_strength(player, game)
+            action_vector = np.zeros(len(action_probs))
+            action_vector[action_idx] = 1
+            action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            info = {
+                'state': state,
+                'action_idx': action_idx,
+                'old_prob': float(np.clip(action_probs[action_idx], 1e-8, 1.0)),
+                'action_probabilities': action_probs,
+                'state_value': float(value),
+            }
+            return action, amount, info
+
+        action, amount = self.agent.act(state, game, player)
+        return action, amount, {'state': state}
     
     def learn(self, reward: float, state: Optional[np.ndarray] = None, 
               action: Optional[int] = None, next_state: Optional[np.ndarray] = None, 

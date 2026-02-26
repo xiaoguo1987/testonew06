@@ -67,6 +67,7 @@ class PokerGame:
         self.pot = 0
         self.current_bet = 0
         self.action_count = 0
+        self.winner = None
         
         # 重置玩家状态
         for player in self.players:
@@ -112,16 +113,19 @@ class PokerGame:
     
     def _setup_round_start(self) -> None:
         """设置轮次开始时的状态"""
-        self.current_bet = 0
+        # 翻牌前必须保留盲注形成的当前下注；翻牌后新街才重置为0
+        if self.round != 1:
+            self.current_bet = 0
         self.action_count = 0
         
         # 确定起始行动玩家
         if self.round == 1:  # 翻牌前
             # 从大盲注后的玩家开始
-            self.current_player = (self.dealer_pos + 3) % len(self.players)
+            # next_player() 会先 +1 再返回，因此这里存上一个位置
+            self.current_player = (self.dealer_pos + 2) % len(self.players)
         else:
             # 翻牌后从庄家位置的下一位开始
-            self.current_player = (self.dealer_pos + 1) % len(self.players)
+            self.current_player = self.dealer_pos
     
     def handle_action(self, player: Player, action: str, amount: Optional[int] = None) -> bool:
         """
@@ -284,6 +288,7 @@ class PokerGame:
         """奖励底池给获胜者"""
         winner.stack += self.pot
         self.pot = 0
+        self.winner = winner
     
     def is_hand_over(self) -> bool:
         """检查当前手牌是否结束"""

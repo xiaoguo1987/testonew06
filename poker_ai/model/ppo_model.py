@@ -53,8 +53,8 @@ class PPOModel:
         self.critic = self._build_critic()
 
         # 优化器
-        self.actor_optimizer = Adam(learning_rate=lr)
-        self.critic_optimizer = Adam(learning_rate=lr)
+        self.actor_optimizer = Adam(learning_rate=lr_val)
+        self.critic_optimizer = Adam(learning_rate=lr_val)
 
     def _build_actor(self) -> models.Model:
         """构建策略网络：输出动作概率分布"""
@@ -102,8 +102,9 @@ class PPOModel:
     def predict(self, state: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """预测动作概率和状态价值（兼容Agent接口）"""
         state = np.expand_dims(state, axis=0) if len(state.shape) == 1 else state
-        action_probs = self.actor.predict(state, verbose=0)
-        value = self.critic.predict(state, verbose=0)
+        state_t = tf.convert_to_tensor(state, dtype=tf.float32)
+        action_probs = self.actor(state_t, training=False).numpy()
+        value = self.critic(state_t, training=False).numpy()
         return action_probs[0], value[0][0]
 
     def get_action(self, state: np.ndarray, epsilon: float = 0.0) -> Tuple[int, float]:
@@ -180,10 +181,10 @@ class PPOModel:
         bs = min(self.batch_size, 64)
         dummy1 = np.zeros((1, self.input_dim), dtype=np.float32)
         dummy64 = np.zeros((bs, self.input_dim), dtype=np.float32)
-        _ = self.actor.predict(dummy1, verbose=0)
-        _ = self.actor.predict(dummy64, verbose=0)
-        _ = self.critic.predict(dummy1, verbose=0)
-        _ = self.critic.predict(dummy64, verbose=0)
+        _ = self.actor(tf.convert_to_tensor(dummy1), training=False)
+        _ = self.actor(tf.convert_to_tensor(dummy64), training=False)
+        _ = self.critic(tf.convert_to_tensor(dummy1), training=False)
+        _ = self.critic(tf.convert_to_tensor(dummy64), training=False)
         self._ppo_warmup_done = True
 
     def _predict_critic_fixed_batch(self, states: np.ndarray, chunk_size: int = 64) -> np.ndarray:
@@ -196,7 +197,7 @@ class PPOModel:
             pad = chunk_size - n
             padded = np.zeros((chunk_size, states.shape[1]), dtype=np.float32)
             padded[:n] = states
-            out = self.critic.predict(padded, verbose=0).flatten()[:n]
+            out = self.critic(tf.convert_to_tensor(padded), training=False).numpy().flatten()[:n]
             return out
         values_list = []
         for start in range(0, n, chunk_size):
@@ -205,9 +206,9 @@ class PPOModel:
             if len(chunk) < chunk_size:
                 padded = np.zeros((chunk_size, states.shape[1]), dtype=np.float32)
                 padded[: len(chunk)] = chunk
-                v = self.critic.predict(padded, verbose=0).flatten()[: len(chunk)]
+                v = self.critic(tf.convert_to_tensor(padded), training=False).numpy().flatten()[: len(chunk)]
             else:
-                v = self.critic.predict(chunk, verbose=0).flatten()
+                v = self.critic(tf.convert_to_tensor(chunk), training=False).numpy().flatten()
             values_list.append(v)
         return np.concatenate(values_list, axis=0)
 

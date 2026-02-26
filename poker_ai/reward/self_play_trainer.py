@@ -117,7 +117,9 @@ class SelfPlayTrainer:
             self.opponent_agents.append(PokerAIAgent(**opp_kw))
             
         # 第 5 个对手作为“鱼” (Random Player)
-        fish_agent = PokerAIAgent(agent_type=self.model_type)
+        # 对 PPO 训练场景，鱼玩家改为随机 DQN，避免“鱼”也变成 PPO 策略体
+        fish_agent_type = 'dqn' if self.model_type == 'ppo' else self.model_type
+        fish_agent = PokerAIAgent(agent_type=fish_agent_type)
         # 强制设置 epsilon 为 1.0 (全随机)
         if hasattr(fish_agent.agent, 'epsilon'):
             fish_agent.agent.epsilon = 1.0 
@@ -187,35 +189,40 @@ class SelfPlayTrainer:
 
             # === 主AI 行动逻辑 ===
             if current_player.name == "Main_AI":
-                current_state = self.main_agent.state_rep.get_state(game, current_player)
                 use_ppo_trajectory = getattr(self.main_agent, 'agent_type', None) == 'ppo'
 
                 if is_training and not use_ppo_trajectory and last_step_info is not None:
+                    current_state = self.main_agent.state_rep.get_state(game, current_player)
                     prev_state, prev_action_idx = last_step_info
                     self.main_agent.learn(0.001, prev_state, prev_action_idx, current_state, False)
 
-                action_str, amount = self.main_agent.select_action(game, current_player)
-                decision_info = self.main_agent.get_decision_info(game, current_player)
-                action_idx = decision_info.get('best_action_index', 0)
-                if 'most_likely_action' in decision_info:
-                    action_idx = decision_info['most_likely_action']
-
-                if is_training and use_ppo_trajectory:
-                    action_probs, _ = self.main_agent.agent.predict(current_state)
-                    old_prob = float(np.clip(action_probs[action_idx], 1e-8, 1.0))
-                    self.main_agent.append_step(current_state, action_idx, old_prob)
+                action_str, amount, action_info = self.main_agent.select_action_with_info(game, current_player)
+                action_idx = action_info.get('action_idx', 0)
+                current_state = action_info.get(
+                    'state',
+                    self.main_agent.state_rep.get_state(game, current_player),
+                )
 
                 action_records[current_player.name].append((action_str, amount if amount else 0))
                 success = game.handle_action(current_player, action_str, amount)
 
                 if not success:
                     game.handle_action(current_player, 'fold', None)
-                    if is_training and not use_ppo_trajectory and last_step_info is not None:
+                    if is_training and use_ppo_trajectory:
+                        probs = action_info.get('action_probabilities', None)
+                        fold_prob = float(np.clip(probs[0], 1e-8, 1.0)) if probs is not None else 1.0
+                        # 动作非法时真实执行为 fold，轨迹记录也必须是 fold
+                        self.main_agent.append_step(current_state, 0, fold_prob)
+                    elif is_training and not use_ppo_trajectory and last_step_info is not None:
                         self.main_agent.learn(
                             reward=-0.05,
                             state=last_step_info[0], action=last_step_info[1],
                             next_state=current_state, done=False
                         )
+                elif is_training and use_ppo_trajectory:
+                    # 动作合法时，记录真实执行动作
+                    old_prob = float(action_info.get('old_prob', 1.0))
+                    self.main_agent.append_step(current_state, int(action_idx), old_prob)
                 last_step_info = (current_state, action_idx)
 
             # === 对手行动逻辑 ===
