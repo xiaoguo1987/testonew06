@@ -41,7 +41,8 @@ class SelfPlayTrainer:
                  optimizer: str = 'adam',
                  target_update_freq: int = 100,
                  ppo_clip_epsilon: float = 0.2,
-                 ppo_update_epochs: int = 10):
+                 ppo_update_epochs: int = 10,
+                 skip_final_eval: bool = False):
         
         # --- 修正1: 强制检查 6-Max ---
         if num_players != 6:
@@ -64,6 +65,7 @@ class SelfPlayTrainer:
         self.optimizer = optimizer
         self.ppo_clip_epsilon = ppo_clip_epsilon
         self.ppo_update_epochs = ppo_update_epochs
+        self.skip_final_eval = skip_final_eval
 
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -86,6 +88,8 @@ class SelfPlayTrainer:
         self.total_bluff_attempts = 0
         self.total_raise_actions = 0
         self.total_invalid_bets = 0
+        # 牌桌创建计数：用于让每手牌的庄位轮转，避免位置长期固定
+        self._table_hand_counter = 0
     
     def _create_agents(self) -> None:
         """创建AI代理（主代理+对手代理）"""
@@ -133,9 +137,13 @@ class SelfPlayTrainer:
         players = [Player("Main_AI", self.initial_stack, True)]
         # 创建对手玩家 (注意名字要和 opponent_agents 的索引对应)
         # Opponent_1 对应 agent[0], ..., Opponent_5 对应 agent[4] (Fish)
-        players.extend([Player(f"Opponent_{i+1}", self.initial_stack, True) 
+        players.extend([Player(f"Opponent_{i+1}", self.initial_stack, True)
                        for i in range(self.num_players - 1)])
-        return PokerGame(self.small_blind, self.big_blind, players), players
+        game = PokerGame(self.small_blind, self.big_blind, players)
+        # 注意：start_new_hand 会先 dealer_pos + 1，因此这里预置“上一手庄位”
+        game.dealer_pos = self._table_hand_counter % len(players)
+        self._table_hand_counter += 1
+        return game, players
     
     def _count_episode_metrics(self, main_player: Player, game: PokerGame, 
                               action_history: List[Tuple[str, int]]) -> Dict[str, int]:
@@ -243,6 +251,11 @@ class SelfPlayTrainer:
                 
                 if not game.handle_action(current_player, action, amount):
                     game.handle_action(current_player, 'fold', None)
+
+        # 若只剩一个活跃玩家且底池未派发，需在这里派奖，避免利润长期为0
+        alive = [p for p in players if p.is_active]
+        if len(alive) == 1 and game.pot > 0:
+            game._award_pot(alive[0])
 
         # === 结算 ===
         final_profit = players[0].stack - initial_stack
@@ -474,6 +487,7 @@ class SelfPlayTrainer:
                         self.total_profit = state.get('total_profit', 0)
                         self.best_score = state.get('best_score', -float('inf'))
                         self.performance_history = state.get('performance_history', [])
+                        self._table_hand_counter = self.total_hands
                         logger.info("✅ [DEBUG] 训练状态加载成功")
                 except Exception as e:
                     logger.warning(f"⚠️ [DEBUG] 状态文件加载失败: {e}")
@@ -528,15 +542,29 @@ class SelfPlayTrainer:
         logger.info(f"开始训练，共{num_hands}手牌")
         logger.info("从当前模型状态开始训练")
         start_hand = self.total_hands
+        t_env_total = 0.0
+        t_train_total = 0.0
         if self.model_type == "ppo" and hasattr(self.main_agent, "agent") and hasattr(self.main_agent.agent, "warmup"):
             self.main_agent.agent.warmup()
 
         for hand_idx in range(num_hands):
             game, players = self._create_game()
+            t0 = datetime.now().timestamp()
             result = self._play_hand(game, players, is_training=True)
+            t1 = datetime.now().timestamp()
             
             self.total_hands += 1
             self.total_profit += result['player_profits']['Main_AI']
+            t_env_total += (t1 - t0)
+
+            # 累计策略统计，修复日志中诈唬率/无效下注率长期为0的问题
+            main_actions = result.get('action_histories', {}).get('Main_AI', [])
+            if main_actions:
+                metrics = self._count_episode_metrics(players[0], game, main_actions)
+                self.total_bluff_attempts += metrics.get('bluffs', 0)
+                self.total_aggressive_actions += metrics.get('aggressive', 0)
+                self.total_raise_actions += metrics.get('raises', 0)
+                self.total_invalid_bets += metrics.get('invalid_bets', 0)
             
             current_hand = start_hand + hand_idx + 1
             progress = ((hand_idx + 1) / num_hands) * 100
@@ -553,7 +581,10 @@ class SelfPlayTrainer:
                 logger.debug(f"第 {current_hand} 手牌结果: {result}")
             
             if self.total_hands % self.eval_interval == 0:
+                te0 = datetime.now().timestamp()
                 eval_result = self.evaluate()
+                te1 = datetime.now().timestamp()
+                t_train_total += (te1 - te0)
                 current_score = eval_result['avg_profit'] * eval_result['win_rate']
                 # 只有当分数显著提高时才保存 Best
                 if current_score > self.best_score:
@@ -571,8 +602,19 @@ class SelfPlayTrainer:
         
         logger.info(f"训练完成！总手牌: {self.total_hands}")
         self.save_checkpoint(is_best=False)
-        final_eval = self.evaluate()
-        logger.info(f"最终评估: {final_eval}")
+        if not self.skip_final_eval:
+            te0 = datetime.now().timestamp()
+            final_eval = self.evaluate()
+            te1 = datetime.now().timestamp()
+            t_train_total += (te1 - te0)
+            logger.info(f"最终评估: {final_eval}")
+        else:
+            logger.info("已按配置跳过最终评估（--skip-final-eval）")
+        if num_hands > 0:
+            logger.info(
+                f"性能统计: 环境与决策总耗时={t_env_total:.2f}s, 评估总耗时={t_train_total:.2f}s, "
+                f"平均每手环境耗时={t_env_total/num_hands:.4f}s"
+            )
 
 # 示例使用
 if __name__ == "__main__":

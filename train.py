@@ -76,6 +76,7 @@ def parse_arguments():
     parser.add_argument('--eval-interval', type=int, default=200, help='评估间隔（局数）')
     parser.add_argument('--checkpoint-interval', type=int, default=1000, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
+    parser.add_argument('--skip-final-eval', action='store_true', help='训练结束后跳过最终评估（加速）')
     
     # 游戏参数
     parser.add_argument('--small-blind', type=int, default=5, help='小盲注')
@@ -169,6 +170,7 @@ def train_model(args):
             optimizer=args.optimizer,
             ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
             ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
+            skip_final_eval=getattr(args, 'skip_final_eval', False),
         )
         
         # 如果启用详细日志，更新日志级别

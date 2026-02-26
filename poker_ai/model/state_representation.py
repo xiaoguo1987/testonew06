@@ -40,13 +40,16 @@ class StateRepresentation:
         
         self.evaluator = HandEvaluator()
         self._preflop_cache = {}
+        # 预计算索引映射，避免在高频路径中反复 list.index
+        self._suit_to_idx = {'♥': 0, '♦': 1, '♣': 2, '♠': 3}
+        self._rank_to_idx = {rank: idx for idx, rank in enumerate(RANK_VALUES.keys())}
 
     def card_to_one_hot(self, cards: List[Card]) -> np.ndarray:
         """将牌转换为one-hot编码"""
-        one_hot = np.zeros(52)
+        one_hot = np.zeros(52, dtype=np.float32)
         for card in cards:
-            suit_idx = ['♥', '♦', '♣', '♠'].index(card.suit)
-            rank_idx = list(RANK_VALUES.keys()).index(card.rank)
+            suit_idx = self._suit_to_idx[card.suit]
+            rank_idx = self._rank_to_idx[card.rank]
             position = rank_idx * 4 + suit_idx
             one_hot[position] = 1
         return one_hot
