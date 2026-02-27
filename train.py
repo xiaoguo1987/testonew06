@@ -102,7 +102,7 @@ def parse_arguments():
     
     # 自我对弈参数
     parser.add_argument('--use-self-play', action='store_true', default=True, help='启用自我对弈训练')
-    parser.add_argument('--opponent-update-interval', type=int, default=5000, help='对手更新间隔（局数）')
+    parser.add_argument('--opponent-update-interval', type=int, default=1000, help='对手更新间隔（局数）')
     
     # 探索参数
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
@@ -168,6 +168,7 @@ def train_model(args):
             use_ensemble=args.use_ensemble,
             opponent_update_interval=args.opponent_update_interval,
             learning_rate=args.learning_rate,
+            batch_size=args.batch_size,
             optimizer=args.optimizer,
             target_update_freq=args.target_update,
             ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
@@ -259,6 +260,7 @@ def evaluate_model(args):
         num_eval_games=args.num_eval_games,
         target_update_freq=args.target_update,
         learning_rate=args.learning_rate,
+        batch_size=args.batch_size,
         optimizer=args.optimizer,
         ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
         ppo_update_epochs=getattr(args, 'ppo_epochs', 10),

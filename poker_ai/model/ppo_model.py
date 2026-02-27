@@ -39,7 +39,7 @@ class PPOModel:
         self.lambda_ = lambda_ if lambda_ is not None else cfg.lambda_
         self.entropy_coef = entropy_coef if entropy_coef is not None else getattr(cfg, "entropy_coef", 0.02)
         self.update_epochs = update_epochs if update_epochs is not None else cfg.update_epochs
-        self.batch_size = batch_size if batch_size is not None else cfg.batch_size
+        self.batch_size = max(1, int(batch_size if batch_size is not None else cfg.batch_size))
         self.max_grad_norm = getattr(cfg, "max_grad_norm", 0.5)
         self.last_loss = 0.0
         self.state_rep = StateRepresentation()
@@ -180,7 +180,7 @@ class PPOModel:
         """用固定 shape (1, dim) 和 (64, dim) 各跑一次 predict，预编译 tf.function，减少训练时的 retracing 警告。"""
         if getattr(self, "_ppo_warmup_done", False):
             return
-        bs = min(self.batch_size, 64)
+        bs = min(self.batch_size, 256)
         dummy1 = np.zeros((1, self.input_dim), dtype=np.float32)
         dummy64 = np.zeros((bs, self.input_dim), dtype=np.float32)
         _ = self.actor(tf.convert_to_tensor(dummy1), training=False)
@@ -227,11 +227,11 @@ class PPOModel:
         logger = logging.getLogger('PPOModel')
 
         buffer_size = len(states)
-        train_batch_size = min(self.batch_size, 64)
+        train_batch_size = self.batch_size
         # 计算状态价值和优势（仅用固定 chunk，避免 fallback 可变 shape 触发 retracing）
         values = self._predict_critic_fixed_batch(states, chunk_size=train_batch_size)
         if len(values) != buffer_size:
-            values = self._predict_critic_fixed_batch(states, chunk_size=64)
+            values = self._predict_critic_fixed_batch(states, chunk_size=train_batch_size)
         if len(values) != buffer_size:
             values = np.zeros(buffer_size, dtype=np.float32)  # 极罕见时保底
         advantages = self._compute_gae(rewards, values, dones)

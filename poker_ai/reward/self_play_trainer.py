@@ -38,6 +38,7 @@ class SelfPlayTrainer:
                  use_ensemble: bool = False,
                  opponent_update_interval: int = 5000,
                  learning_rate: float = 0.001,
+                 batch_size: int = 64,
                  optimizer: str = 'adam',
                  target_update_freq: int = 100,
                  ppo_clip_epsilon: float = 0.2,
@@ -63,6 +64,7 @@ class SelfPlayTrainer:
         self.opponent_update_interval = opponent_update_interval
         self.target_update_freq = target_update_freq
         self.learning_rate = learning_rate
+        self.batch_size = batch_size
         self.optimizer = optimizer
         self.ppo_clip_epsilon = ppo_clip_epsilon
         self.ppo_update_epochs = ppo_update_epochs
@@ -108,6 +110,7 @@ class SelfPlayTrainer:
                 kwargs['ppo_clip_epsilon'] = self.ppo_clip_epsilon
                 kwargs['ppo_update_epochs'] = self.ppo_update_epochs
                 kwargs['ppo_entropy_coef'] = self.ppo_entropy_coef
+                kwargs['ppo_batch_size'] = self.batch_size
             self.main_agent = PokerAIAgent(**kwargs)
 
         self.opponent_agents = []
@@ -122,6 +125,7 @@ class SelfPlayTrainer:
                 opp_kw['ppo_clip_epsilon'] = self.ppo_clip_epsilon
                 opp_kw['ppo_update_epochs'] = self.ppo_update_epochs
                 opp_kw['ppo_entropy_coef'] = self.ppo_entropy_coef
+                opp_kw['ppo_batch_size'] = self.batch_size
             self.opponent_agents.append(PokerAIAgent(**opp_kw))
             
         # 第 5 个对手作为“鱼” (Random Player)

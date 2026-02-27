@@ -58,7 +58,7 @@ class PokerAIAgent:
     def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None, target_update_freq: int = 10,
                  learning_rate: float = 0.001, optimizer: str = 'adam',
                  ppo_clip_epsilon: Optional[float] = None, ppo_update_epochs: Optional[int] = None,
-                 ppo_entropy_coef: Optional[float] = None):
+                 ppo_entropy_coef: Optional[float] = None, ppo_batch_size: Optional[int] = None):
         """
         初始化AI代理
         agent_type: 'dqn'、'policy_gradient' 或 'ppo'
@@ -86,6 +86,8 @@ class PokerAIAgent:
                 kwargs['update_epochs'] = ppo_update_epochs
             if ppo_entropy_coef is not None:
                 kwargs['entropy_coef'] = ppo_entropy_coef
+            if ppo_batch_size is not None:
+                kwargs['batch_size'] = ppo_batch_size
             self.agent = PPOModel(**kwargs)
         else:
             raise ValueError(f"不支持的代理类型: {agent_type}")
