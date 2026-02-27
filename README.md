@@ -1,263 +1,227 @@
-# 德州扑克AI模型
+# 德州扑克 AI（6-Max）
 
-## 项目概述
+基于强化学习的 6 人桌德州扑克训练项目，包含：
 
-本项目是一个基于强化学习的德州扑克AI系统，专为6人桌cash游戏设计。系统具有以下核心功能：
+- 自我对弈训练（`train.py`）
+- 评估与报告（`train.py --mode eval`、`evaluate.py`）
+- 演示模式（`train.py --mode demo`）
+- AI 建议器（`poker_ai/advisor/ai_advisor.py`）
 
-- 完整的德州扑克游戏逻辑实现
-- 基于强化学习的AI决策模型
-- 自我迭代训练系统，通过奖励机制不断优化
-- AI辅助建议功能，为玩家提供实时决策支持
-- 全面的训练和评估工具
+---
 
-## 目录结构
+## 1. 快速开始
 
-```
-poker_ai/                   # 主项目目录
-├── game/                   # 游戏逻辑模块
-│   ├── __init__.py
-│   ├── poker_game.py       # 德州扑克游戏核心实现
-│   ├── card.py             # 卡牌相关类
-│   └── player.py           # 玩家相关类
-├── config/                 # 配置模块
-│   └── ppo_config.py       # PPO 超参数配置
-├── model/                  # AI模型模块
-│   ├── ai_agent.py         # AI代理统一接口
-│   ├── dqn_agent.py        # DQN/策略梯度实现
-│   ├── ppo_model.py        # PPO（近端策略优化）实现
-│   ├── state_representation.py # 状态表示
-│   └── hand_evaluator.py   # 手牌评估器
-├── reward/                 # 奖励机制模块
-│   ├── __init__.py
-│   ├── reward_calculator.py # 奖励计算器
-│   └── self_play_trainer.py # 自我对弈训练器
-├── advisor/                # AI建议器模块
-│   ├── __init__.py
-│   └── ai_advisor.py       # AI辅助建议器实现
-train.py                    # 训练脚本
-evaluate.py                 # 评估脚本
-requirements.txt            # 依赖列表
-README.md                   # 项目文档
-```
-
-## 安装说明
-
-### 环境要求
+### 1.1 环境准备
 
 - Python 3.8+
-- TensorFlow 2.5+
-- NumPy
-- Matplotlib
-- Seaborn
+- TensorFlow 2.x（项目当前在 `2.9.0` 环境下可运行）
 
-### 安装步骤
-
-1. 克隆或下载项目代码到本地
-
-2. 安装依赖
+安装依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. 确保项目目录结构正确，所有模块都在适当的位置
-
-## 训练模型
-
-### 基本训练
-
-使用`train.py`脚本进行模型训练：
+### 1.2 先跑一个 500 手牌验证
 
 ```bash
-# 使用 PPO 训练（推荐）
+python train.py --mode train --model-type ppo \
+  --num-hands 500 \
+  --eval-interval 250 \
+  --num-eval-games 100 \
+  --checkpoint-interval 500 \
+  --learning-rate 2e-4 \
+  --ppo-clip 0.15 \
+  --ppo-epochs 8 \
+  --ppo-entropy-coef 0.006 \
+  --target-update 20 \
+  --checkpoint-dir ./checkpoints_run500_fixwinrate \
+  --skip-final-eval
+```
+
+训练日志会写到 `logs/`，检查点默认写到 `checkpoints/`（或你指定目录）。
+
+---
+
+## 2. 项目结构（当前代码对应）
+
+```text
+train.py                         # 主入口：train/eval/demo
+evaluate.py                      # 详细评估脚本（可生成图表）
+requirements.txt
+TRAINING_GUIDE.md                # 历史训练说明（部分参数已过期）
+docs/如何看训练结果.md
+
+poker_ai/
+  game/
+    cards.py                     # 牌与牌型评估、compare_hands
+    poker_game.py                # 6-max 游戏流程与结算
+  model/
+    ai_agent.py                  # 统一代理接口（dqn / policy_gradient / ppo）
+    dqn_agent.py                 # DQN + PolicyGradient
+    ppo_model.py                 # PPO Actor-Critic
+    state_representation.py      # 状态编码（134 维）
+    hand_evaluator.py
+  reward/
+    self_play_trainer.py         # 自我对弈训练主循环
+    reward_calculator.py
+    simple_reward_calculator.py
+  advisor/
+    ai_advisor.py                # 建议器（类名是 AIAvisor）
+  config/
+    ppo_config.py
+  utils/
+    checkpoint.py
+```
+
+---
+
+## 3. 训练与评估命令
+
+### 3.1 训练（推荐 PPO）
+
+```bash
 python train.py --mode train --model-type ppo --num-hands 10000
-
-# 使用 DQN 训练
-python train.py --mode train --model-type dqn --num-hands 10000
 ```
-PPO 检查点保存为 `base.actor.weights.h5` 与 `base.critic.weights.h5`，加载时指定 base 路径即可（如 `--model-path ./checkpoints/agent_ppo_1000`）。
 
-### 训练参数说明
-
-- `--mode`: 运行模式，可选'train'(训练)、'eval'(评估)、'demo'(演示)
-- `--model-type`: 模型类型，可选'dqn'、'policy_gradient'或'ppo'（推荐 PPO）
-- `--num-hands`: 训练的手牌数量
-- `--learning-rate`: 学习率（默认为0.001）
-- `--batch-size`: 批处理大小（默认为64）
-- `--eval-interval`: 评估间隔（默认为100局）
-- `--checkpoint-interval`: 保存检查点间隔（默认为500局）
-- `--checkpoint-dir`: 检查点保存目录（默认为'./checkpoints'）
-
-### 继续训练
-
-要从之前的检查点继续训练，可以使用`--resume`参数：
+### 3.2 从最近检查点继续训练
 
 ```bash
-python train.py --mode train --resume
+python train.py --mode train --model-type ppo --resume
 ```
 
-或者指定具体的模型文件（PPO 使用 base 路径，不含 `.actor.weights.h5` 后缀）：
+### 3.3 指定检查点继续训练
+
+PPO 传 **base 路径**（不带后缀）：
 
 ```bash
-python train.py --mode train --model-path ./checkpoints/best_agent_ppo_20231120_120000
-python train.py --mode train --model-path ./checkpoints/best_agent_dqn_20231120_120000.weights.h5
+python train.py --mode train --model-type ppo \
+  --model-path ./checkpoints/agent_ppo_1000
 ```
 
-### 高级训练选项
+DQN/PG 可传 `.weights.h5` 或 `.pkl` 路径。
 
-- `--use-ensemble`: 使用集成模型
-- `--save-best-only`: 仅保存表现最好的模型
-- `--verbose`: 输出详细日志
-
-## 评估模型
-
-### 基本评估
-
-使用`evaluate.py`脚本进行详细评估：
+### 3.4 用 `train.py` 做标准评估（推荐）
 
 ```bash
-python evaluate.py --model-path ./checkpoints/best_agent_dqn_20231120_120000.h5 --num-games 100
+python train.py --mode eval --model-type ppo \
+  --model-path ./checkpoints/agent_ppo_1000 \
+  --num-eval-games 500 \
+  --eval-output eval_results.json
 ```
 
-### 评估参数说明
-
-- `--model-path`: 要评估的模型路径（必需）
-- `--model-type`: 模型类型
-- `--num-games`: 评估的游戏局数
-- `--opponent-type`: 对手类型，可选'random'(随机)、'fixed'(固定策略)、'previous'(历史版本)
-- `--output-dir`: 评估报告输出目录
-- `--generate-plots`: 生成可视化图表
-
-## 使用AI辅助建议功能
-
-### 在Python代码中使用
-
-```python
-from poker_ai.advisor.ai_advisor import AIAvisor
-from poker_ai.game.poker_game import PokerGame, Player
-
-# 创建AI建议器
-advisor = AIAvisor(model_path='./checkpoints/best_agent_dqn.h5')
-
-# 创建游戏实例和玩家
-# ...（游戏初始化代码）
-
-# 获取建议
-advice = advisor.get_detailed_advice(game, player)
-print(advice['reasoning'])  # 打印建议理由
-print(advice['recommended_action'])  # 打印推荐动作
-print(advice['expected_value'])  # 打印预期价值
-```
-
-### 使用演示模式
-
-使用`train.py`的演示模式来查看AI的实际表现：
+### 3.5 用 `evaluate.py` 做详细评估（图表）
 
 ```bash
-python train.py --mode demo --model-path ./checkpoints/best_agent_dqn.h5 --demo-hands 10
+python evaluate.py \
+  --model-path ./checkpoints/agent_dqn_1000.weights.h5 \
+  --model-type dqn \
+  --num-games 200 \
+  --generate-plots
 ```
 
-## 自我迭代训练原理
+---
 
-本系统使用以下机制实现自我迭代：
+## 4. 模型与检查点说明
 
-1. **自我对弈**：AI与自身的历史版本进行对弈，不断挑战自我
-2. **自适应奖励机制**：根据游戏表现动态调整奖励函数
-3. **定期更新对手**：周期性地将主代理的版本复制给对手，保持挑战性
-4. **性能评估**：定期评估模型性能，并保存表现最佳的版本
-5. **渐进式学习**：从简单策略开始，逐步过渡到复杂策略
+### 4.1 支持的模型类型
 
-### 奖励函数设计
+- `dqn`
+- `policy_gradient`
+- `ppo`
 
-奖励函数考虑了以下因素：
-- 直接收益/损失
-- 手牌强度
-- 底池赔率
-- 位置优势
-- 动作的预期价值
-- 游戏阶段（翻牌前、翻牌、转牌、河牌）
+### 4.2 PPO 检查点文件
 
-## 代码使用示例
+PPO 保存为三件套（同一个 base）：
 
-### 创建游戏并运行
+- `*.actor.weights.h5`
+- `*.critic.weights.h5`
+- `*_state.pkl`
+
+例如 base 为 `./checkpoints/agent_ppo_500`，对应：
+
+- `./checkpoints/agent_ppo_500.actor.weights.h5`
+- `./checkpoints/agent_ppo_500.critic.weights.h5`
+- `./checkpoints/agent_ppo_500_state.pkl`
+
+---
+
+## 5. 常用参数（以 `train.py` 实际 argparse 为准）
+
+### 基础参数
+
+- `--mode {train,eval,demo}`
+- `--model-type {dqn,policy_gradient,ppo}`
+- `--num-hands`
+- `--checkpoint-dir`
+- `--resume`
+- `--model-path`
+
+### PPO 相关
+
+- `--learning-rate`（默认 `3e-4`）
+- `--ppo-clip`（默认 `0.2`）
+- `--ppo-epochs`（默认 `10`）
+- `--ppo-entropy-coef`（默认 `0.02`）
+
+### 训练过程控制
+
+- `--eval-interval`（默认 `200`）
+- `--num-eval-games`（默认 `100`）
+- `--checkpoint-interval`（默认 `1000`）
+- `--skip-final-eval`
+- `--target-update`（DQN 目标网络更新频率）
+
+### 游戏配置
+
+- `--small-blind`（默认 `5`）
+- `--big-blind`（默认 `10`）
+- `--initial-stack`（默认 `1000`）
+- `--num-players`（默认 `6`）
+
+---
+
+## 6. 当前实现的关键约束（重要）
+
+- 训练器是 **6-max 专用**：`SelfPlayTrainer` 要求 `num_players == 6`。
+- `PokerGame` 也是 6 人桌实现。
+- 项目核心依赖 TensorFlow，未安装会在导入阶段报错。
+- 胜率统计当前按“本局是否为赢家之一”计算（支持并列赢家）。
+- `evaluate.py` 的 `--model-type` 选项目前只允许 `dqn/policy_gradient`（脚本参数层面的限制），PPO 正式评估建议用 `train.py --mode eval`。
+
+---
+
+## 7. 如何判断训练是否正常
+
+看日志中的三类信息：
+
+- **运行状态**：是否有 `ERROR/Exception`
+- **效率**：`平均每手耗时`（例如 0.15s/手）
+- **效果**：`评估完成` 中的 `平均利润 / 胜率 / 诈唬率 / 加注率`
+
+建议先做小样本（500~1000）验证流程，再上大手数。
+
+---
+
+## 8. 已知命名与兼容性备注
+
+- 建议器类名拼写是 `AIAvisor`（不是 `AIAdvisor`）。
+- 旧文档中的部分参数已过期，请以 `train.py`、`evaluate.py` 当前参数为准。
+
+---
+
+## 9. 一个最小 Python 调用示例
 
 ```python
 from poker_ai.game.poker_game import PokerGame, Player
 from poker_ai.model.ai_agent import PokerAIAgent
 
-# 创建玩家
-players = [
-    Player("Player1", 1000, is_human=False),
-    Player("Player2", 1000, is_human=False),
-    Player("Player3", 1000, is_human=False),
-    Player("Player4", 1000, is_human=False),
-    Player("Player5", 1000, is_human=False),
-    Player("Player6", 1000, is_human=False)
-]
+players = [Player(f"P{i+1}", 1000, True) for i in range(6)]
+game = PokerGame(5, 10, players)
+agent = PokerAIAgent(agent_type="ppo")
 
-# 创建游戏
-game = PokerGame(small_blind=5, big_blind=10, players=players)
-
-# 运行游戏
-for _ in range(10):  # 运行10手牌
-    game.start_new_hand()
-    while not game.is_round_over():
-        # 这里添加AI决策逻辑
-        pass
+game.start_new_hand()
+p = game.players[0]
+action, amount = agent.select_action(game, p)
+print(action, amount)
 ```
-
-### 使用AI代理
-
-```python
-from poker_ai.model.ai_agent import PokerAIAgent
-
-# 创建AI代理
-agent = PokerAIAgent(agent_type='dqn')
-
-# 加载模型
-agent.load_model('./checkpoints/best_agent_dqn.h5')
-
-# 选择动作
-action, amount = agent.select_action(game, current_player)
-```
-
-## 训练技巧
-
-1. **从小规模开始**：先使用较小的手牌数量（如1000-5000）进行训练，确保系统正常工作
-2. **监控训练进度**：定期检查日志和评估报告，了解模型性能
-3. **调整超参数**：如果训练效果不佳，尝试调整学习率、批处理大小等超参数
-4. **使用检查点**：训练中断后可以从最近的检查点继续
-5. **定期评估**：使用`evaluate.py`进行详细评估，生成可视化报告分析模型表现
-
-## 常见问题
-
-### 训练速度慢
-
-- 减少每次评估的游戏局数（`--num-eval-games`）
-- 增加检查点间隔（`--checkpoint-interval`）
-- 如果有GPU，确保TensorFlow正确使用GPU
-
-### 模型性能不佳
-
-- 增加训练的手牌数量
-- 调整学习率
-- 尝试不同的模型类型（DQN vs 策略梯度）
-- 检查奖励函数是否合理
-
-### 内存错误
-
-- 减少批处理大小
-- 减少同时训练的游戏数量
-- 清理不再需要的检查点文件
-
-## 许可证
-
-[MIT License](LICENSE)
-
-## 贡献
-
-欢迎提交问题报告和改进建议！
-
-## 联系信息
-
-如有任何问题，请联系项目维护者。

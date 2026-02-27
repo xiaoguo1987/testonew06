@@ -3,7 +3,7 @@
 import random
 import logging
 from typing import List, Dict, Optional, Tuple
-from .cards import Card, Deck
+from .cards import Card, Deck, compare_hands
 
 class Player:
     """德州扑克玩家类"""
@@ -235,35 +235,22 @@ class PokerGame:
         return False
     
     def _showdown(self) -> None:
-        """摊牌并确定获胜者（修复平局逻辑）"""
+        """摊牌并确定获胜者（基于 7 张牌最佳 5 张比较）"""
         active_players = [p for p in self.players if p.is_active]
         
         if not active_players:
             return
-            
-        # 1. 计算所有活跃玩家的牌力
-        player_ranks = []
-        for player in active_players:
-            # 组合玩家手牌和公共牌
-            full_hand = player.cards + self.board
-            from .cards import evaluate_hand
-            score = evaluate_hand(full_hand)
-            player_ranks.append((player, score))
-            
-        # 2. 找出最强牌力（可能有多个）
-        # 排序：牌型等级(降序), 踢脚牌(降序)
-        # score[0]是牌型等级，score[1]是踢脚牌列表
-        player_ranks.sort(key=lambda x: (x[1][0], x[1][1]), reverse=True)
-        
-        best_score = player_ranks[0][1]
-        winners = []
-        
-        for player, score in player_ranks:
-            # 比较牌型等级和踢脚牌是否完全相同
-            if score[0] == best_score[0] and score[1] == best_score[1]:
-                winners.append(player)
-            else:
-                break # 因为已经排过序，一旦不等，后面的更小
+
+        # 使用 compare_hands（内部会从 7 张牌中选最佳 5 张）逐个比较，正确处理平局
+        winners = [active_players[0]]
+        for challenger in active_players[1:]:
+            challenger_cards = challenger.cards + self.board
+            best_cards = winners[0].cards + self.board
+            cmp = compare_hands(challenger_cards, best_cards)
+            if cmp > 0:
+                winners = [challenger]
+            elif cmp == 0:
+                winners.append(challenger)
         
         # 3. 分配底池
         if len(winners) > 0:

@@ -451,7 +451,11 @@ def run_detailed_evaluation(args, trainer):
         
         # 记录游戏结果
         try:
-            if hasattr(game, 'winner') and game.winner and game.winner.name == "Main_AI":
+            winner_names = [p.name for p in getattr(game, 'winners', [])]
+            if not winner_names and hasattr(game, 'winner') and game.winner:
+                winner_names = [game.winner.name]
+
+            if "Main_AI" in winner_names:
                 game_result['is_winner'] = True
                 detailed_stats['win_by_position'][0] += 1  # 位置0是主玩家
                 detailed_stats['win_rate_by_hand_strength'][strength_category]['wins'] += 1
