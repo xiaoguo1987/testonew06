@@ -1,0 +1,2 @@
+2026-02-27 17:46:49,329 - PokerAITrainer - INFO - 日志已配置，记录到: logs/poker_ai_20260227_174649.log
+2026-02-27 17:46:49,372 - PokerAITrainer - ERROR - 导入模块失败: No module named 'tensorflow'

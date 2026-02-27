@@ -149,8 +149,9 @@ class SelfPlayTrainer:
         self._table_hand_counter += 1
         return game, players
     
-    def _count_episode_metrics(self, main_player: Player, game: PokerGame, 
-                              action_history: List[Tuple[str, int]]) -> Dict[str, int]:
+    def _count_episode_metrics(self, main_player: Player, game: PokerGame,
+                              action_history: List[Tuple[str, int]],
+                              lightweight: bool = False) -> Dict[str, int]:
         """统计单局策略指标"""
         bluffs = 0
         aggressive = 0
@@ -160,7 +161,7 @@ class SelfPlayTrainer:
         # --- 修正2: 只有当 reward_calculator 支持复杂逻辑时才计算 ---
         # SimpleRewardCalculator 是极简版，可能没有 is_bluffing 等方法
         # 这里做一个简单的兼容性检查
-        has_complex_logic = hasattr(self.reward_calculator, 'is_bluffing')
+        has_complex_logic = (not lightweight) and hasattr(self.reward_calculator, 'is_bluffing')
 
         for action, amount in action_history:
             if action in ['raise', 'call']:
@@ -267,7 +268,10 @@ class SelfPlayTrainer:
         # 计算最终奖励 (使用 SimpleRewardCalculator)
         # 注意: SimpleRewardCalculator.calculate_reward 参数顺序
         # (player, game, action, amount, is_winner, profit_loss, done)
-        is_winner = (game.winner.name == "Main_AI") if hasattr(game, 'winner') and game.winner else False
+        winners = [p.name for p in getattr(game, 'winners', [])]
+        if not winners and hasattr(game, 'winner') and game.winner:
+            winners = [game.winner.name]
+        is_winner = "Main_AI" in winners
         
         # 训练结束时的最终学习
         if is_training and last_step_info is not None:
@@ -294,6 +298,7 @@ class SelfPlayTrainer:
 
         result = {
             'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
+            'winners': winners,
             'player_profits': {p.name: p.stack - self.initial_stack for p in players},
             'action_histories': action_records
         }
@@ -317,7 +322,7 @@ class SelfPlayTrainer:
             game, players = self._create_game()
             result = self._play_hand(game, players, is_training=False)
             total_profit += result['player_profits']['Main_AI']
-            if result['winner'] == 'Main_AI':
+            if 'Main_AI' in result.get('winners', []):
                 wins += 1
             
             main_actions = result['action_histories']['Main_AI']
@@ -568,7 +573,8 @@ class SelfPlayTrainer:
             # 累计策略统计，修复日志中诈唬率/无效下注率长期为0的问题
             main_actions = result.get('action_histories', {}).get('Main_AI', [])
             if main_actions:
-                metrics = self._count_episode_metrics(players[0], game, main_actions)
+                # 训练阶段使用轻量统计，避免每手都触发蒙特卡洛牌力估算导致速度下降
+                metrics = self._count_episode_metrics(players[0], game, main_actions, lightweight=True)
                 self.total_bluff_attempts += metrics.get('bluffs', 0)
                 self.total_aggressive_actions += metrics.get('aggressive', 0)
                 self.total_raise_actions += metrics.get('raises', 0)

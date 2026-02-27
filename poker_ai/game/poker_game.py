@@ -3,7 +3,7 @@
 import random
 import logging
 from typing import List, Dict, Optional, Tuple
-from .cards import Card, Deck, compare_hands
+from .cards import Card, Deck
 
 class Player:
     """德州扑克玩家类"""
@@ -54,6 +54,8 @@ class PokerGame:
         self.current_player = 0  # 当前行动玩家
         self.round = 0  # 0: 预处理, 1: 翻牌前, 2: 翻牌, 3: 转牌, 4: 河牌
         self.action_count = 0  # 当前轮次行动次数
+        self.winner = None
+        self.winners: List[Player] = []
         
         # 设置玩家位置
         for i, player in enumerate(players):
@@ -68,6 +70,7 @@ class PokerGame:
         self.current_bet = 0
         self.action_count = 0
         self.winner = None
+        self.winners = []
         
         # 重置玩家状态
         for player in self.players:
@@ -243,10 +246,6 @@ class PokerGame:
         for player in active_players:
             # 组合玩家手牌和公共牌
             full_hand = player.cards + self.board
-            # 获取牌力评分 (rank, strength_list)
-            rank_score = compare_hands(full_hand, full_hand) # 这里借用compare_hands获取结构，实际应该用evaluate_hand
-            # 注意：原代码的compare_hands设计是比较两个手牌，这里我们需要直接评估
-            # 假设 evaluate_hand 返回 (rank_int, [kicker_ints])
             from .cards import evaluate_hand
             score = evaluate_hand(full_hand)
             player_ranks.append((player, score))
@@ -282,13 +281,15 @@ class PokerGame:
                 
             self.pot = 0
             # 标记赢家供外部读取
-            self.winner = winners[0] # 简单标记一个，用于日志
+            self.winner = winners[0] # 兼容旧逻辑：保留单一winner
+            self.winners = winners
             
     def _award_pot(self, winner: Player) -> None:
         """奖励底池给获胜者"""
         winner.stack += self.pot
         self.pot = 0
         self.winner = winner
+        self.winners = [winner]
     
     def is_hand_over(self) -> bool:
         """检查当前手牌是否结束"""

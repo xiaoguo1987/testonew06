@@ -169,6 +169,7 @@ def train_model(args):
             opponent_update_interval=args.opponent_update_interval,
             learning_rate=args.learning_rate,
             optimizer=args.optimizer,
+            target_update_freq=args.target_update,
             ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
             ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
             ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
