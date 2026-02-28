@@ -100,6 +100,9 @@ class SelfPlayTrainer:
         self._table_hand_counter = 0
         # 训练期每隔固定手数做一次精确策略统计，避免“训练全0、评估很高”的口径偏差
         self._exact_metrics_interval = 200
+        # best 选择稳定性参数
+        self.best_invalid_bet_threshold = 0.15
+        self.best_score_window = 3
         # all-in 不走运补偿统计（用于监控补偿是否过量）
         self.allin_unlucky_trigger_count = 0
         self.allin_unlucky_bonus_total = 0.0
@@ -665,11 +668,26 @@ class SelfPlayTrainer:
                     20.0 * float(eval_result['win_rate']) -
                     30.0 * float(eval_result.get('invalid_bet_rate', 0.0))
                 )
-                # 只有当分数显著提高时才保存 Best
-                if current_score > self.best_score:
-                    self.best_score = current_score
+                # 用最近N次评估分数做平滑，降低单点评估噪声对best选择的影响
+                if not hasattr(self, "_best_score_history"):
+                    self._best_score_history = []
+                self._best_score_history.append(current_score)
+                if len(self._best_score_history) > self.best_score_window:
+                    self._best_score_history.pop(0)
+                smoothed_score = float(np.mean(self._best_score_history))
+                invalid_rate = float(eval_result.get('invalid_bet_rate', 0.0))
+                # 加硬门槛：无效下注率过高时不允许当选best
+                if invalid_rate <= self.best_invalid_bet_threshold and smoothed_score > self.best_score:
+                    self.best_score = smoothed_score
                     self.save_checkpoint(is_best=True)
-                    logger.info(f"新最佳模型！得分: {current_score:.4f}")
+                    logger.info(
+                        f"新最佳模型！平滑得分: {smoothed_score:.4f}, "
+                        f"当前得分: {current_score:.4f}, 无效下注率: {invalid_rate:.3f}"
+                    )
+                elif invalid_rate > self.best_invalid_bet_threshold:
+                    logger.info(
+                        f"跳过最佳模型保存：无效下注率过高 ({invalid_rate:.3f} > {self.best_invalid_bet_threshold:.3f})"
+                    )
             
             if self.total_hands % self.opponent_update_interval == 0:
                 logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
