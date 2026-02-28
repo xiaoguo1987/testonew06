@@ -100,6 +100,10 @@ class SelfPlayTrainer:
         self._table_hand_counter = 0
         # 训练期每隔固定手数做一次精确策略统计，避免“训练全0、评估很高”的口径偏差
         self._exact_metrics_interval = 200
+        # all-in 不走运补偿统计（用于监控补偿是否过量）
+        self.allin_unlucky_trigger_count = 0
+        self.allin_unlucky_bonus_total = 0.0
+        self.allin_unlucky_equity_sum = 0.0
     
     def _create_agents(self) -> None:
         """创建AI代理（主代理+对手代理）"""
@@ -327,6 +331,9 @@ class SelfPlayTrainer:
                         0.20 + (eq - self.allin_unlucky_eq_threshold) * 2.0
                     )
                     final_reward += unlucky_bonus
+                    self.allin_unlucky_trigger_count += 1
+                    self.allin_unlucky_bonus_total += float(unlucky_bonus)
+                    self.allin_unlucky_equity_sum += float(eq)
             use_ppo_trajectory = getattr(self.main_agent, 'agent_type', None) == 'ppo'
             if use_ppo_trajectory:
                 self.main_agent.finish_trajectory(final_reward)
@@ -435,7 +442,10 @@ class SelfPlayTrainer:
                 'performance_history': self.performance_history,
                 'strategy_metrics': {
                     'bluff_attempts': self.total_bluff_attempts,
-                    'aggressive_actions': self.total_aggressive_actions
+                    'aggressive_actions': self.total_aggressive_actions,
+                    'allin_unlucky_trigger_count': self.allin_unlucky_trigger_count,
+                    'allin_unlucky_bonus_total': self.allin_unlucky_bonus_total,
+                    'allin_unlucky_equity_sum': self.allin_unlucky_equity_sum
                 },
                 'model_type': self.model_type
             }
@@ -556,6 +566,12 @@ class SelfPlayTrainer:
         # 计算策略指标
         bluff_rate = self.total_bluff_attempts / self.total_aggressive_actions if self.total_aggressive_actions > 0 else 0.0
         invalid_bet_rate = self.total_invalid_bets / self.total_raise_actions if self.total_raise_actions > 0 else 0.0
+        if self.allin_unlucky_trigger_count > 0:
+            avg_allin_bonus = self.allin_unlucky_bonus_total / self.allin_unlucky_trigger_count
+            avg_allin_equity = self.allin_unlucky_equity_sum / self.allin_unlucky_trigger_count
+        else:
+            avg_allin_bonus = 0.0
+            avg_allin_equity = 0.0
         
         # 详细日志记录
         logger.info(
@@ -563,7 +579,10 @@ class SelfPlayTrainer:
             f"累计利润: {self.total_profit:.2f}, "
             f"当前手牌利润: {profit_loss:.2f}, "
             f"诈唬率: {bluff_rate:.3f}, "
-            f"无效下注率: {invalid_bet_rate:.3f}"
+            f"无效下注率: {invalid_bet_rate:.3f}, "
+            f"allin补偿触发: {self.allin_unlucky_trigger_count}, "
+            f"allin补偿均值: {avg_allin_bonus:.3f}, "
+            f"allin触发时平均胜率: {avg_allin_equity:.3f}"
         )
         
         # 为所有奖励计算器类型提供兼容支持
