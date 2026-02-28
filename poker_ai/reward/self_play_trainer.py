@@ -9,6 +9,7 @@ import logging
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import threading
 
 # 设置日志
 logging.basicConfig(
@@ -383,10 +384,12 @@ class SelfPlayTrainer:
             return {
                 'profit': hand_profit,
                 'win': hand_win,
-                'metrics': metrics
+                'metrics': metrics,
+                'worker_tid': threading.get_ident()
             }
 
         if self.eval_workers > 1:
+            worker_tids = set()
             with ThreadPoolExecutor(max_workers=self.eval_workers) as executor:
                 for item in executor.map(_run_single_eval_game, range(self.num_eval_games)):
                     total_profit += item['profit']
@@ -395,6 +398,11 @@ class SelfPlayTrainer:
                     eval_aggressive += item['metrics']['aggressive']
                     eval_raises += item['metrics']['raises']
                     eval_invalid_bets += item['metrics']['invalid_bets']
+                    worker_tids.add(item['worker_tid'])
+            logger.info(
+                f"评估并行生效检查: 实际线程数={len(worker_tids)}, "
+                f"配置线程数={self.eval_workers}"
+            )
         else:
             for eval_idx in range(self.num_eval_games):
                 item = _run_single_eval_game(eval_idx)

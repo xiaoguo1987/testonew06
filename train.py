@@ -158,7 +158,7 @@ def setup_environment(args):
         logger.info(f"可用GPU数量: {len(gpus)}")
         for i, gpu in enumerate(gpus):
             logger.info(f"GPU {i}: {gpu.name}")
-        logger.info(f"可用CPU数量: {len(cpus)}")
+        logger.info(f"TF CPU设备数: {len(cpus)}（这是TensorFlow逻辑设备数，不等于CPU核心数）")
         logger.info(f"训练将使用: {'GPU' if gpus else 'CPU'}")
     except ImportError:
         logger.warning("TensorFlow未安装，无法检测硬件信息")
