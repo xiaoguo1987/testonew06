@@ -14,6 +14,7 @@ import logging
 import time
 import numpy as np
 from datetime import datetime
+import platform
 
 # 设置日志目录和文件名
 log_dir = 'logs'
@@ -77,11 +78,14 @@ def parse_arguments():
     parser.add_argument('--eval-interval', type=int, default=200, help='评估间隔（局数）')
     parser.add_argument('--checkpoint-interval', type=int, default=1000, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
+    parser.add_argument('--eval-workers', type=int, default=8, help='评估并行worker数量（建议8或16）')
     parser.add_argument('--skip-final-eval', action='store_true', help='训练结束后跳过最终评估（加速）')
     parser.add_argument('--allin-unlucky-eq-threshold', type=float, default=0.65,
                         help='all-in 不走运补偿触发阈值（翻牌前/翻牌，若估计胜率高于该值但输掉则补偿）')
     parser.add_argument('--allin-unlucky-bonus-cap', type=float, default=0.80,
                         help='all-in 不走运补偿上限')
+    parser.add_argument('--cpu-threads', type=int, default=8, help='TensorFlow intra-op 线程数（建议8或16）')
+    parser.add_argument('--tf-inter-op-threads', type=int, default=2, help='TensorFlow inter-op 线程数')
     
     # 游戏参数
     parser.add_argument('--small-blind', type=int, default=5, help='小盲注')
@@ -128,12 +132,29 @@ def setup_environment(args):
             handler.setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
     
-    # 记录硬件使用情况
+    # 记录硬件使用情况与并行配置
     try:
         import tensorflow as tf
+        logical_cores = os.cpu_count()
+        if hasattr(os, "sched_getaffinity"):
+            available_cores = len(os.sched_getaffinity(0))
+        else:
+            available_cores = logical_cores
+
+        # 线程并行配置（在创建图/执行前设置）
+        intra_threads = max(1, int(getattr(args, 'cpu_threads', 8)))
+        inter_threads = max(1, int(getattr(args, 'tf_inter_op_threads', 2)))
+        tf.config.threading.set_intra_op_parallelism_threads(intra_threads)
+        tf.config.threading.set_inter_op_parallelism_threads(inter_threads)
+
         gpus = tf.config.list_physical_devices('GPU')
         cpus = tf.config.list_physical_devices('CPU')
         logger.info(f"TensorFlow版本: {tf.__version__}")
+        logger.info(
+            f"DEBUG: 平台={platform.system()}, 逻辑核心数={logical_cores}, "
+            f"进程可用核心数={available_cores}"
+        )
+        logger.info(f"并行配置: TF intra_op={intra_threads}, inter_op={inter_threads}")
         logger.info(f"可用GPU数量: {len(gpus)}")
         for i, gpu in enumerate(gpus):
             logger.info(f"GPU {i}: {gpu.name}")
@@ -181,6 +202,7 @@ def train_model(args):
             skip_final_eval=getattr(args, 'skip_final_eval', False),
             allin_unlucky_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
             allin_unlucky_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
+            eval_workers=getattr(args, 'eval_workers', 1),
         )
         
         # 如果启用详细日志，更新日志级别
@@ -271,6 +293,7 @@ def evaluate_model(args):
         ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
         ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
         ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
+        eval_workers=getattr(args, 'eval_workers', 1),
     )
     
     # 加载模型

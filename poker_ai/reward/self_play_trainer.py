@@ -7,6 +7,7 @@ from typing import List, Dict, Tuple, Optional
 import pickle
 import logging
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 # 设置日志
@@ -46,7 +47,8 @@ class SelfPlayTrainer:
                  ppo_entropy_coef: float = 0.02,
                  skip_final_eval: bool = False,
                  allin_unlucky_eq_threshold: float = 0.65,
-                 allin_unlucky_bonus_cap: float = 0.80):
+                 allin_unlucky_bonus_cap: float = 0.80,
+                 eval_workers: int = 1):
         
         # --- 修正1: 强制检查 6-Max ---
         if num_players != 6:
@@ -74,6 +76,7 @@ class SelfPlayTrainer:
         self.skip_final_eval = skip_final_eval
         self.allin_unlucky_eq_threshold = allin_unlucky_eq_threshold
         self.allin_unlucky_bonus_cap = allin_unlucky_bonus_cap
+        self.eval_workers = max(1, int(eval_workers))
 
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -356,6 +359,7 @@ class SelfPlayTrainer:
     def evaluate(self) -> Dict:
         """评估模型性能"""
         logger.info(f"开始评估，共{self.num_eval_games}局")
+        logger.info(f"评估并行配置: workers={self.eval_workers}")
         total_profit = 0
         wins = 0
         eval_bluffs = 0
@@ -363,24 +367,43 @@ class SelfPlayTrainer:
         eval_raises = 0
         eval_invalid_bets = 0
 
-        for eval_idx in range(self.num_eval_games):
+        def _run_single_eval_game(eval_idx: int) -> Dict:
             # 每10局评估记录一次进度
             if (eval_idx + 1) % 10 == 0:
                 logger.debug(f"评估进度: {eval_idx + 1}/{self.num_eval_games} 局")
-                
             game, players = self._create_game()
             result = self._play_hand(game, players, is_training=False)
-            total_profit += result['player_profits']['Main_AI']
-            if 'Main_AI' in result.get('winners', []):
-                wins += 1
-            
+            hand_profit = result['player_profits']['Main_AI']
+            hand_win = 1 if 'Main_AI' in result.get('winners', []) else 0
             main_actions = result['action_histories']['Main_AI']
             if main_actions:
                 metrics = self._count_episode_metrics(players[0], game, main_actions)
-                eval_bluffs += metrics['bluffs']
-                eval_aggressive += metrics['aggressive']
-                eval_raises += metrics['raises']
-                eval_invalid_bets += metrics['invalid_bets']
+            else:
+                metrics = {'bluffs': 0, 'aggressive': 0, 'raises': 0, 'invalid_bets': 0}
+            return {
+                'profit': hand_profit,
+                'win': hand_win,
+                'metrics': metrics
+            }
+
+        if self.eval_workers > 1:
+            with ThreadPoolExecutor(max_workers=self.eval_workers) as executor:
+                for item in executor.map(_run_single_eval_game, range(self.num_eval_games)):
+                    total_profit += item['profit']
+                    wins += item['win']
+                    eval_bluffs += item['metrics']['bluffs']
+                    eval_aggressive += item['metrics']['aggressive']
+                    eval_raises += item['metrics']['raises']
+                    eval_invalid_bets += item['metrics']['invalid_bets']
+        else:
+            for eval_idx in range(self.num_eval_games):
+                item = _run_single_eval_game(eval_idx)
+                total_profit += item['profit']
+                wins += item['win']
+                eval_bluffs += item['metrics']['bluffs']
+                eval_aggressive += item['metrics']['aggressive']
+                eval_raises += item['metrics']['raises']
+                eval_invalid_bets += item['metrics']['invalid_bets']
 
         avg_profit = total_profit / self.num_eval_games
         win_rate = wins / self.num_eval_games
