@@ -44,7 +44,9 @@ class SelfPlayTrainer:
                  ppo_clip_epsilon: float = 0.2,
                  ppo_update_epochs: int = 10,
                  ppo_entropy_coef: float = 0.02,
-                 skip_final_eval: bool = False):
+                 skip_final_eval: bool = False,
+                 allin_unlucky_eq_threshold: float = 0.65,
+                 allin_unlucky_bonus_cap: float = 0.80):
         
         # --- 修正1: 强制检查 6-Max ---
         if num_players != 6:
@@ -70,6 +72,8 @@ class SelfPlayTrainer:
         self.ppo_update_epochs = ppo_update_epochs
         self.ppo_entropy_coef = ppo_entropy_coef
         self.skip_final_eval = skip_final_eval
+        self.allin_unlucky_eq_threshold = allin_unlucky_eq_threshold
+        self.allin_unlucky_bonus_cap = allin_unlucky_bonus_cap
 
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -94,6 +98,8 @@ class SelfPlayTrainer:
         self.total_invalid_bets = 0
         # 牌桌创建计数：用于让每手牌的庄位轮转，避免位置长期固定
         self._table_hand_counter = 0
+        # 训练期每隔固定手数做一次精确策略统计，避免“训练全0、评估很高”的口径偏差
+        self._exact_metrics_interval = 200
     
     def _create_agents(self) -> None:
         """创建AI代理（主代理+对手代理）"""
@@ -194,6 +200,12 @@ class SelfPlayTrainer:
         last_step_info = None 
         initial_stack = players[0].stack 
         action_records = {p.name: [] for p in players}
+        # 记录主AI是否在前两条街（翻牌前/翻牌）发生 all-in 以及当时估计胜率
+        all_in_context = {
+            'happened': False,
+            'round': None,
+            'equity': 0.0
+        }
 
         while not game.is_hand_over():
             if game.is_round_over():
@@ -222,6 +234,18 @@ class SelfPlayTrainer:
 
                 action_records[current_player.name].append((action_str, amount if amount else 0))
                 success = game.handle_action(current_player, action_str, amount)
+                # 只在首次 all-in 时记录，避免重复覆盖
+                if success and (not all_in_context['happened']) and current_player.is_all_in and game.round in (1, 2):
+                    try:
+                        # 使用状态表示的快速估计，减少训练路径开销
+                        eq = float(self.main_agent.state_rep.calculate_hand_strength(current_player, game))
+                    except Exception:
+                        eq = 0.0
+                    all_in_context.update({
+                        'happened': True,
+                        'round': int(game.round),
+                        'equity': max(0.0, min(1.0, eq))
+                    })
 
                 if not success:
                     game.handle_action(current_player, 'fold', None)
@@ -292,6 +316,17 @@ class SelfPlayTrainer:
             main_actions = action_records.get("Main_AI", [])
             if len(main_actions) == 1 and main_actions[0][0] == "fold" and final_profit <= 0:
                 final_reward -= 0.25
+            # all-in 不走运补偿：若在翻牌前/翻牌以高胜率打光，最终输掉，给予少量正向补偿
+            # 目的：避免模型因短期方差而过度惩罚“长期EV正确”的激进行为
+            if (not is_winner) and all_in_context['happened'] and all_in_context['round'] in (1, 2):
+                eq = all_in_context['equity']
+                if eq >= self.allin_unlucky_eq_threshold:
+                    # 胜率越高补偿越高；封顶由配置控制
+                    unlucky_bonus = min(
+                        self.allin_unlucky_bonus_cap,
+                        0.20 + (eq - self.allin_unlucky_eq_threshold) * 2.0
+                    )
+                    final_reward += unlucky_bonus
             use_ppo_trajectory = getattr(self.main_agent, 'agent_type', None) == 'ppo'
             if use_ppo_trajectory:
                 self.main_agent.finish_trajectory(final_reward)
@@ -577,8 +612,9 @@ class SelfPlayTrainer:
             # 累计策略统计，修复日志中诈唬率/无效下注率长期为0的问题
             main_actions = result.get('action_histories', {}).get('Main_AI', [])
             if main_actions:
-                # 训练阶段使用轻量统计，避免每手都触发蒙特卡洛牌力估算导致速度下降
-                metrics = self._count_episode_metrics(players[0], game, main_actions, lightweight=True)
+                # 大部分手牌用轻量统计保证速度；周期性做精确统计修正口径偏差
+                exact_metrics = (self.total_hands % self._exact_metrics_interval == 0)
+                metrics = self._count_episode_metrics(players[0], game, main_actions, lightweight=not exact_metrics)
                 self.total_bluff_attempts += metrics.get('bluffs', 0)
                 self.total_aggressive_actions += metrics.get('aggressive', 0)
                 self.total_raise_actions += metrics.get('raises', 0)
@@ -603,7 +639,13 @@ class SelfPlayTrainer:
                 eval_result = self.evaluate()
                 te1 = datetime.now().timestamp()
                 t_train_total += (te1 - te0)
-                current_score = eval_result['avg_profit'] * eval_result['win_rate']
+                # 避免 avg_profit*win_rate 在 win_rate=0 时退化为 -0.0，导致“假最佳”
+                # 综合收益、胜率和无效下注率，保持量纲可解释
+                current_score = (
+                    float(eval_result['avg_profit']) +
+                    20.0 * float(eval_result['win_rate']) -
+                    30.0 * float(eval_result.get('invalid_bet_rate', 0.0))
+                )
                 # 只有当分数显著提高时才保存 Best
                 if current_score > self.best_score:
                     self.best_score = current_score
