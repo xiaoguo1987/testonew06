@@ -72,6 +72,18 @@ class PokerAIAgent:
         self.state_rep = StateRepresentation()
         if state_dim is None:
             state_dim = self.state_rep.total_state_dim
+        # 保存初始化参数，供 clone_for_inference 复用，避免副本超参数退化到硬编码默认值
+        self._init_kwargs = dict(
+            agent_type=agent_type,
+            state_dim=state_dim,
+            target_update_freq=target_update_freq,
+            learning_rate=learning_rate,
+            optimizer=optimizer,
+            ppo_clip_epsilon=ppo_clip_epsilon,
+            ppo_update_epochs=ppo_update_epochs,
+            ppo_entropy_coef=ppo_entropy_coef,
+            ppo_batch_size=ppo_batch_size,
+        )
 
         if agent_type == 'dqn':
             self.agent = DQNAgent(state_dim=state_dim, target_update_freq=target_update_freq,
@@ -278,19 +290,20 @@ class PokerAIAgent:
 
     def clone_for_inference(self) -> "PokerAIAgent":
         """创建仅用于推理的副本（不包含 replay/optimizer 等训练状态），供并行采样 worker 使用。"""
-        state_dim = self.state_rep.total_state_dim
-        kwargs = dict(
-            agent_type=self.agent_type,
-            state_dim=state_dim,
-            target_update_freq=10,
-            learning_rate=0.001,
-            optimizer='adam',
-        )
+        kwargs = dict(self._init_kwargs)
         if self.agent_type == 'ppo':
-            kwargs['ppo_clip_epsilon'] = getattr(self.agent, 'clip_epsilon', 0.2)
-            kwargs['ppo_update_epochs'] = getattr(self.agent, 'update_epochs', 10)
-            kwargs['ppo_entropy_coef'] = getattr(self.agent, 'entropy_coef', 0.02)
-            kwargs['ppo_batch_size'] = getattr(self.agent, 'batch_size', 64)
+            kwargs['ppo_clip_epsilon'] = getattr(
+                self.agent, 'clip_epsilon', kwargs.get('ppo_clip_epsilon')
+            )
+            kwargs['ppo_update_epochs'] = getattr(
+                self.agent, 'update_epochs', kwargs.get('ppo_update_epochs')
+            )
+            kwargs['ppo_entropy_coef'] = getattr(
+                self.agent, 'entropy_coef', kwargs.get('ppo_entropy_coef')
+            )
+            kwargs['ppo_batch_size'] = getattr(
+                self.agent, 'batch_size', kwargs.get('ppo_batch_size')
+            )
         clone = PokerAIAgent(**kwargs)
         weights = self.get_weights()
         if weights is not None:
