@@ -79,6 +79,7 @@ def parse_arguments():
     parser.add_argument('--checkpoint-interval', type=int, default=1000, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
     parser.add_argument('--eval-workers', type=int, default=8, help='评估并行worker数量（建议8或16）')
+    parser.add_argument('--train-workers', type=int, default=1, help='训练采样并行worker数量（PPO建议先试4/8）')
     parser.add_argument('--skip-final-eval', action='store_true', help='训练结束后跳过最终评估（加速）')
     parser.add_argument('--allin-unlucky-eq-threshold', type=float, default=0.65,
                         help='all-in 不走运补偿触发阈值（翻牌前/翻牌，若估计胜率高于该值但输掉则补偿）')
@@ -203,6 +204,7 @@ def train_model(args):
             allin_unlucky_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
             allin_unlucky_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
             eval_workers=getattr(args, 'eval_workers', 1),
+            train_workers=getattr(args, 'train_workers', 1),
         )
         
         # 如果启用详细日志，更新日志级别
@@ -294,6 +296,7 @@ def evaluate_model(args):
         ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
         ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
         eval_workers=getattr(args, 'eval_workers', 1),
+        train_workers=getattr(args, 'train_workers', 1),
     )
     
     # 加载模型

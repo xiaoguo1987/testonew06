@@ -49,7 +49,8 @@ class SelfPlayTrainer:
                  skip_final_eval: bool = False,
                  allin_unlucky_eq_threshold: float = 0.65,
                  allin_unlucky_bonus_cap: float = 0.80,
-                 eval_workers: int = 1):
+                 eval_workers: int = 1,
+                 train_workers: int = 1):
         
         # --- 修正1: 强制检查 6-Max ---
         if num_players != 6:
@@ -78,6 +79,7 @@ class SelfPlayTrainer:
         self.allin_unlucky_eq_threshold = allin_unlucky_eq_threshold
         self.allin_unlucky_bonus_cap = allin_unlucky_bonus_cap
         self.eval_workers = max(1, int(eval_workers))
+        self.train_workers = max(1, int(train_workers))
 
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -107,6 +109,8 @@ class SelfPlayTrainer:
         # best 选择稳定性参数
         self.best_invalid_bet_threshold = 0.15
         self.best_score_window = 3
+        # 并行采样时 _create_game 中 _table_hand_counter 的更新需要加锁
+        self._table_hand_counter_lock = threading.Lock()
         # all-in 不走运补偿统计（用于监控补偿是否过量）
         self.allin_unlucky_trigger_count = 0
         self.allin_unlucky_bonus_total = 0.0
@@ -166,22 +170,22 @@ class SelfPlayTrainer:
                        for i in range(self.num_players - 1)])
         game = PokerGame(self.small_blind, self.big_blind, players)
         # 注意：start_new_hand 会先 dealer_pos + 1，因此这里预置“上一手庄位”
-        game.dealer_pos = self._table_hand_counter % len(players)
-        self._table_hand_counter += 1
+        with self._table_hand_counter_lock:
+            game.dealer_pos = self._table_hand_counter % len(players)
+            self._table_hand_counter += 1
         return game, players
     
-    def _count_episode_metrics(self, main_player: Player, game: PokerGame,
+    def _count_episode_metrics(self, main_player: Optional[Player], game: Optional[PokerGame],
                               action_history: List[Tuple[str, int]],
                               lightweight: bool = False) -> Dict[str, int]:
-        """统计单局策略指标"""
+        """统计单局策略指标。main_player/game 为 None 时自动退化为轻量统计。"""
         bluffs = 0
         aggressive = 0
         raises = 0
         invalid_bets = 0
-
+        if main_player is None or game is None:
+            lightweight = True
         # --- 修正2: 只有当 reward_calculator 支持复杂逻辑时才计算 ---
-        # SimpleRewardCalculator 是极简版，可能没有 is_bluffing 等方法
-        # 这里做一个简单的兼容性检查
         has_complex_logic = (not lightweight) and hasattr(self.reward_calculator, 'is_bluffing')
 
         for action, amount in action_history:
@@ -356,6 +360,178 @@ class SelfPlayTrainer:
             'action_histories': action_records
         }
         return result
+
+    def _play_hand_collect(
+        self, game: PokerGame, players: List[Player], agent_copy: "PokerAIAgent"
+    ) -> Tuple[Dict, Dict]:
+        """
+        仅做采样：用 agent_copy 选动作，不写 main_agent，返回 (result_dict, trajectory_data)。
+        供并行 worker 使用；主线程收到后再对 main_agent 做 learn/append_step/finish_trajectory。
+        """
+        game.start_new_hand()
+        last_step_info = None
+        initial_stack = players[0].stack
+        action_records = {p.name: [] for p in players}
+        all_in_context = {'happened': False, 'round': None, 'equity': 0.0}
+        use_ppo = getattr(agent_copy, 'agent_type', None) == 'ppo'
+        trajectory = (
+            {'states': [], 'actions': [], 'old_probs': []}
+            if use_ppo
+            else {'transitions': []}
+        )
+
+        while not game.is_hand_over():
+            if game.is_round_over():
+                if not game.proceed_to_next_round():
+                    break
+            current_player = game.next_player()
+            if not current_player or not current_player.is_active:
+                continue
+
+            if current_player.name == "Main_AI":
+                if not use_ppo and last_step_info is not None:
+                    current_state = agent_copy.state_rep.get_state(game, current_player)
+                    prev_state, prev_action_idx = last_step_info
+                    trajectory['transitions'].append(
+                        (prev_state, prev_action_idx, 0.001, current_state, False)
+                    )
+
+                action_str, amount, action_info = agent_copy.select_action_with_info(
+                    game, current_player
+                )
+                action_idx = action_info.get('action_idx', 0)
+                current_state = action_info.get(
+                    'state',
+                    agent_copy.state_rep.get_state(game, current_player),
+                )
+                action_records[current_player.name].append(
+                    (action_str, amount if amount else 0)
+                )
+                success = game.handle_action(current_player, action_str, amount)
+                if success and (not all_in_context['happened']) and current_player.is_all_in and game.round in (1, 2):
+                    try:
+                        eq = float(
+                            agent_copy.state_rep.calculate_hand_strength(
+                                current_player, game
+                            )
+                        )
+                    except Exception:
+                        eq = 0.0
+                    all_in_context.update({
+                        'happened': True,
+                        'round': int(game.round),
+                        'equity': max(0.0, min(1.0, eq)),
+                    })
+
+                if not success:
+                    game.handle_action(current_player, 'fold', None)
+                    if use_ppo:
+                        probs = action_info.get('action_probabilities', None)
+                        fold_prob = (
+                            float(np.clip(probs[0], 1e-8, 1.0)) if probs is not None
+                            else 1.0
+                        )
+                        trajectory['states'].append(current_state)
+                        trajectory['actions'].append(0)
+                        trajectory['old_probs'].append(fold_prob)
+                    else:
+                        if last_step_info is not None:
+                            prev_state, prev_action_idx = last_step_info
+                            trajectory['transitions'].append(
+                                (prev_state, prev_action_idx, -0.05, current_state, False)
+                            )
+                else:
+                    if use_ppo:
+                        old_prob = float(action_info.get('old_prob', 1.0))
+                        trajectory['states'].append(current_state)
+                        trajectory['actions'].append(int(action_idx))
+                        trajectory['old_probs'].append(old_prob)
+                last_step_info = (current_state, action_idx)
+            else:
+                try:
+                    opp_idx = int(current_player.name.split('_')[-1]) - 1
+                    if 0 <= opp_idx < len(self.opponent_agents):
+                        agent = self.opponent_agents[opp_idx]
+                    else:
+                        agent = self.opponent_agents[0]
+                except Exception:
+                    agent = self.opponent_agents[0]
+                action, amount = agent.select_action(game, current_player)
+                action_records[current_player.name].append(
+                    (action, amount if amount else 0)
+                )
+                if not game.handle_action(current_player, action, amount):
+                    game.handle_action(current_player, 'fold', None)
+
+        alive = [p for p in players if p.is_active]
+        if len(alive) == 1 and game.pot > 0:
+            game._award_pot(alive[0])
+
+        final_profit = players[0].stack - initial_stack
+        winners = [p.name for p in getattr(game, 'winners', [])]
+        if not winners and hasattr(game, 'winner') and game.winner:
+            winners = [game.winner.name]
+        is_winner = "Main_AI" in winners
+
+        final_reward = self.reward_calculator.calculate_reward(
+            player=players[0],
+            game=game,
+            action="end",
+            action_amount=0,
+            is_winner=is_winner,
+            profit_loss=final_profit,
+            done=True,
+        )
+        main_actions = action_records.get("Main_AI", [])
+        if len(main_actions) == 1 and main_actions[0][0] == "fold" and final_profit <= 0:
+            final_reward -= 0.25
+        allin_unlucky_bonus = 0.0
+        if (not is_winner) and all_in_context['happened'] and all_in_context['round'] in (1, 2):
+            eq = all_in_context['equity']
+            if eq >= self.allin_unlucky_eq_threshold:
+                unlucky_bonus = min(
+                    self.allin_unlucky_bonus_cap,
+                    0.20 + (eq - self.allin_unlucky_eq_threshold) * 2.0,
+                )
+                final_reward += unlucky_bonus
+                allin_unlucky_bonus = unlucky_bonus
+        trajectory['final_reward'] = final_reward
+        trajectory['allin_unlucky'] = {
+            'triggered': allin_unlucky_bonus > 0,
+            'bonus': allin_unlucky_bonus,
+            'equity': all_in_context['equity'],
+        }
+
+        if not use_ppo and last_step_info is not None:
+            prev_state, prev_action_idx = last_step_info
+            terminal_state = np.zeros_like(prev_state)
+            trajectory['transitions'].append(
+                (prev_state, prev_action_idx, final_reward, terminal_state, True)
+            )
+
+        result = {
+            'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
+            'winners': winners,
+            'player_profits': {p.name: p.stack - self.initial_stack for p in players},
+            'action_histories': action_records,
+        }
+        return result, trajectory
+
+    def _apply_trajectory(self, trajectory: Dict) -> None:
+        """将单条轨迹应用到 main_agent（PPO: append_step + finish_trajectory；DQN: remember + replay）。"""
+        use_ppo = getattr(self.main_agent, 'agent_type', None) == 'ppo'
+        if use_ppo:
+            for s, a, p in zip(
+                trajectory['states'],
+                trajectory['actions'],
+                trajectory['old_probs'],
+            ):
+                self.main_agent.append_step(s, a, p)
+            self.main_agent.finish_trajectory(trajectory['final_reward'])
+        else:
+            for t in trajectory['transitions']:
+                s, a, r, s_next, done = t
+                self.main_agent.learn(r, state=s, action=a, next_state=s_next, done=done)
     
     def evaluate(self) -> Dict:
         """评估模型性能"""
@@ -642,92 +818,154 @@ class SelfPlayTrainer:
         }
         logger.debug(f"性能数据: {performance_data}")
 
+    def _sync_copies_from_main(self, copies: List) -> None:
+        """将 main_agent 的权重同步到各 inference 副本。"""
+        weights = self.main_agent.get_weights()
+        if weights is None:
+            return
+        for c in copies:
+            c.set_weights(weights)
+        if self.model_type == 'dqn' and hasattr(self.main_agent.agent, 'epsilon'):
+            for c in copies:
+                c.agent.epsilon = self.main_agent.agent.epsilon
+                c.agent.epsilon_min = getattr(
+                    self.main_agent.agent, 'epsilon_min', 0.1
+                )
+                c.agent.epsilon_decay = getattr(
+                    self.main_agent.agent, 'epsilon_decay', 0.995
+                )
+
     def train(self, num_hands: int) -> None:
-        """主训练循环"""
+        """主训练循环。当 train_workers > 1 时并行采样，主线程串行更新。"""
         logger.info(f"开始训练，共{num_hands}手牌")
         logger.info("从当前模型状态开始训练")
+        logger.info(f"训练采样并行: workers={self.train_workers}")
         start_hand = self.total_hands
         t_env_total = 0.0
         t_train_total = 0.0
         if self.model_type == "ppo" and hasattr(self.main_agent, "agent") and hasattr(self.main_agent.agent, "warmup"):
             self.main_agent.agent.warmup()
 
-        for hand_idx in range(num_hands):
-            game, players = self._create_game()
+        use_parallel = (
+            self.train_workers > 1
+            and not self.use_ensemble
+            and hasattr(self.main_agent, 'clone_for_inference')
+        )
+        agent_copies = []
+        if use_parallel:
+            agent_copies = [
+                self.main_agent.clone_for_inference()
+                for _ in range(self.train_workers)
+            ]
+            self._sync_copies_from_main(agent_copies)
+
+        hand_idx = 0
+        while hand_idx < num_hands:
+            batch_size = (
+                min(self.train_workers, num_hands - hand_idx)
+                if use_parallel
+                else 1
+            )
             t0 = datetime.now().timestamp()
-            result = self._play_hand(game, players, is_training=True)
+
+            if use_parallel:
+                self._sync_copies_from_main(agent_copies)
+
+                def run_one(worker_idx: int):
+                    game, players = self._create_game()
+                    copy_agent = agent_copies[worker_idx]
+                    return self._play_hand_collect(game, players, copy_agent)
+
+                results_and_trajectories = []
+                with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                    for res in executor.map(run_one, range(batch_size)):
+                        results_and_trajectories.append(res)
+            else:
+                game, players = self._create_game()
+                result, trajectory = self._play_hand_collect(
+                    game, players, self.main_agent
+                )
+                results_and_trajectories = [(result, trajectory)]
+
             t1 = datetime.now().timestamp()
-            
-            self.total_hands += 1
-            self.total_profit += result['player_profits']['Main_AI']
             t_env_total += (t1 - t0)
 
-            # 累计策略统计，修复日志中诈唬率/无效下注率长期为0的问题
-            main_actions = result.get('action_histories', {}).get('Main_AI', [])
-            if main_actions:
-                # 大部分手牌用轻量统计保证速度；周期性做精确统计修正口径偏差
-                exact_metrics = (self.total_hands % self._exact_metrics_interval == 0)
-                metrics = self._count_episode_metrics(players[0], game, main_actions, lightweight=not exact_metrics)
-                self.total_bluff_attempts += metrics.get('bluffs', 0)
-                self.total_aggressive_actions += metrics.get('aggressive', 0)
-                self.total_raise_actions += metrics.get('raises', 0)
-                self.total_invalid_bets += metrics.get('invalid_bets', 0)
-            
-            current_hand = start_hand + hand_idx + 1
-            progress = ((hand_idx + 1) / num_hands) * 100
-            
-            if self.total_hands % 50 == 0:
-               self.record_performance(result['player_profits']['Main_AI'])
-            
-            # 添加训练进度日志（每100手牌）
-            if (hand_idx + 1) % 100 == 0:
-                logger.info(f"训练进度: {current_hand}/{start_hand + num_hands} 手牌 ({progress:.1f}%)")
-            
-            # 记录详细手牌结果（每1000手牌）
-            if (hand_idx + 1) % 1000 == 0:
-                logger.debug(f"第 {current_hand} 手牌结果: {result}")
-            
-            if self.total_hands % self.eval_interval == 0:
-                te0 = datetime.now().timestamp()
-                eval_result = self.evaluate()
-                te1 = datetime.now().timestamp()
-                t_train_total += (te1 - te0)
-                # 避免 avg_profit*win_rate 在 win_rate=0 时退化为 -0.0，导致“假最佳”
-                # 综合收益、胜率和无效下注率，保持量纲可解释
-                current_score = (
-                    float(eval_result['avg_profit']) +
-                    20.0 * float(eval_result['win_rate']) -
-                    30.0 * float(eval_result.get('invalid_bet_rate', 0.0))
-                )
-                # 用最近N次评估分数做平滑，降低单点评估噪声对best选择的影响
-                if not hasattr(self, "_best_score_history"):
-                    self._best_score_history = []
-                self._best_score_history.append(current_score)
-                if len(self._best_score_history) > self.best_score_window:
-                    self._best_score_history.pop(0)
-                smoothed_score = float(np.mean(self._best_score_history))
-                invalid_rate = float(eval_result.get('invalid_bet_rate', 0.0))
-                # 加硬门槛：无效下注率过高时不允许当选best
-                if invalid_rate <= self.best_invalid_bet_threshold and smoothed_score > self.best_score:
-                    self.best_score = smoothed_score
-                    self.save_checkpoint(is_best=True)
-                    logger.info(
-                        f"新最佳模型！平滑得分: {smoothed_score:.4f}, "
-                        f"当前得分: {current_score:.4f}, 无效下注率: {invalid_rate:.3f}"
+            for (result, trajectory) in results_and_trajectories:
+                self._apply_trajectory(trajectory)
+                self.total_hands += 1
+                self.total_profit += result['player_profits']['Main_AI']
+
+                au = trajectory.get('allin_unlucky', {})
+                if au.get('triggered'):
+                    self.allin_unlucky_trigger_count += 1
+                    self.allin_unlucky_bonus_total += float(au.get('bonus', 0))
+                    self.allin_unlucky_equity_sum += float(au.get('equity', 0))
+
+                main_actions = result.get('action_histories', {}).get('Main_AI', [])
+                if main_actions:
+                    exact_metrics = (
+                        self.total_hands % self._exact_metrics_interval == 0
                     )
-                elif invalid_rate > self.best_invalid_bet_threshold:
-                    logger.info(
-                        f"跳过最佳模型保存：无效下注率过高 ({invalid_rate:.3f} > {self.best_invalid_bet_threshold:.3f})"
+                    metrics = self._count_episode_metrics(
+                        None, None, main_actions, lightweight=not exact_metrics
                     )
-            
-            if self.total_hands % self.opponent_update_interval == 0:
-                logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
-                self.update_opponents()
-            
-            if self.total_hands % self.checkpoint_interval == 0:
-                logger.info(f"保存检查点，当前手牌数: {self.total_hands}")
-                self.save_checkpoint(is_best=False)
-        
+                    self.total_bluff_attempts += metrics.get('bluffs', 0)
+                    self.total_aggressive_actions += metrics.get('aggressive', 0)
+                    self.total_raise_actions += metrics.get('raises', 0)
+                    self.total_invalid_bets += metrics.get('invalid_bets', 0)
+
+                current_hand = self.total_hands
+                progress = (current_hand - start_hand) / num_hands * 100
+
+                if self.total_hands % 50 == 0:
+                    self.record_performance(result['player_profits']['Main_AI'])
+
+                if (current_hand - start_hand) % 100 == 0:
+                    logger.info(
+                        f"训练进度: {current_hand}/{start_hand + num_hands} 手牌 ({progress:.1f}%)"
+                    )
+                if (current_hand - start_hand) % 1000 == 0:
+                    logger.debug(f"第 {current_hand} 手牌结果: {result}")
+
+                if self.total_hands % self.eval_interval == 0:
+                    te0 = datetime.now().timestamp()
+                    eval_result = self.evaluate()
+                    te1 = datetime.now().timestamp()
+                    t_train_total += (te1 - te0)
+                    current_score = (
+                        float(eval_result['avg_profit']) +
+                        20.0 * float(eval_result['win_rate']) -
+                        30.0 * float(eval_result.get('invalid_bet_rate', 0.0))
+                    )
+                    if not hasattr(self, "_best_score_history"):
+                        self._best_score_history = []
+                    self._best_score_history.append(current_score)
+                    if len(self._best_score_history) > self.best_score_window:
+                        self._best_score_history.pop(0)
+                    smoothed_score = float(np.mean(self._best_score_history))
+                    invalid_rate = float(eval_result.get('invalid_bet_rate', 0.0))
+                    if invalid_rate <= self.best_invalid_bet_threshold and smoothed_score > self.best_score:
+                        self.best_score = smoothed_score
+                        self.save_checkpoint(is_best=True)
+                        logger.info(
+                            f"新最佳模型！平滑得分: {smoothed_score:.4f}, "
+                            f"当前得分: {current_score:.4f}, 无效下注率: {invalid_rate:.3f}"
+                        )
+                    elif invalid_rate > self.best_invalid_bet_threshold:
+                        logger.info(
+                            f"跳过最佳模型保存：无效下注率过高 ({invalid_rate:.3f} > {self.best_invalid_bet_threshold:.3f})"
+                        )
+
+                if self.total_hands % self.opponent_update_interval == 0:
+                    logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
+                    self.update_opponents()
+
+                if self.total_hands % self.checkpoint_interval == 0:
+                    logger.info(f"保存检查点，当前手牌数: {self.total_hands}")
+                    self.save_checkpoint(is_best=False)
+
+            hand_idx += batch_size
+
         logger.info(f"训练完成！总手牌: {self.total_hands}")
         self.save_checkpoint(is_best=False)
         if not self.skip_final_eval:

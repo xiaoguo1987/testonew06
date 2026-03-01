@@ -276,6 +276,31 @@ class PokerAIAgent:
         if hasattr(self.agent, 'set_weights'):
             self.agent.set_weights(weights)
 
+    def clone_for_inference(self) -> "PokerAIAgent":
+        """创建仅用于推理的副本（不包含 replay/optimizer 等训练状态），供并行采样 worker 使用。"""
+        state_dim = self.state_rep.total_state_dim
+        kwargs = dict(
+            agent_type=self.agent_type,
+            state_dim=state_dim,
+            target_update_freq=10,
+            learning_rate=0.001,
+            optimizer='adam',
+        )
+        if self.agent_type == 'ppo':
+            kwargs['ppo_clip_epsilon'] = getattr(self.agent, 'clip_epsilon', 0.2)
+            kwargs['ppo_update_epochs'] = getattr(self.agent, 'update_epochs', 10)
+            kwargs['ppo_entropy_coef'] = getattr(self.agent, 'entropy_coef', 0.02)
+            kwargs['ppo_batch_size'] = getattr(self.agent, 'batch_size', 64)
+        clone = PokerAIAgent(**kwargs)
+        weights = self.get_weights()
+        if weights is not None:
+            clone.set_weights(weights)
+        if self.agent_type == 'dqn' and hasattr(self.agent, 'epsilon'):
+            clone.agent.epsilon = self.agent.epsilon
+            clone.agent.epsilon_min = getattr(self.agent, 'epsilon_min', 0.1)
+            clone.agent.epsilon_decay = getattr(self.agent, 'epsilon_decay', 0.995)
+        return clone
+
     def update_target_model(self) -> None:
         """更新目标模型（DQN特定）"""
         if self.agent_type == 'dqn':
