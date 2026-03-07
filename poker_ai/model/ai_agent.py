@@ -58,7 +58,8 @@ class PokerAIAgent:
     def __init__(self, agent_type: str = 'dqn', state_dim: Optional[int] = None, target_update_freq: int = 10,
                  learning_rate: float = 0.001, optimizer: str = 'adam',
                  ppo_clip_epsilon: Optional[float] = None, ppo_update_epochs: Optional[int] = None,
-                 ppo_entropy_coef: Optional[float] = None, ppo_batch_size: Optional[int] = None):
+                 ppo_entropy_coef: Optional[float] = None, ppo_batch_size: Optional[int] = None,
+                 ppo_update_min_steps: Optional[int] = None):
         """
         初始化AI代理
         agent_type: 'dqn'、'policy_gradient' 或 'ppo'
@@ -83,6 +84,7 @@ class PokerAIAgent:
             ppo_update_epochs=ppo_update_epochs,
             ppo_entropy_coef=ppo_entropy_coef,
             ppo_batch_size=ppo_batch_size,
+            ppo_update_min_steps=ppo_update_min_steps,
         )
 
         if agent_type == 'dqn':
@@ -101,6 +103,11 @@ class PokerAIAgent:
             if ppo_batch_size is not None:
                 kwargs['batch_size'] = ppo_batch_size
             self.agent = PPOModel(**kwargs)
+            auto_min_steps = max(256, int(self.agent.batch_size) * 8)
+            self.ppo_update_min_steps = int(ppo_update_min_steps) if ppo_update_min_steps else auto_min_steps
+            self.ppo_pending_buffer = {
+                'states': [], 'actions': [], 'rewards': [], 'dones': [], 'old_probs': []
+            }
         else:
             raise ValueError(f"不支持的代理类型: {agent_type}")
         
@@ -178,6 +185,30 @@ class PokerAIAgent:
                     self._ppo_train_from_buffer()
                     self._ppo_clear_buffer()
 
+    def learn_from_transitions(self, transitions, replay_updates: int = 1) -> None:
+        """
+        批量应用转移样本，降低 Python 调度开销。
+        - DQN: 先批量 remember，再 replay 指定次数
+        - 其他模型: 回退到逐条 learn
+        """
+        if not transitions:
+            return
+        if self.agent_type == 'dqn':
+            for (state, action, reward, next_state, done) in transitions:
+                self.agent.remember(state, action, reward, next_state, done)
+            for _ in range(max(1, int(replay_updates))):
+                self.agent.replay()
+            return
+
+        for (state, action, reward, next_state, done) in transitions:
+            self.learn(
+                reward=reward,
+                state=state,
+                action=action,
+                next_state=next_state,
+                done=done,
+            )
+
     def _ppo_ensure_buffer(self) -> None:
         if not hasattr(self, 'ppo_buffer'):
             self.ppo_buffer = {
@@ -198,6 +229,51 @@ class PokerAIAgent:
         old_probs = np.array(buf['old_probs'], dtype=np.float32)
         self.agent.train(states, actions, rewards, dones, old_probs)
 
+    def _ppo_train_pending_buffer(self, force: bool = False) -> None:
+        """仅 PPO：当累计样本达到阈值（或 force=True）时，批量训练一次。"""
+        if self.agent_type != 'ppo':
+            return
+        pending = getattr(self, 'ppo_pending_buffer', None)
+        if not pending or len(pending['states']) == 0:
+            return
+        if (not force) and len(pending['states']) < self.ppo_update_min_steps:
+            return
+
+        states = np.array(pending['states'])
+        actions = np.array(pending['actions'])
+        rewards = np.array(pending['rewards'], dtype=np.float32)
+        dones = np.array(pending['dones'])
+        old_probs = np.array(pending['old_probs'], dtype=np.float32)
+        self.agent.train(states, actions, rewards, dones, old_probs)
+        self.ppo_pending_buffer = {
+            'states': [], 'actions': [], 'rewards': [], 'dones': [], 'old_probs': []
+        }
+
+    def append_trajectories_batch(self, trajectories) -> None:
+        """
+        仅 PPO：批量写入多条轨迹后再触发一次阈值检查，减少每手牌一次函数调用的开销。
+        trajectories: [{'states','actions','old_probs','final_reward'}, ...]
+        """
+        if self.agent_type != 'ppo' or not trajectories:
+            return
+        pending = self.ppo_pending_buffer
+        for traj in trajectories:
+            states = traj.get('states', [])
+            actions = traj.get('actions', [])
+            old_probs = traj.get('old_probs', [])
+            n = len(states)
+            if n == 0:
+                continue
+            final_reward = float(traj.get('final_reward', 0.0))
+            rewards = [0.0] * (n - 1) + [final_reward]
+            dones = [False] * (n - 1) + [True]
+            pending['states'].extend(states)
+            pending['actions'].extend(actions)
+            pending['old_probs'].extend(old_probs)
+            pending['rewards'].extend(rewards)
+            pending['dones'].extend(dones)
+        self._ppo_train_pending_buffer(force=False)
+
     def append_step(self, state: np.ndarray, action: int, old_prob: float) -> None:
         """仅 PPO：每步将 (state, action, old_prob) 加入轨迹，不传 reward。"""
         if self.agent_type != 'ppo':
@@ -208,7 +284,7 @@ class PokerAIAgent:
         self.ppo_buffer['old_probs'].append(float(np.clip(old_prob, 1e-8, 1.0)))
 
     def finish_trajectory(self, final_reward: float) -> None:
-        """仅 PPO：一手牌结束时，用 final_reward 填 rewards/dones 并执行一次 PPO 更新。"""
+        """仅 PPO：一手牌结束时写入累计缓冲，并在达到阈值时批量 PPO 更新。"""
         if self.agent_type != 'ppo':
             return
         self._ppo_ensure_buffer()
@@ -217,8 +293,19 @@ class PokerAIAgent:
             return
         self.ppo_buffer['rewards'] = [0.0] * (n - 1) + [final_reward]
         self.ppo_buffer['dones'] = [False] * (n - 1) + [True]
-        self._ppo_train_from_buffer()
+        pending = self.ppo_pending_buffer
+        pending['states'].extend(self.ppo_buffer['states'])
+        pending['actions'].extend(self.ppo_buffer['actions'])
+        pending['rewards'].extend(self.ppo_buffer['rewards'])
+        pending['dones'].extend(self.ppo_buffer['dones'])
+        pending['old_probs'].extend(self.ppo_buffer['old_probs'])
         self._ppo_clear_buffer()
+        self._ppo_train_pending_buffer(force=False)
+
+    def flush_pending_updates(self) -> None:
+        """训练结束/评估前可调用，确保 PPO 剩余样本也被训练。"""
+        if self.agent_type == 'ppo':
+            self._ppo_train_pending_buffer(force=True)
     
     def get_decision_info(self, game: PokerGame, player: Player) -> Dict:
         """
@@ -303,6 +390,9 @@ class PokerAIAgent:
             )
             kwargs['ppo_batch_size'] = getattr(
                 self.agent, 'batch_size', kwargs.get('ppo_batch_size')
+            )
+            kwargs['ppo_update_min_steps'] = getattr(
+                self, 'ppo_update_min_steps', kwargs.get('ppo_update_min_steps')
             )
         clone = PokerAIAgent(**kwargs)
         weights = self.get_weights()

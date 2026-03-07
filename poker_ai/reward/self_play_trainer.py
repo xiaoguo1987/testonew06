@@ -24,6 +24,17 @@ from ..reward.reward_calculator import RewardCalculator, AdaptiveRewardCalculato
 from ..utils.checkpoint import save_checkpoint, load_checkpoint, find_latest_checkpoint
 from ..reward.simple_reward_calculator import SimpleRewardCalculator
 
+
+def _resolve_workers(requested_workers: int, reserve_cores: int = 2) -> int:
+    """将 worker 数规范化为可用范围；<=0 时按 CPU 核数自动推断。"""
+    if requested_workers > 0:
+        return int(requested_workers)
+    logical = os.cpu_count() or 4
+    available = max(1, logical - max(0, reserve_cores))
+    if available <= 4:
+        return available
+    return max(1, (available * 3) // 4)
+
 class SelfPlayTrainer:
     """德州扑克自我对弈训练器（6-Max 极速训练版）"""
     
@@ -46,11 +57,16 @@ class SelfPlayTrainer:
                  ppo_clip_epsilon: float = 0.2,
                  ppo_update_epochs: int = 10,
                  ppo_entropy_coef: float = 0.02,
+                 ppo_update_min_steps: int = 0,
+                 train_rollouts_per_worker: int = 0,
+                 train_sync_every_batches: int = 0,
+                 dqn_replay_updates_per_hand: int = 0,
+                 tuning_mode: bool = False,
                  skip_final_eval: bool = False,
                  allin_unlucky_eq_threshold: float = 0.65,
                  allin_unlucky_bonus_cap: float = 0.80,
-                 eval_workers: int = 1,
-                 train_workers: int = 1):
+                 eval_workers: int = 0,
+                 train_workers: int = 0):
         
         # --- 修正1: 强制检查 6-Max ---
         if num_players != 6:
@@ -75,11 +91,32 @@ class SelfPlayTrainer:
         self.ppo_clip_epsilon = ppo_clip_epsilon
         self.ppo_update_epochs = ppo_update_epochs
         self.ppo_entropy_coef = ppo_entropy_coef
+        self.ppo_update_min_steps = int(ppo_update_min_steps)
+        self.tuning_mode = bool(tuning_mode)
         self.skip_final_eval = skip_final_eval
         self.allin_unlucky_eq_threshold = allin_unlucky_eq_threshold
         self.allin_unlucky_bonus_cap = allin_unlucky_bonus_cap
-        self.eval_workers = max(1, int(eval_workers))
-        self.train_workers = max(1, int(train_workers))
+        self.eval_workers = _resolve_workers(int(eval_workers), reserve_cores=1)
+        self.train_workers = _resolve_workers(int(train_workers), reserve_cores=2)
+        if int(train_rollouts_per_worker) > 0:
+            self.train_rollouts_per_worker = int(train_rollouts_per_worker)
+        else:
+            # PPO 训练更依赖大批量轨迹，默认给更大的并行块，降低调度开销
+            if self.model_type == 'ppo':
+                self.train_rollouts_per_worker = 8 if self.train_workers >= 32 else 4
+            else:
+                self.train_rollouts_per_worker = 2
+        if int(train_sync_every_batches) > 0:
+            self.train_sync_every_batches = int(train_sync_every_batches)
+        else:
+            if self.model_type == 'ppo':
+                self.train_sync_every_batches = max(12, self.train_workers // 2)
+            else:
+                self.train_sync_every_batches = max(4, self.train_workers * 2)
+        if int(dqn_replay_updates_per_hand) > 0:
+            self.dqn_replay_updates_per_hand = int(dqn_replay_updates_per_hand)
+        else:
+            self.dqn_replay_updates_per_hand = 1
 
         # 创建检查点目录
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -109,9 +146,6 @@ class SelfPlayTrainer:
         # best 选择稳定性参数
         self.best_invalid_bet_threshold = 0.15
         self.best_score_window = 3
-        self.train_sync_every_batches = 4
-        # 并行采样时 _create_game 中 _table_hand_counter 的更新需要加锁
-        self._table_hand_counter_lock = threading.Lock()
         self._opponents_version = 0
         # all-in 不走运补偿统计（用于监控补偿是否过量）
         self.allin_unlucky_trigger_count = 0
@@ -134,6 +168,7 @@ class SelfPlayTrainer:
                 kwargs['ppo_update_epochs'] = self.ppo_update_epochs
                 kwargs['ppo_entropy_coef'] = self.ppo_entropy_coef
                 kwargs['ppo_batch_size'] = self.batch_size
+                kwargs['ppo_update_min_steps'] = self.ppo_update_min_steps
             self.main_agent = PokerAIAgent(**kwargs)
 
         self.opponent_agents = []
@@ -149,6 +184,7 @@ class SelfPlayTrainer:
                 opp_kw['ppo_update_epochs'] = self.ppo_update_epochs
                 opp_kw['ppo_entropy_coef'] = self.ppo_entropy_coef
                 opp_kw['ppo_batch_size'] = self.batch_size
+                opp_kw['ppo_update_min_steps'] = self.ppo_update_min_steps
             self.opponent_agents.append(PokerAIAgent(**opp_kw))
             
         # 第 5 个对手作为“鱼” (Random Player)
@@ -171,10 +207,8 @@ class SelfPlayTrainer:
         players.extend([Player(f"Opponent_{i+1}", self.initial_stack, True)
                        for i in range(self.num_players - 1)])
         game = PokerGame(self.small_blind, self.big_blind, players)
-        # 注意：start_new_hand 会先 dealer_pos + 1，因此这里预置“上一手庄位”
-        with self._table_hand_counter_lock:
-            game.dealer_pos = self._table_hand_counter % len(players)
-            self._table_hand_counter += 1
+        # 并行场景下避免全局锁竞争：庄位随机化可保证长期公平性
+        game.dealer_pos = random.randrange(len(players))
         return game, players
     
     def _count_episode_metrics(self, main_player: Optional[Player], game: Optional[PokerGame],
@@ -603,9 +637,10 @@ class SelfPlayTrainer:
                 self.main_agent.append_step(s, a, p)
             self.main_agent.finish_trajectory(trajectory['final_reward'])
         else:
-            for t in trajectory['transitions']:
-                s, a, r, s_next, done = t
-                self.main_agent.learn(r, state=s, action=a, next_state=s_next, done=done)
+            self.main_agent.learn_from_transitions(
+                trajectory['transitions'],
+                replay_updates=self.dqn_replay_updates_per_hand,
+            )
     
     def evaluate(self) -> Dict:
         """评估模型性能"""
@@ -928,6 +963,8 @@ class SelfPlayTrainer:
         logger.info(f"开始训练，共{num_hands}手牌")
         logger.info("从当前模型状态开始训练")
         logger.info(f"训练采样并行: workers={self.train_workers}")
+        logger.info(f"训练并行批次: rollouts_per_worker={self.train_rollouts_per_worker}")
+        logger.info(f"训练同步频率: sync_every_batches={self.train_sync_every_batches}")
         start_hand = self.total_hands
         t_env_total = 0.0
         t_train_total = 0.0
@@ -954,36 +991,47 @@ class SelfPlayTrainer:
         executor = ThreadPoolExecutor(max_workers=self.train_workers) if use_parallel else None
         try:
             while hand_idx < num_hands:
-                batch_size = (
-                    min(self.train_workers, num_hands - hand_idx)
-                    if use_parallel
-                    else 1
-                )
+                remaining_hands = num_hands - hand_idx
                 t0 = datetime.now().timestamp()
 
                 if use_parallel:
+                    worker_count = min(self.train_workers, remaining_hands)
+                    target_batch_hands = min(
+                        remaining_hands,
+                        worker_count * max(1, self.train_rollouts_per_worker)
+                    )
+                    base_rollouts = target_batch_hands // worker_count
+                    extra_rollouts = target_batch_hands % worker_count
+                    worker_plan = [
+                        (idx, base_rollouts + (1 if idx < extra_rollouts else 0))
+                        for idx in range(worker_count)
+                    ]
                     if batch_counter % max(1, self.train_sync_every_batches) == 0:
                         self._sync_copies_from_main(agent_copies)
 
-                    def run_one(worker_idx: int):
+                    def run_one(task: Tuple[int, int]):
+                        worker_idx, rollout_count = task
                         if (
                             worker_opp_copies[worker_idx] is None
                             or worker_opp_versions[worker_idx] != self._opponents_version
                         ):
                             worker_opp_copies[worker_idx] = self._clone_opponents_for_inference()
                             worker_opp_versions[worker_idx] = self._opponents_version
-                        game, players = self._create_game()
                         copy_agent = agent_copies[worker_idx]
-                        return self._play_hand_collect(
-                            game,
-                            players,
-                            copy_agent,
-                            opponent_agents=worker_opp_copies[worker_idx]
-                        )
+                        outputs = []
+                        for _ in range(rollout_count):
+                            game, players = self._create_game()
+                            outputs.append(self._play_hand_collect(
+                                game,
+                                players,
+                                copy_agent,
+                                opponent_agents=worker_opp_copies[worker_idx]
+                            ))
+                        return outputs
 
                     results_and_trajectories = []
-                    for res in executor.map(run_one, range(batch_size)):
-                        results_and_trajectories.append(res)
+                    for res_list in executor.map(run_one, worker_plan):
+                        results_and_trajectories.extend(res_list)
                 else:
                     game, players = self._create_game()
                     result, trajectory = self._play_hand_collect(
@@ -995,7 +1043,9 @@ class SelfPlayTrainer:
                 t_env_total += (t1 - t0)
 
                 for (result, trajectory) in results_and_trajectories:
-                    self._apply_trajectory(trajectory)
+                    # PPO 先批量聚合轨迹，循环后统一提交，减少函数调用与阈值检查开销
+                    if self.model_type != 'ppo':
+                        self._apply_trajectory(trajectory)
                     self.total_hands += 1
                     self.total_profit += result['player_profits']['Main_AI']
 
@@ -1031,7 +1081,7 @@ class SelfPlayTrainer:
                     if (current_hand - start_hand) % 1000 == 0:
                         logger.debug(f"第 {current_hand} 手牌结果: {result}")
 
-                    if self.total_hands % self.eval_interval == 0:
+                    if (not self.tuning_mode) and self.total_hands % self.eval_interval == 0:
                         te0 = datetime.now().timestamp()
                         eval_result = self.evaluate()
                         te1 = datetime.now().timestamp()
@@ -1060,23 +1110,34 @@ class SelfPlayTrainer:
                                 f"跳过最佳模型保存：无效下注率过高 ({invalid_rate:.3f} > {self.best_invalid_bet_threshold:.3f})"
                             )
 
-                    if self.total_hands % self.opponent_update_interval == 0:
+                    if (not self.tuning_mode) and self.total_hands % self.opponent_update_interval == 0:
                         logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
                         self.update_opponents()
 
-                    if self.total_hands % self.checkpoint_interval == 0:
+                    if (not self.tuning_mode) and self.total_hands % self.checkpoint_interval == 0:
                         logger.info(f"保存检查点，当前手牌数: {self.total_hands}")
                         self.save_checkpoint(is_best=False)
 
-                hand_idx += batch_size
+                if self.model_type == 'ppo' and results_and_trajectories:
+                    ppo_batch = [traj for _, traj in results_and_trajectories]
+                    if hasattr(self.main_agent, 'append_trajectories_batch'):
+                        self.main_agent.append_trajectories_batch(ppo_batch)
+                    else:
+                        for _, traj in results_and_trajectories:
+                            self._apply_trajectory(traj)
+
+                hand_idx += len(results_and_trajectories)
                 batch_counter += 1
         finally:
             if executor is not None:
                 executor.shutdown(wait=True)
 
         logger.info(f"训练完成！总手牌: {self.total_hands}")
-        self.save_checkpoint(is_best=False)
-        if not self.skip_final_eval:
+        if hasattr(self.main_agent, 'flush_pending_updates'):
+            self.main_agent.flush_pending_updates()
+        if not self.tuning_mode:
+            self.save_checkpoint(is_best=False)
+        if (not self.tuning_mode) and (not self.skip_final_eval):
             te0 = datetime.now().timestamp()
             final_eval = self.evaluate()
             te1 = datetime.now().timestamp()

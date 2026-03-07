@@ -12,6 +12,7 @@ import argparse
 import json
 import logging
 import time
+import copy
 import numpy as np
 from datetime import datetime
 import platform
@@ -35,17 +36,65 @@ logging.basicConfig(
 logger = logging.getLogger('PokerAITrainer')
 logger.info(f"日志已配置，记录到: {log_file}")
 
-# 导入必要的模块
-try:
-    from poker_ai.reward.self_play_trainer import SelfPlayTrainer
-    from poker_ai.advisor.ai_advisor import AIAvisor  # 正确的类名是AIAvisor
-    from poker_ai.game.poker_game import PokerGame, Player
-    from poker_ai.model.ai_agent import PokerAIAgent
-    from poker_ai.utils import checkpoint  # 确保正确导入checkpoint模块
-    logger.info("成功导入所有必要模块")
-except Exception as e:
-    logger.error(f"导入模块失败: {e}")
-    raise
+def _resolve_auto_workers(requested_workers: int, reserved_cores: int = 2) -> int:
+    """
+    自动计算并行 worker 数:
+    - requested_workers > 0: 直接使用
+    - requested_workers <= 0: 按可用 CPU 核数自动推断
+    """
+    if requested_workers > 0:
+        return int(requested_workers)
+    logical_cores = os.cpu_count() or 4
+    available = max(1, logical_cores - max(0, reserved_cores))
+    # 更激进地利用 CPU：默认使用约 75% 的可用核心（小机器直接全用）
+    if available <= 4:
+        return available
+    return max(1, (available * 3) // 4)
+
+
+def _apply_hardware_profile(args) -> None:
+    """
+    根据硬件档位应用更激进的默认参数（仅在对应参数为“自动/未显式设置”时生效）。
+    当前内置:
+    - rtx3090_112cpu: 112 线程级 CPU + 单卡 3090 场景
+    """
+    profile = getattr(args, 'hardware_profile', 'auto')
+    if profile != 'rtx3090_112cpu':
+        return
+
+    cpu_total = os.cpu_count() or 112
+    cpu_total = max(cpu_total, 112)
+
+    # 线程池并发：Python牌局逻辑较重，worker 不宜直接打满 112，采用更高效区间
+    if int(getattr(args, 'train_workers', 0)) <= 0:
+        args.train_workers = min(48, max(24, cpu_total // 2))
+    if int(getattr(args, 'eval_workers', 0)) <= 0:
+        args.eval_workers = min(80, max(32, (cpu_total * 3) // 4))
+
+    # TensorFlow CPU 并行参数（仍会在 setup_environment 阶段统一设置）
+    if int(getattr(args, 'cpu_threads', 0)) <= 0:
+        args.cpu_threads = min(96, cpu_total)
+    if int(getattr(args, 'tf_inter_op_threads', 0)) <= 0:
+        args.tf_inter_op_threads = 8
+
+    # 训练并行批次策略：减少线程调度开销，提高 worker 有效工作占比
+    if int(getattr(args, 'train_rollouts_per_worker', 0)) <= 0:
+        args.train_rollouts_per_worker = 8
+    if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
+        args.train_sync_every_batches = 24
+
+    # PPO 更大轨迹累计与 mini-batch，提升 3090 利用率
+    if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
+        args.ppo_update_min_steps = 32768
+    if int(getattr(args, 'batch_size', 64)) <= 64:
+        args.batch_size = 512
+
+    # 默认优先走 GPU+XLA+混合精度（用户显式指定时仍可覆盖）
+    if getattr(args, 'device', 'auto') == 'auto':
+        args.device = 'gpu'
+    args.mixed_precision = True
+    args.enable_xla = True
+    args.gpu_memory_growth = True
 
 def parse_arguments():
     """
@@ -56,6 +105,15 @@ def parse_arguments():
     # 模式选择
     parser.add_argument('--mode', type=str, choices=['train', 'eval', 'demo'],
                         default='train', help='运行模式: train(训练), eval(评估), demo(演示)')
+    parser.add_argument('--hardware-profile', type=str, default='auto',
+                        choices=['auto', 'rtx3090_112cpu'],
+                        help='硬件优化档位: auto 或 rtx3090_112cpu')
+    parser.add_argument('--auto-tune', action='store_true',
+                        help='训练前短跑多组参数，自动选择吞吐最高配置（推荐PPO）')
+    parser.add_argument('--auto-tune-hands', type=int, default=4000,
+                        help='自动调参每组短跑手数')
+    parser.add_argument('--auto-tune-max-candidates', type=int, default=3,
+                        help='自动调参最多测试候选组数')
     
     # 模型参数
     parser.add_argument('--model-type', type=str, choices=['dqn', 'policy_gradient', 'ppo'],
@@ -73,20 +131,40 @@ def parse_arguments():
     parser.add_argument('--ppo-clip', type=float, default=0.2, help='PPO clip_epsilon')
     parser.add_argument('--ppo-epochs', type=int, default=10, help='PPO 每批轨迹更新轮次')
     parser.add_argument('--ppo-entropy-coef', type=float, default=0.02, help='PPO 熵正则系数，越大越鼓励探索')
+    parser.add_argument('--ppo-update-min-steps', type=int, default=0,
+                        help='PPO累计多少步再做一次更新（<=0 自动，能提升GPU吞吐）')
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamax', 'rmsprop', 'sgd'], help='优化器类型')
     parser.add_argument('--eval-interval', type=int, default=200, help='评估间隔（局数）')
     parser.add_argument('--checkpoint-interval', type=int, default=1000, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
-    parser.add_argument('--eval-workers', type=int, default=8, help='评估并行worker数量（建议8或16）')
-    parser.add_argument('--train-workers', type=int, default=1, help='训练采样并行worker数量（PPO建议先试4/8）')
+    parser.add_argument('--eval-workers', type=int, default=0, help='评估并行worker数量（<=0 自动按CPU核数推断）')
+    parser.add_argument('--train-workers', type=int, default=0, help='训练采样并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--skip-final-eval', action='store_true', help='训练结束后跳过最终评估（加速）')
     parser.add_argument('--allin-unlucky-eq-threshold', type=float, default=0.65,
                         help='all-in 不走运补偿触发阈值（翻牌前/翻牌，若估计胜率高于该值但输掉则补偿）')
     parser.add_argument('--allin-unlucky-bonus-cap', type=float, default=0.80,
                         help='all-in 不走运补偿上限')
-    parser.add_argument('--cpu-threads', type=int, default=8, help='TensorFlow intra-op 线程数（建议8或16）')
-    parser.add_argument('--tf-inter-op-threads', type=int, default=2, help='TensorFlow inter-op 线程数')
+    parser.add_argument('--cpu-threads', type=int, default=0, help='TensorFlow intra-op 线程数（<=0 自动按CPU核数）')
+    parser.add_argument('--tf-inter-op-threads', type=int, default=0, help='TensorFlow inter-op 线程数（<=0 自动）')
+    parser.add_argument('--train-rollouts-per-worker', type=int, default=0,
+                        help='每个训练worker单次提交的局数（<=0 自动，提升CPU利用率）')
+    parser.add_argument('--train-sync-every-batches', type=int, default=0,
+                        help='每隔多少并行批次同步一次权重到worker（<=0 自动）')
+    parser.add_argument('--dqn-replay-updates-per-hand', type=int, default=0,
+                        help='DQN每手牌回放更新次数（<=0 自动）')
+    parser.add_argument('--device', type=str, default='auto', choices=['auto', 'gpu', 'cpu'],
+                        help='训练设备偏好: auto/gpu/cpu')
+    parser.add_argument('--mixed-precision', action='store_true', default=True,
+                        help='启用混合精度（GPU上通常更快）')
+    parser.add_argument('--no-mixed-precision', action='store_false', dest='mixed_precision',
+                        help='禁用混合精度')
+    parser.add_argument('--enable-xla', action='store_true', default=True, help='启用 TensorFlow XLA JIT')
+    parser.add_argument('--disable-xla', action='store_false', dest='enable_xla', help='禁用 TensorFlow XLA JIT')
+    parser.add_argument('--gpu-memory-growth', action='store_true', default=True,
+                        help='启用GPU按需分配显存')
+    parser.add_argument('--no-gpu-memory-growth', action='store_false', dest='gpu_memory_growth',
+                        help='禁用GPU按需分配显存')
     
     # 游戏参数
     parser.add_argument('--small-blind', type=int, default=5, help='小盲注')
@@ -133,9 +211,13 @@ def setup_environment(args):
             handler.setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
     
+    args.train_workers = _resolve_auto_workers(getattr(args, 'train_workers', 0), reserved_cores=2)
+    args.eval_workers = _resolve_auto_workers(getattr(args, 'eval_workers', 0), reserved_cores=1)
+
     # 记录硬件使用情况与并行配置
     try:
         import tensorflow as tf
+        from tensorflow.keras import mixed_precision
         logical_cores = os.cpu_count()
         if hasattr(os, "sched_getaffinity"):
             available_cores = len(os.sched_getaffinity(0))
@@ -143,19 +225,65 @@ def setup_environment(args):
             available_cores = logical_cores
 
         # 线程并行配置（在创建图/执行前设置）
-        intra_threads = max(1, int(getattr(args, 'cpu_threads', 8)))
-        inter_threads = max(1, int(getattr(args, 'tf_inter_op_threads', 2)))
+        requested_intra = int(getattr(args, 'cpu_threads', 0))
+        requested_inter = int(getattr(args, 'tf_inter_op_threads', 0))
+        intra_threads = requested_intra if requested_intra > 0 else max(1, int(available_cores))
+        inter_threads = (
+            requested_inter if requested_inter > 0
+            else max(1, min(8, intra_threads // 4))
+        )
         tf.config.threading.set_intra_op_parallelism_threads(intra_threads)
         tf.config.threading.set_inter_op_parallelism_threads(inter_threads)
 
         gpus = tf.config.list_physical_devices('GPU')
         cpus = tf.config.list_physical_devices('CPU')
+        has_gpu = len(gpus) > 0
+        if args.device == 'cpu':
+            try:
+                tf.config.set_visible_devices([], 'GPU')
+                gpus = []
+                has_gpu = False
+            except Exception as _e:
+                logger.warning(f"切换到CPU模式失败，将继续使用默认设备: {_e}")
+        elif args.device == 'gpu' and not has_gpu:
+            logger.warning("指定了 --device gpu，但未检测到可用GPU，将回退到CPU")
+
+        if has_gpu and getattr(args, 'gpu_memory_growth', True):
+            for gpu in gpus:
+                try:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+                except Exception as _e:
+                    logger.warning(f"设置GPU显存按需增长失败({gpu.name}): {_e}")
+
+        if has_gpu and getattr(args, 'mixed_precision', True):
+            mixed_precision.set_global_policy('mixed_float16')
+            logger.info("已启用 mixed precision: mixed_float16")
+        else:
+            mixed_precision.set_global_policy('float32')
+            logger.info("mixed precision 已禁用，使用 float32")
+
+        if getattr(args, 'enable_xla', True):
+            tf.config.optimizer.set_jit(True)
+            logger.info("已启用 XLA JIT")
+        else:
+            tf.config.optimizer.set_jit(False)
+            logger.info("XLA JIT 已禁用")
+
         logger.info(f"TensorFlow版本: {tf.__version__}")
         logger.info(
             f"DEBUG: 平台={platform.system()}, 逻辑核心数={logical_cores}, "
             f"进程可用核心数={available_cores}"
         )
         logger.info(f"并行配置: TF intra_op={intra_threads}, inter_op={inter_threads}")
+        logger.info(f"并行配置: train_workers={args.train_workers}, eval_workers={args.eval_workers}")
+        logger.info(
+            f"并行配置: train_rollouts_per_worker={getattr(args, 'train_rollouts_per_worker', 0)}, "
+            f"train_sync_every_batches={getattr(args, 'train_sync_every_batches', 0)}"
+        )
+        logger.info(
+            f"PPO配置: batch_size={getattr(args, 'batch_size', 64)}, "
+            f"ppo_update_min_steps={getattr(args, 'ppo_update_min_steps', 0)}"
+        )
         logger.info(f"可用GPU数量: {len(gpus)}")
         for i, gpu in enumerate(gpus):
             logger.info(f"GPU {i}: {gpu.name}")
@@ -180,59 +308,140 @@ def train_model(args):
     start_time = time.time()
     
     try:
-        # 创建训练器
-        trainer = SelfPlayTrainer(
-            model_type=args.model_type,
-            checkpoint_dir=args.checkpoint_dir,
-            small_blind=args.small_blind,
-            big_blind=args.big_blind,
-            initial_stack=args.initial_stack,
-            num_players=args.num_players,
-            eval_interval=args.eval_interval,
-            checkpoint_interval=args.checkpoint_interval,
-            num_eval_games=args.num_eval_games,
-            use_ensemble=args.use_ensemble,
-            opponent_update_interval=args.opponent_update_interval,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch_size,
-            optimizer=args.optimizer,
-            target_update_freq=args.target_update,
-            ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
-            ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
-            ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
-            skip_final_eval=getattr(args, 'skip_final_eval', False),
-            allin_unlucky_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
-            allin_unlucky_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
-            eval_workers=getattr(args, 'eval_workers', 1),
-            train_workers=getattr(args, 'train_workers', 1),
-        )
+        from poker_ai.reward.self_play_trainer import SelfPlayTrainer
+        
+        def _create_trainer(override: dict = None, tuning_mode: bool = False):
+            ov = override or {}
+            return SelfPlayTrainer(
+                model_type=args.model_type,
+                checkpoint_dir=args.checkpoint_dir,
+                small_blind=args.small_blind,
+                big_blind=args.big_blind,
+                initial_stack=args.initial_stack,
+                num_players=args.num_players,
+                eval_interval=ov.get('eval_interval', args.eval_interval),
+                checkpoint_interval=ov.get('checkpoint_interval', args.checkpoint_interval),
+                num_eval_games=ov.get('num_eval_games', args.num_eval_games),
+                use_ensemble=args.use_ensemble,
+                opponent_update_interval=ov.get('opponent_update_interval', args.opponent_update_interval),
+                learning_rate=args.learning_rate,
+                batch_size=ov.get('batch_size', args.batch_size),
+                optimizer=args.optimizer,
+                target_update_freq=args.target_update,
+                ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
+                ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
+                ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
+                ppo_update_min_steps=ov.get('ppo_update_min_steps', getattr(args, 'ppo_update_min_steps', 0)),
+                train_rollouts_per_worker=ov.get('train_rollouts_per_worker', getattr(args, 'train_rollouts_per_worker', 0)),
+                train_sync_every_batches=ov.get('train_sync_every_batches', getattr(args, 'train_sync_every_batches', 0)),
+                dqn_replay_updates_per_hand=ov.get('dqn_replay_updates_per_hand', getattr(args, 'dqn_replay_updates_per_hand', 0)),
+                tuning_mode=tuning_mode,
+                skip_final_eval=getattr(args, 'skip_final_eval', False),
+                allin_unlucky_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
+                allin_unlucky_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
+                eval_workers=ov.get('eval_workers', getattr(args, 'eval_workers', 1)),
+                train_workers=ov.get('train_workers', getattr(args, 'train_workers', 1)),
+            )
+
+        def _configure_exploration(trainer_obj):
+            if hasattr(trainer_obj, 'main_agent') and trainer_obj.main_agent:
+                if hasattr(trainer_obj.main_agent, 'set_epsilon'):
+                    trainer_obj.main_agent.set_epsilon(
+                        value=args.eps_start,
+                        min_value=args.eps_end,
+                        decay_rate=args.eps_decay
+                    )
+                elif hasattr(trainer_obj.main_agent, 'agent'):
+                    if hasattr(trainer_obj.main_agent.agent, 'epsilon'):
+                        trainer_obj.main_agent.agent.epsilon = args.eps_start
+                    if hasattr(trainer_obj.main_agent.agent, 'epsilon_min'):
+                        trainer_obj.main_agent.agent.epsilon_min = args.eps_end
+                    if hasattr(trainer_obj.main_agent.agent, 'epsilon_decay'):
+                        trainer_obj.main_agent.agent.epsilon_decay = args.eps_decay
+                    logger.info(
+                        f"已通过直接访问设置探索参数: eps_start={args.eps_start}, "
+                        f"eps_end={args.eps_end}, eps_decay={args.eps_decay}"
+                    )
+            if hasattr(trainer_obj, 'opponent_update_interval'):
+                trainer_obj.opponent_update_interval = args.opponent_update_interval
+
+        # 自动调参：短跑多组候选，按 hands/s 选最优
+        if getattr(args, 'auto_tune', False) and args.model_type == 'ppo':
+            cpu_total = os.cpu_count() or 32
+            candidate_pool = [
+                {
+                    'train_workers': max(8, min(getattr(args, 'train_workers', 16), 24)),
+                    'train_rollouts_per_worker': max(4, int(getattr(args, 'train_rollouts_per_worker', 4))),
+                    'train_sync_every_batches': max(8, int(getattr(args, 'train_sync_every_batches', 8))),
+                    'batch_size': max(256, int(getattr(args, 'batch_size', 256))),
+                    'ppo_update_min_steps': max(8192, int(getattr(args, 'ppo_update_min_steps', 8192))),
+                },
+                {
+                    'train_workers': max(16, min(cpu_total // 3, 36)),
+                    'train_rollouts_per_worker': 8,
+                    'train_sync_every_batches': 16,
+                    'batch_size': 512,
+                    'ppo_update_min_steps': 16384,
+                },
+                {
+                    'train_workers': max(24, min(cpu_total // 2, 48)),
+                    'train_rollouts_per_worker': 8,
+                    'train_sync_every_batches': 24,
+                    'batch_size': 512,
+                    'ppo_update_min_steps': 32768,
+                },
+                {
+                    'train_workers': max(32, min((cpu_total * 2) // 3, 64)),
+                    'train_rollouts_per_worker': 12,
+                    'train_sync_every_batches': 32,
+                    'batch_size': 768,
+                    'ppo_update_min_steps': 65536,
+                },
+            ]
+
+            max_candidates = max(1, int(getattr(args, 'auto_tune_max_candidates', 3)))
+            candidates = candidate_pool[:max_candidates]
+            warmup_hands = max(500, int(getattr(args, 'auto_tune_hands', 4000)))
+            logger.info(f"自动调参启动: candidates={len(candidates)}, warmup_hands={warmup_hands}")
+
+            best_idx = -1
+            best_hps = -1.0
+            for i, cand in enumerate(candidates, start=1):
+                logger.info(f"[AutoTune] 候选 {i}/{len(candidates)}: {cand}")
+                tune_override = copy.deepcopy(cand)
+                tune_override['eval_interval'] = 10**9
+                tune_override['checkpoint_interval'] = 10**9
+                tune_override['opponent_update_interval'] = 10**9
+                tune_override['num_eval_games'] = 1
+                t0 = time.perf_counter()
+                tune_trainer = _create_trainer(override=tune_override, tuning_mode=True)
+                _configure_exploration(tune_trainer)
+                tune_trainer.train(warmup_hands)
+                elapsed = max(1e-6, time.perf_counter() - t0)
+                hps = warmup_hands / elapsed
+                logger.info(
+                    f"[AutoTune] 候选{i}结果: hands/s={hps:.2f}, elapsed={elapsed:.2f}s"
+                )
+                if hps > best_hps:
+                    best_hps = hps
+                    best_idx = i - 1
+
+            best = candidates[best_idx]
+            args.train_workers = best['train_workers']
+            args.train_rollouts_per_worker = best['train_rollouts_per_worker']
+            args.train_sync_every_batches = best['train_sync_every_batches']
+            args.batch_size = best['batch_size']
+            args.ppo_update_min_steps = best['ppo_update_min_steps']
+            logger.info(f"[AutoTune] 选择最优候选: #{best_idx + 1}, hands/s={best_hps:.2f}, config={best}")
+
+        # 创建正式训练器
+        trainer = _create_trainer()
         
         # 如果启用详细日志，更新日志级别
         if args.verbose:
             logger.setLevel(logging.DEBUG)
             
-        # 设置探索参数 - 使用增强的set_epsilon方法
-        if hasattr(trainer, 'main_agent') and trainer.main_agent:
-            # 使用增强的set_epsilon方法一次性设置所有探索参数
-            if hasattr(trainer.main_agent, 'set_epsilon'):
-                trainer.main_agent.set_epsilon(
-                    value=args.eps_start,
-                    min_value=args.eps_end,
-                    decay_rate=args.eps_decay
-                )
-            # 直接设置代理内部参数（作为后备）
-            elif hasattr(trainer.main_agent, 'agent'):
-                if hasattr(trainer.main_agent.agent, 'epsilon'):
-                    trainer.main_agent.agent.epsilon = args.eps_start
-                if hasattr(trainer.main_agent.agent, 'epsilon_min'):
-                    trainer.main_agent.agent.epsilon_min = args.eps_end
-                if hasattr(trainer.main_agent.agent, 'epsilon_decay'):
-                    trainer.main_agent.agent.epsilon_decay = args.eps_decay
-                logger.info(f"已通过直接访问设置探索参数: eps_start={args.eps_start}, eps_end={args.eps_end}, eps_decay={args.eps_decay}")
-        
-        # 设置对手更新间隔
-        if hasattr(trainer, 'opponent_update_interval'):
-            trainer.opponent_update_interval = args.opponent_update_interval
+        _configure_exploration(trainer)
         
         # 如果指定了模型路径或需要恢复训练
         if args.model_path:
@@ -280,6 +489,7 @@ def evaluate_model(args):
     """
     logger.info("开始评估德州扑克AI模型")
     
+    from poker_ai.reward.self_play_trainer import SelfPlayTrainer
     trainer = SelfPlayTrainer(
         model_type=args.model_type,
         checkpoint_dir=args.checkpoint_dir,
@@ -295,6 +505,10 @@ def evaluate_model(args):
         ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
         ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
         ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
+        ppo_update_min_steps=getattr(args, 'ppo_update_min_steps', 0),
+        train_rollouts_per_worker=getattr(args, 'train_rollouts_per_worker', 0),
+        train_sync_every_batches=getattr(args, 'train_sync_every_batches', 0),
+        dqn_replay_updates_per_hand=getattr(args, 'dqn_replay_updates_per_hand', 0),
         eval_workers=getattr(args, 'eval_workers', 1),
         train_workers=getattr(args, 'train_workers', 1),
     )
@@ -341,6 +555,9 @@ def run_demo(args):
         return False
     
     try:
+        from poker_ai.advisor.ai_advisor import AIAvisor
+        from poker_ai.game.poker_game import PokerGame, Player
+        from poker_ai.model.ai_agent import PokerAIAgent
         # 创建AI代理
         agent = PokerAIAgent(agent_type=args.model_type)
         
@@ -551,6 +768,7 @@ def main():
     try:
         # 解析命令行参数
         args = parse_arguments()
+        _apply_hardware_profile(args)
         
         # 设置环境
         setup_environment(args)

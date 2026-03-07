@@ -58,6 +58,58 @@ class PPOModel:
         self.actor_optimizer = Adam(learning_rate=lr_val)
         self.critic_optimizer = Adam(learning_rate=lr_val)
 
+    @tf.function(reduce_retracing=True)
+    def _ppo_update_step(
+        self,
+        batch_states: tf.Tensor,
+        batch_actions: tf.Tensor,
+        batch_old_probs: tf.Tensor,
+        batch_advantages: tf.Tensor,
+        batch_returns: tf.Tensor,
+        batch_mask: tf.Tensor,
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
+        """单个 PPO mini-batch 更新（编译后执行，降低 Python 调度开销）。"""
+        # 更新策略网络（Actor）
+        with tf.GradientTape() as actor_tape:
+            batch_action_probs = self.actor(batch_states, training=True)
+            action_masks = tf.one_hot(batch_actions, self.output_dim)
+            batch_current_probs = tf.reduce_sum(batch_action_probs * action_masks, axis=1)
+            ratio = batch_current_probs / (batch_old_probs + 1e-8)
+            clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
+            per_sample = tf.minimum(ratio * batch_advantages, clipped_ratio * batch_advantages)
+            policy_loss = -tf.reduce_sum(per_sample * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
+
+            # 熵正则：抑制策略过早塌缩
+            entropy = -tf.reduce_sum(batch_action_probs * tf.math.log(batch_action_probs + 1e-8), axis=1)
+            entropy_loss = -tf.reduce_sum(entropy * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
+            actor_loss = policy_loss + self.entropy_coef * entropy_loss
+
+        actor_grads = actor_tape.gradient(actor_loss, self.actor.trainable_variables)
+        actor_grads = [
+            tf.clip_by_norm(grad, self.max_grad_norm) if grad is not None else None
+            for grad in actor_grads
+        ]
+        self.actor_optimizer.apply_gradients(
+            [(g, v) for g, v in zip(actor_grads, self.actor.trainable_variables) if g is not None]
+        )
+
+        # 更新价值网络（Critic）
+        with tf.GradientTape() as critic_tape:
+            batch_values = self.critic(batch_states, training=True)
+            sq = tf.square(batch_values - batch_returns[:, None])
+            critic_loss = tf.reduce_sum(sq * batch_mask[:, None]) / (tf.reduce_sum(batch_mask) + 1e-8)
+
+        critic_grads = critic_tape.gradient(critic_loss, self.critic.trainable_variables)
+        critic_grads = [
+            tf.clip_by_norm(grad, self.max_grad_norm) if grad is not None else None
+            for grad in critic_grads
+        ]
+        self.critic_optimizer.apply_gradients(
+            [(g, v) for g, v in zip(critic_grads, self.critic.trainable_variables) if g is not None]
+        )
+
+        return actor_loss, critic_loss
+
     def _build_actor(self) -> models.Model:
         """构建策略网络：输出动作概率分布"""
         inputs = layers.Input(shape=(self.input_dim,))
@@ -278,46 +330,17 @@ class PPOModel:
                 batch_returns = tf.convert_to_tensor(batch_returns_np, dtype=tf.float32)
                 batch_mask = tf.convert_to_tensor(mask, dtype=tf.float32)
 
-                # 更新策略网络（Actor），用 mask 忽略填充样本
-                with tf.GradientTape() as tape:
-                    batch_action_probs = self.actor(batch_states)
-                    action_masks = tf.one_hot(batch_actions, self.output_dim)
-                    batch_current_probs = tf.reduce_sum(
-                        batch_action_probs * action_masks, axis=1
-                    )
-                    ratio = batch_current_probs / (batch_old_probs + 1e-8)
-                    clipped_ratio = tf.clip_by_value(
-                        ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon
-                    )
-                    per_sample = tf.minimum(ratio * batch_advantages, clipped_ratio * batch_advantages)
-                    policy_loss = -tf.reduce_sum(per_sample * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
-                    # 熵正则：抑制策略过早塌缩到单一动作（如全弃牌）
-                    entropy = -tf.reduce_sum(
-                        batch_action_probs * tf.math.log(batch_action_probs + 1e-8), axis=1
-                    )
-                    entropy_loss = -tf.reduce_sum(entropy * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
-                    actor_loss = policy_loss + self.entropy_coef * entropy_loss
-
-                actor_grads = tape.gradient(actor_loss, self.actor.trainable_variables)
-                actor_grads = [tf.clip_by_norm(grad, self.max_grad_norm) for grad in actor_grads]
-                self.actor_optimizer.apply_gradients(
-                    zip(actor_grads, self.actor.trainable_variables)
+                actor_loss, critic_loss = self._ppo_update_step(
+                    batch_states,
+                    batch_actions,
+                    batch_old_probs,
+                    batch_advantages,
+                    batch_returns,
+                    batch_mask,
                 )
 
-                # 更新价值网络（Critic），用 mask 忽略填充样本
-                with tf.GradientTape() as tape:
-                    batch_values = self.critic(batch_states)
-                    sq = tf.square(batch_values - batch_returns[:, None])
-                    critic_loss = tf.reduce_sum(sq * batch_mask[:, None]) / (tf.reduce_sum(batch_mask) + 1e-8)
-
-                critic_grads = tape.gradient(critic_loss, self.critic.trainable_variables)
-                critic_grads = [tf.clip_by_norm(grad, self.max_grad_norm) for grad in critic_grads]
-                self.critic_optimizer.apply_gradients(
-                    zip(critic_grads, self.critic.trainable_variables)
-                )
-
-                total_actor_loss += actor_loss.numpy()
-                total_critic_loss += critic_loss.numpy()
+                total_actor_loss += float(actor_loss.numpy())
+                total_critic_loss += float(critic_loss.numpy())
                 num_batches_done += 1
 
         num_batches_done = max(num_batches_done, 1)
