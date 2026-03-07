@@ -52,8 +52,10 @@ class DQNAgent:
         self.optimizer = self._get_optimizer()
         
         # 创建主网络和目标网络
-        self.model = self._build_model()
-        self.target_model = self._build_model()
+        # 注意：mixed precision 下，同一个 optimizer 不能被重复 wrap。
+        # target_model 仅用于推理目标 Q，不参与训练，因此不需要 compile。
+        self.model = self._build_model(compile_model=True)
+        self.target_model = self._build_model(compile_model=False)
         self.update_target_model() 
         
         self.state_rep = StateRepresentation()
@@ -95,7 +97,7 @@ class DQNAgent:
         self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
         return loss
 
-    def _build_model(self) -> Model:
+    def _build_model(self, compile_model: bool = True) -> Model:
         model = Sequential([
             Input(shape=(self.state_dim,)),
             Dense(512, activation='relu'),
@@ -105,7 +107,8 @@ class DQNAgent:
             Dense(64, activation='relu'),
             Dense(self.action_dim, activation='linear')
         ])
-        model.compile(optimizer=self.optimizer, loss='mse') 
+        if compile_model:
+            model.compile(optimizer=self.optimizer, loss='mse')
         return model
     
     def update_target_model(self) -> None:
