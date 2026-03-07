@@ -72,16 +72,22 @@ class PPOModel:
         # 更新策略网络（Actor）
         with tf.GradientTape() as actor_tape:
             batch_action_probs = self.actor(batch_states, training=True)
-            action_masks = tf.one_hot(batch_actions, self.output_dim)
-            batch_current_probs = tf.reduce_sum(batch_action_probs * action_masks, axis=1)
-            ratio = batch_current_probs / (batch_old_probs + 1e-8)
+            # mixed precision 下模型输出可能是 float16，损失计算统一转 float32
+            probs_f32 = tf.cast(batch_action_probs, tf.float32)
+            action_masks = tf.cast(tf.one_hot(batch_actions, self.output_dim), tf.float32)
+            old_probs_f32 = tf.cast(batch_old_probs, tf.float32)
+            advantages_f32 = tf.cast(batch_advantages, tf.float32)
+            mask_f32 = tf.cast(batch_mask, tf.float32)
+
+            batch_current_probs = tf.reduce_sum(probs_f32 * action_masks, axis=1)
+            ratio = batch_current_probs / (old_probs_f32 + 1e-8)
             clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
-            per_sample = tf.minimum(ratio * batch_advantages, clipped_ratio * batch_advantages)
-            policy_loss = -tf.reduce_sum(per_sample * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
+            per_sample = tf.minimum(ratio * advantages_f32, clipped_ratio * advantages_f32)
+            policy_loss = -tf.reduce_sum(per_sample * mask_f32) / (tf.reduce_sum(mask_f32) + 1e-8)
 
             # 熵正则：抑制策略过早塌缩
-            entropy = -tf.reduce_sum(batch_action_probs * tf.math.log(batch_action_probs + 1e-8), axis=1)
-            entropy_loss = -tf.reduce_sum(entropy * batch_mask) / (tf.reduce_sum(batch_mask) + 1e-8)
+            entropy = -tf.reduce_sum(probs_f32 * tf.math.log(probs_f32 + 1e-8), axis=1)
+            entropy_loss = -tf.reduce_sum(entropy * mask_f32) / (tf.reduce_sum(mask_f32) + 1e-8)
             actor_loss = policy_loss + self.entropy_coef * entropy_loss
 
         actor_grads = actor_tape.gradient(actor_loss, self.actor.trainable_variables)
@@ -96,8 +102,11 @@ class PPOModel:
         # 更新价值网络（Critic）
         with tf.GradientTape() as critic_tape:
             batch_values = self.critic(batch_states, training=True)
-            sq = tf.square(batch_values - batch_returns[:, None])
-            critic_loss = tf.reduce_sum(sq * batch_mask[:, None]) / (tf.reduce_sum(batch_mask) + 1e-8)
+            values_f32 = tf.cast(batch_values, tf.float32)
+            returns_f32 = tf.cast(batch_returns, tf.float32)
+            mask_f32 = tf.cast(batch_mask, tf.float32)
+            sq = tf.square(values_f32 - returns_f32[:, None])
+            critic_loss = tf.reduce_sum(sq * mask_f32[:, None]) / (tf.reduce_sum(mask_f32) + 1e-8)
 
         critic_grads = critic_tape.gradient(critic_loss, self.critic.trainable_variables)
         critic_grads = [

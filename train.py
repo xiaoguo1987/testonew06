@@ -402,6 +402,13 @@ def train_model(args):
             max_candidates = max(1, int(getattr(args, 'auto_tune_max_candidates', 3)))
             candidates = candidate_pool[:max_candidates]
             warmup_hands = max(500, int(getattr(args, 'auto_tune_hands', 4000)))
+            # 小规模测试时，自动调参不应吞掉大部分预算
+            if args.num_hands <= warmup_hands * 2:
+                warmup_hands = max(200, args.num_hands // 4)
+                logger.info(
+                    f"[AutoTune] 检测到小规模训练(num_hands={args.num_hands})，"
+                    f"自动将 warmup_hands 调整为 {warmup_hands}"
+                )
             logger.info(f"自动调参启动: candidates={len(candidates)}, warmup_hands={warmup_hands}")
 
             best_idx = -1
