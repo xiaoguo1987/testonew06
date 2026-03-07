@@ -147,6 +147,7 @@ class SelfPlayTrainer:
         self.best_invalid_bet_threshold = 0.15
         self.best_score_window = 3
         self._opponents_version = 0
+        self._last_regular_checkpoint_hands = None
         # all-in 不走运补偿统计（用于监控补偿是否过量）
         self.allin_unlucky_trigger_count = 0
         self.allin_unlucky_bonus_total = 0.0
@@ -394,7 +395,13 @@ class SelfPlayTrainer:
             'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
             'winners': winners,
             'player_profits': {p.name: p.stack - self.initial_stack for p in players},
-            'action_histories': action_records
+            'action_histories': action_records,
+            'metrics': self._count_episode_metrics(
+                players[0],
+                game,
+                action_records.get("Main_AI", []),
+                lightweight=False
+            )
         }
         return result
 
@@ -557,6 +564,12 @@ class SelfPlayTrainer:
             'winners': winners,
             'player_profits': {p.name: p.stack - self.initial_stack for p in players},
             'action_histories': action_records,
+            'metrics': self._count_episode_metrics(
+                players[0],
+                game,
+                action_records.get("Main_AI", []),
+                lightweight=False
+            ),
         }
         return result, trajectory
 
@@ -613,6 +626,12 @@ class SelfPlayTrainer:
             'winners': winners,
             'player_profits': {p.name: p.stack - self.initial_stack for p in players},
             'action_histories': action_records,
+            'metrics': self._count_episode_metrics(
+                players[0],
+                game,
+                action_records.get("Main_AI", []),
+                lightweight=False
+            ),
         }
 
     def _clone_opponents_for_inference(self) -> List["PokerAIAgent"]:
@@ -645,7 +664,15 @@ class SelfPlayTrainer:
     def evaluate(self) -> Dict:
         """评估模型性能"""
         logger.info(f"开始评估，共{self.num_eval_games}局")
-        logger.info(f"评估并行配置: workers={self.eval_workers}")
+        cpu_total = os.cpu_count() or 8
+        effective_eval_workers = max(
+            1,
+            min(self.eval_workers, self.num_eval_games, max(1, min(24, cpu_total // 4)))
+        )
+        logger.info(
+            f"评估并行配置: workers={effective_eval_workers} "
+            f"(requested={self.eval_workers})"
+        )
         total_profit = 0
         wins = 0
         eval_bluffs = 0
@@ -656,9 +683,6 @@ class SelfPlayTrainer:
         eval_local = threading.local()
 
         def _run_single_eval_game(eval_idx: int) -> Dict:
-            # 每10局评估记录一次进度
-            if (eval_idx + 1) % 10 == 0:
-                logger.debug(f"评估进度: {eval_idx + 1}/{self.num_eval_games} 局")
             if not hasattr(eval_local, 'main_agent'):
                 if hasattr(self.main_agent, 'clone_for_inference'):
                     eval_local.main_agent = self.main_agent.clone_for_inference()
@@ -674,22 +698,20 @@ class SelfPlayTrainer:
             )
             hand_profit = result['player_profits']['Main_AI']
             hand_win = 1 if 'Main_AI' in result.get('winners', []) else 0
-            main_actions = result['action_histories']['Main_AI']
-            if main_actions:
-                metrics = self._count_episode_metrics(players[0], game, main_actions)
-            else:
-                metrics = {'bluffs': 0, 'aggressive': 0, 'raises': 0, 'invalid_bets': 0}
             return {
                 'profit': hand_profit,
                 'win': hand_win,
-                'metrics': metrics,
+                'metrics': result.get(
+                    'metrics',
+                    {'bluffs': 0, 'aggressive': 0, 'raises': 0, 'invalid_bets': 0}
+                ),
                 'worker_tid': threading.get_ident()
             }
 
-        if self.eval_workers > 1:
+        if effective_eval_workers > 1:
             worker_tids = set()
-            with ThreadPoolExecutor(max_workers=self.eval_workers) as executor:
-                for item in executor.map(_run_single_eval_game, range(self.num_eval_games)):
+            with ThreadPoolExecutor(max_workers=effective_eval_workers) as executor:
+                for idx, item in enumerate(executor.map(_run_single_eval_game, range(self.num_eval_games)), start=1):
                     total_profit += item['profit']
                     wins += item['win']
                     eval_bluffs += item['metrics']['bluffs']
@@ -697,9 +719,11 @@ class SelfPlayTrainer:
                     eval_raises += item['metrics']['raises']
                     eval_invalid_bets += item['metrics']['invalid_bets']
                     worker_tids.add(item['worker_tid'])
+                    if idx % 10 == 0 or idx == self.num_eval_games:
+                        logger.info(f"评估进度: {idx}/{self.num_eval_games} 局")
             logger.info(
                 f"评估并行生效检查: 实际线程数={len(worker_tids)}, "
-                f"配置线程数={self.eval_workers}"
+                f"配置线程数={effective_eval_workers}"
             )
         else:
             for eval_idx in range(self.num_eval_games):
@@ -710,6 +734,8 @@ class SelfPlayTrainer:
                 eval_aggressive += item['metrics']['aggressive']
                 eval_raises += item['metrics']['raises']
                 eval_invalid_bets += item['metrics']['invalid_bets']
+                if (eval_idx + 1) % 10 == 0 or (eval_idx + 1) == self.num_eval_games:
+                    logger.info(f"评估进度: {eval_idx + 1}/{self.num_eval_games} 局")
 
         avg_profit = total_profit / self.num_eval_games
         win_rate = wins / self.num_eval_games
@@ -789,10 +815,14 @@ class SelfPlayTrainer:
                 with open(state_path, 'wb') as f:
                     pickle.dump(metadata, f)
                 logger.info(f"保存 PPO 检查点: {base_name}.actor.weights.h5 / .critic.weights.h5")
+                if not is_best:
+                    self._last_regular_checkpoint_hands = self.total_hands
             else:
                 success = save_checkpoint(self.main_agent, filepath, metadata)
                 if success:
                     logger.info(f"保存检查点: {base_name}")
+                    if not is_best:
+                        self._last_regular_checkpoint_hands = self.total_hands
                 else:
                     self.main_agent.save_model(filepath)
                     state_path = filepath.replace('.pkl', '') + '_state.pkl'
@@ -801,6 +831,8 @@ class SelfPlayTrainer:
                     with open(state_path, 'wb') as f:
                         pickle.dump(metadata, f)
                     logger.info(f"使用后备方法保存检查点: {base_name}")
+                    if not is_best:
+                        self._last_regular_checkpoint_hands = self.total_hands
         except Exception as e:
             logger.error(f"保存检查点失败: {e}")
             logger.error(traceback.format_exc())
@@ -1055,14 +1087,8 @@ class SelfPlayTrainer:
                         self.allin_unlucky_bonus_total += float(au.get('bonus', 0))
                         self.allin_unlucky_equity_sum += float(au.get('equity', 0))
 
-                    main_actions = result.get('action_histories', {}).get('Main_AI', [])
-                    if main_actions:
-                        exact_metrics = (
-                            self.total_hands % self._exact_metrics_interval == 0
-                        )
-                        metrics = self._count_episode_metrics(
-                            None, None, main_actions, lightweight=not exact_metrics
-                        )
+                    metrics = result.get('metrics')
+                    if metrics:
                         self.total_bluff_attempts += metrics.get('bluffs', 0)
                         self.total_aggressive_actions += metrics.get('aggressive', 0)
                         self.total_raise_actions += metrics.get('raises', 0)
@@ -1135,7 +1161,10 @@ class SelfPlayTrainer:
         logger.info(f"训练完成！总手牌: {self.total_hands}")
         if hasattr(self.main_agent, 'flush_pending_updates'):
             self.main_agent.flush_pending_updates()
-        if not self.tuning_mode:
+        if (
+            (not self.tuning_mode)
+            and self._last_regular_checkpoint_hands != self.total_hands
+        ):
             self.save_checkpoint(is_best=False)
         if (not self.tuning_mode) and (not self.skip_final_eval):
             te0 = datetime.now().timestamp()
