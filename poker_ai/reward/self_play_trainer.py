@@ -1418,14 +1418,18 @@ class SelfPlayTrainer:
             and hasattr(self.main_agent, 'clone_for_inference')
         )
         agent_copies = []
+        worker_opp_copies = [None] * self.train_workers
+        worker_opp_versions = [-1] * self.train_workers
         if use_parallel:
             agent_copies = [
                 self.main_agent.clone_for_inference()
                 for _ in range(self.train_workers)
             ]
             self._sync_copies_from_main(agent_copies)
-        worker_opp_copies = [None] * self.train_workers
-        worker_opp_versions = [-1] * self.train_workers
+            # 在主线程预创建对手副本，避免在 worker 子线程中创建 TF 模型（TF 2.13+ 会报 shape 错乱）
+            for w in range(self.train_workers):
+                worker_opp_copies[w] = self._clone_opponents_for_inference()
+                worker_opp_versions[w] = self._opponents_version
 
         hand_idx = 0
         batch_counter = 0
@@ -1452,12 +1456,6 @@ class SelfPlayTrainer:
 
                     def run_one(task: Tuple[int, int]):
                         worker_idx, rollout_count = task
-                        if (
-                            worker_opp_copies[worker_idx] is None
-                            or worker_opp_versions[worker_idx] != self._opponents_version
-                        ):
-                            worker_opp_copies[worker_idx] = self._clone_opponents_for_inference()
-                            worker_opp_versions[worker_idx] = self._opponents_version
                         copy_agent = agent_copies[worker_idx]
                         return self._play_hands_collect_batched(
                             rollout_count,
@@ -1543,6 +1541,10 @@ class SelfPlayTrainer:
                     if (not self.tuning_mode) and self.total_hands % self.opponent_update_interval == 0:
                         logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
                         self.update_opponents()
+                        if use_parallel:
+                            for w in range(self.train_workers):
+                                worker_opp_copies[w] = self._clone_opponents_for_inference()
+                                worker_opp_versions[w] = self._opponents_version
 
                     if (not self.tuning_mode) and self.total_hands % self.checkpoint_interval == 0:
                         logger.info(f"保存检查点，当前手牌数: {self.total_hands}")
