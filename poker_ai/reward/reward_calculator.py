@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import threading
 from functools import lru_cache
 from typing import Dict, List, Tuple, Optional, Set
 from ..game.poker_game import PokerGame, Player
@@ -35,7 +36,22 @@ class RewardCalculator:
         
         # 蒙特卡洛模拟参数
         self.monte_carlo_iterations = 1000  # 模拟次数
-        self.player_last_state = {}  # 存储玩家上一轮状态（用于一致性判断）
+        # 并行训练时多个 worker 都会出现同名玩家（如 Main_AI）。
+        # 使用线程本地存储，避免不同 worker 之间互相覆盖/删除状态。
+        self._thread_local = threading.local()
+
+    def _get_player_state_store(self) -> Dict[int, Dict[str, float]]:
+        """获取当前线程的玩家状态表。"""
+        if not hasattr(self._thread_local, 'player_last_state'):
+            self._thread_local.player_last_state = {}
+        return self._thread_local.player_last_state
+
+    def _get_player_state_key(self, player: Player) -> int:
+        """
+        使用对象身份作为 key，而不是 player.name。
+        不同线程里的 Main_AI 名字相同，但对象不同。
+        """
+        return id(player)
 
     def calculate_hand_strength(self, player: Player, game: PokerGame) -> float:
         """估算手牌强度（0-1之间），含蒙特卡洛缓存优化"""
@@ -200,20 +216,24 @@ class RewardCalculator:
 
     def _update_player_last_state(self, player: Player, current_strength: float) -> None:
         """更新玩家上一轮状态（手牌强度+动作）"""
-        if player.name not in self.player_last_state:
-            self.player_last_state[player.name] = {
+        state_store = self._get_player_state_store()
+        player_key = self._get_player_state_key(player)
+        if player_key not in state_store:
+            state_store[player_key] = {
                 'hand_strength': current_strength,
                 'action': None
             }
         else:
-            self.player_last_state[player.name]['hand_strength'] = current_strength
+            state_store[player_key]['hand_strength'] = current_strength
 
     def _check_decision_consistency(self, player: Player, action: str, game: PokerGame) -> float:
         """检查决策一致性，返回奖励/惩罚值"""
-        if player.name not in self.player_last_state:
+        state_store = self._get_player_state_store()
+        player_key = self._get_player_state_key(player)
+        if player_key not in state_store:
             return 0.0
         
-        last_state = self.player_last_state[player.name]
+        last_state = state_store[player_key]
         last_action = last_state.get('action')
         last_strength = last_state.get('hand_strength', 0.0)
         current_strength = self.calculate_hand_strength(player, game)
@@ -230,7 +250,7 @@ class RewardCalculator:
             consistency_reward = 0.0
         
         # 更新当前动作到历史状态
-        self.player_last_state[player.name]['action'] = action
+        state_store[player_key]['action'] = action
         return consistency_reward
 
     def calculate_position_advantage(self, player: Player, game: PokerGame, action: str) -> float:
@@ -342,7 +362,8 @@ class RewardCalculator:
 
         # 重置玩家历史状态（局结束时）
         if done:
-            self.player_last_state.pop(player.name, None)
+            state_store = self._get_player_state_store()
+            state_store.pop(self._get_player_state_key(player), None)
 
         # 限制奖励范围
         return max(-2.0, min(2.0, total_reward))
