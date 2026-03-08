@@ -153,6 +153,97 @@ class PokerAIAgent:
 
         action, amount = self.agent.act(state, game, player)
         return action, amount, {'state': state}
+
+    def select_actions_batch_with_info(
+        self,
+        game_player_pairs,
+        precomputed_states: Optional[np.ndarray] = None,
+    ):
+        """
+        批量选择动作。
+        - PPO: 单次前向推理多局状态
+        - 其他模型: 退化为逐条调用，保持兼容
+        """
+        if not game_player_pairs:
+            return []
+
+        if self.agent_type != 'ppo':
+            results = []
+            for idx, (game, player) in enumerate(game_player_pairs):
+                state = None if precomputed_states is None else precomputed_states[idx]
+                if state is None:
+                    action, amount, info = self.select_action_with_info(game, player)
+                else:
+                    action, amount, info = self._select_action_with_state(game, player, state)
+                results.append((action, amount, info))
+            return results
+
+        if precomputed_states is None:
+            states = np.asarray(
+                [self.state_rep.get_state(game, player) for game, player in game_player_pairs],
+                dtype=np.float32,
+            )
+        else:
+            states = np.asarray(precomputed_states, dtype=np.float32)
+
+        action_probs_batch, values_batch = self.agent.predict_batch(states)
+        results = []
+        for idx, ((game, player), action_probs, value) in enumerate(
+            zip(game_player_pairs, action_probs_batch, values_batch)
+        ):
+            legal_mask = _get_legal_action_mask(game, player)
+            masked_probs = action_probs * legal_mask
+            prob_sum = float(np.sum(masked_probs))
+            if prob_sum <= 1e-8:
+                masked_probs = legal_mask / (np.sum(legal_mask) + 1e-8)
+            else:
+                masked_probs = masked_probs / prob_sum
+            action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
+            hand_strength = self.state_rep.calculate_hand_strength(player, game)
+            action_vector = np.zeros(len(action_probs), dtype=np.float32)
+            action_vector[action_idx] = 1.0
+            action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            info = {
+                'state': states[idx],
+                'action_idx': action_idx,
+                'old_prob': float(np.clip(masked_probs[action_idx], 1e-8, 1.0)),
+                'action_probabilities': masked_probs,
+                'state_value': float(value),
+            }
+            results.append((action, amount, info))
+        return results
+
+    def _select_action_with_state(
+        self,
+        game: PokerGame,
+        player: Player,
+        state: np.ndarray,
+    ) -> Tuple[str, Optional[int], Dict]:
+        """给批量路径复用的单状态版本，避免重复编码 state。"""
+        if self.agent_type == 'ppo':
+            action_probs, value = self.agent.predict(state)
+            legal_mask = _get_legal_action_mask(game, player)
+            masked_probs = action_probs * legal_mask
+            prob_sum = float(np.sum(masked_probs))
+            if prob_sum <= 1e-8:
+                masked_probs = legal_mask / (np.sum(legal_mask) + 1e-8)
+            else:
+                masked_probs = masked_probs / prob_sum
+            action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
+            hand_strength = self.state_rep.calculate_hand_strength(player, game)
+            action_vector = np.zeros(len(action_probs), dtype=np.float32)
+            action_vector[action_idx] = 1.0
+            action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            return action, amount, {
+                'state': state,
+                'action_idx': action_idx,
+                'old_prob': float(np.clip(masked_probs[action_idx], 1e-8, 1.0)),
+                'action_probabilities': masked_probs,
+                'state_value': float(value),
+            }
+
+        action, amount = self.agent.act(state, game, player)
+        return action, amount, {'state': state}
     
     def learn(self, reward: float, state: Optional[np.ndarray] = None, 
               action: Optional[int] = None, next_state: Optional[np.ndarray] = None, 

@@ -34,10 +34,26 @@ class Card:
         # 确保Card对象可以被哈希化，用于集合和字典键
         return hash((self.rank, self.suit))
 
+
+_CARD_CACHE = tuple(Card(rank, suit) for rank in RANKS for suit in SUITS)
+_CARD_CODE_LOOKUP = {
+    (card.rank, card.suit): idx for idx, card in enumerate(_CARD_CACHE)
+}
+
+
+def card_to_code(card: Card) -> int:
+    """将 Card 映射到稳定的整数编码（rank-major, suit-minor）。"""
+    return _CARD_CODE_LOOKUP[(card.rank, card.suit)]
+
+
+def code_to_card(code: int) -> Card:
+    """将整数编码映射回共享 Card 实例。"""
+    return _CARD_CACHE[int(code)]
+
 class Deck:
     """表示一副扑克牌"""
     def __init__(self):
-        self.cards = [Card(rank, suit) for suit in SUITS for rank in RANKS]
+        self.cards = list(range(len(_CARD_CACHE)))
         self.shuffle()
     
     def shuffle(self) -> None:
@@ -48,7 +64,13 @@ class Deck:
         """发一张牌"""
         if not self.cards:
             raise ValueError("牌堆已空")
-        return self.cards.pop()
+        return code_to_card(self.cards.pop())
+
+    def deal_code(self) -> int:
+        """直接发整数编码，供高性能环境路径使用。"""
+        if not self.cards:
+            raise ValueError("牌堆已空")
+        return int(self.cards.pop())
     
     def __len__(self) -> int:
         return len(self.cards)

@@ -170,6 +170,16 @@ class PPOModel:
         value = self.critic(state_t, training=False).numpy()
         return action_probs[0], value[0][0]
 
+    def predict_batch(self, states: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """批量预测动作概率和状态价值，供并行环境推理复用。"""
+        states = np.asarray(states, dtype=np.float32)
+        if states.ndim == 1:
+            states = np.expand_dims(states, axis=0)
+        state_t = tf.convert_to_tensor(states, dtype=tf.float32)
+        action_probs = self.actor(state_t, training=False).numpy()
+        values = self.critic(state_t, training=False).numpy().reshape(-1)
+        return action_probs, values
+
     def get_action(self, state: np.ndarray, epsilon: float = 0.0) -> Tuple[int, float]:
         """采样动作（PPO使用策略网络概率分布，epsilon参数保留仅用于兼容）"""
         action_probs, _ = self.predict(state)

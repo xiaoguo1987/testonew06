@@ -573,6 +573,361 @@ class SelfPlayTrainer:
         }
         return result, trajectory
 
+    def _play_hands_collect_batched(
+        self,
+        num_hands: int,
+        agent_copy: "PokerAIAgent",
+        opponent_agents: Optional[List["PokerAIAgent"]] = None,
+    ) -> List[Tuple[Dict, Dict]]:
+        """
+        同时推进多局手牌，并对 Main_AI 使用批量推理。
+        主要用于 PPO 并行采样，减少 Python/TensorFlow 往返开销。
+        """
+        if num_hands <= 0:
+            return []
+
+        opp_agents = opponent_agents if opponent_agents is not None else self.opponent_agents
+        use_ppo = getattr(agent_copy, 'agent_type', None) == 'ppo'
+        if not use_ppo or num_hands == 1:
+            outputs = []
+            for _ in range(num_hands):
+                game, players = self._create_game()
+                outputs.append(
+                    self._play_hand_collect(
+                        game,
+                        players,
+                        agent_copy,
+                        opponent_agents=opp_agents,
+                    )
+                )
+            return outputs
+
+        envs = []
+        for _ in range(num_hands):
+            game, players = self._create_game()
+            game.start_new_hand()
+            envs.append({
+                'game': game,
+                'players': players,
+                'last_step_info': None,
+                'initial_stack': players[0].stack,
+                'action_records': {p.name: [] for p in players},
+                'all_in_context': {'happened': False, 'round': None, 'equity': 0.0},
+                'trajectory': {'states': [], 'actions': [], 'old_probs': []},
+                'done': False,
+            })
+
+        outputs: List[Tuple[Dict, Dict]] = []
+        remaining = len(envs)
+
+        def finalize_env(env_idx: int) -> None:
+            env = envs[env_idx]
+            if env['done']:
+                return
+            game = env['game']
+            players = env['players']
+            alive = [p for p in players if p.is_active]
+            if len(alive) == 1 and game.pot > 0:
+                game._award_pot(alive[0])
+
+            final_profit = players[0].stack - env['initial_stack']
+            winners = [p.name for p in getattr(game, 'winners', [])]
+            if not winners and hasattr(game, 'winner') and game.winner:
+                winners = [game.winner.name]
+            is_winner = "Main_AI" in winners
+
+            final_reward = self.reward_calculator.calculate_reward(
+                player=players[0],
+                game=game,
+                action="end",
+                action_amount=0,
+                is_winner=is_winner,
+                profit_loss=final_profit,
+                done=True,
+            )
+            main_actions = env['action_records'].get("Main_AI", [])
+            if len(main_actions) == 1 and main_actions[0][0] == "fold" and final_profit <= 0:
+                final_reward -= 0.25
+            allin_unlucky_bonus = 0.0
+            all_in_context = env['all_in_context']
+            if (not is_winner) and all_in_context['happened'] and all_in_context['round'] in (1, 2):
+                eq = all_in_context['equity']
+                if eq >= self.allin_unlucky_eq_threshold:
+                    unlucky_bonus = min(
+                        self.allin_unlucky_bonus_cap,
+                        0.20 + (eq - self.allin_unlucky_eq_threshold) * 2.0,
+                    )
+                    final_reward += unlucky_bonus
+                    allin_unlucky_bonus = unlucky_bonus
+
+            env['trajectory']['final_reward'] = final_reward
+            env['trajectory']['allin_unlucky'] = {
+                'triggered': allin_unlucky_bonus > 0,
+                'bonus': allin_unlucky_bonus,
+                'equity': all_in_context['equity'],
+            }
+
+            result = {
+                'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
+                'winners': winners,
+                'player_profits': {p.name: p.stack - self.initial_stack for p in players},
+                'action_histories': env['action_records'],
+                'metrics': self._count_episode_metrics(
+                    players[0],
+                    game,
+                    env['action_records'].get("Main_AI", []),
+                    lightweight=False,
+                ),
+            }
+            outputs.append((result, env['trajectory']))
+            env['done'] = True
+
+        while remaining > 0:
+            main_requests = []
+            main_states = []
+            progress_made = False
+
+            for env_idx, env in enumerate(envs):
+                if env['done']:
+                    continue
+                game = env['game']
+                players = env['players']
+
+                if game.is_hand_over():
+                    finalize_env(env_idx)
+                    remaining -= 1
+                    progress_made = True
+                    continue
+
+                if game.is_round_over():
+                    if game.proceed_to_next_round():
+                        finalize_env(env_idx)
+                        remaining -= 1
+                    progress_made = True
+                    continue
+
+                current_player = game.next_player()
+                if not current_player or not current_player.is_active:
+                    continue
+
+                if current_player.name == "Main_AI":
+                    current_state = agent_copy.state_rep.get_state(game, current_player)
+                    env['current_main_player'] = current_player
+                    env['current_main_state'] = current_state
+                    main_requests.append((game, current_player))
+                    main_states.append(current_state)
+                    progress_made = True
+                else:
+                    try:
+                        opp_idx = int(current_player.name.split('_')[-1]) - 1
+                        if 0 <= opp_idx < len(opp_agents):
+                            agent = opp_agents[opp_idx]
+                        else:
+                            agent = opp_agents[0]
+                    except Exception:
+                        agent = opp_agents[0]
+                    action, amount = agent.select_action(game, current_player)
+                    env['action_records'][current_player.name].append(
+                        (action, amount if amount else 0)
+                    )
+                    if not game.handle_action(current_player, action, amount):
+                        game.handle_action(current_player, 'fold', None)
+                    progress_made = True
+
+            if main_requests:
+                batched_actions = agent_copy.select_actions_batch_with_info(
+                    main_requests,
+                    precomputed_states=np.asarray(main_states, dtype=np.float32),
+                )
+                batched_idx = 0
+                for env_idx, env in enumerate(envs):
+                    if env['done'] or 'current_main_player' not in env:
+                        continue
+                    game = env['game']
+                    current_player = env.pop('current_main_player')
+                    current_state = env.pop('current_main_state')
+                    action_str, amount, action_info = batched_actions[batched_idx]
+                    batched_idx += 1
+                    action_idx = action_info.get('action_idx', 0)
+                    env['action_records'][current_player.name].append(
+                        (action_str, amount if amount else 0)
+                    )
+                    success = game.handle_action(current_player, action_str, amount)
+                    if success and (not env['all_in_context']['happened']) and current_player.is_all_in and game.round in (1, 2):
+                        try:
+                            eq = float(agent_copy.state_rep.calculate_hand_strength(current_player, game))
+                        except Exception:
+                            eq = 0.0
+                        env['all_in_context'].update({
+                            'happened': True,
+                            'round': int(game.round),
+                            'equity': max(0.0, min(1.0, eq)),
+                        })
+
+                    if not success:
+                        game.handle_action(current_player, 'fold', None)
+                        probs = action_info.get('action_probabilities', None)
+                        fold_prob = float(np.clip(probs[0], 1e-8, 1.0)) if probs is not None else 1.0
+                        env['trajectory']['states'].append(current_state)
+                        env['trajectory']['actions'].append(0)
+                        env['trajectory']['old_probs'].append(fold_prob)
+                    else:
+                        old_prob = float(action_info.get('old_prob', 1.0))
+                        env['trajectory']['states'].append(current_state)
+                        env['trajectory']['actions'].append(int(action_idx))
+                        env['trajectory']['old_probs'].append(old_prob)
+                    env['last_step_info'] = (current_state, action_idx)
+
+            if not progress_made and not main_requests:
+                # 理论上不应出现；若出现则避免死循环并强制结算剩余局面。
+                for env_idx, env in enumerate(envs):
+                    if not env['done']:
+                        finalize_env(env_idx)
+                        remaining -= 1
+
+        return outputs
+
+    def _play_hands_inference_batched(
+        self,
+        num_hands: int,
+        main_agent: "PokerAIAgent",
+        opponent_agents: Optional[List["PokerAIAgent"]] = None,
+    ) -> List[Dict]:
+        """纯推理版多局同步推进，对 Main_AI 使用批量推理。"""
+        if num_hands <= 0:
+            return []
+
+        opp_agents = opponent_agents if opponent_agents is not None else self.opponent_agents
+        if getattr(main_agent, 'agent_type', None) != 'ppo' or num_hands == 1:
+            outputs = []
+            for _ in range(num_hands):
+                game, players = self._create_game()
+                outputs.append(
+                    self._play_hand_inference(
+                        game,
+                        players,
+                        main_agent,
+                        opponent_agents=opp_agents,
+                    )
+                )
+            return outputs
+
+        envs = []
+        for _ in range(num_hands):
+            game, players = self._create_game()
+            game.start_new_hand()
+            envs.append({
+                'game': game,
+                'players': players,
+                'initial_stack': players[0].stack,
+                'action_records': {p.name: [] for p in players},
+                'done': False,
+            })
+
+        outputs: List[Dict] = []
+        remaining = len(envs)
+
+        def finalize_env(env_idx: int) -> None:
+            env = envs[env_idx]
+            if env['done']:
+                return
+            game = env['game']
+            players = env['players']
+            alive = [p for p in players if p.is_active]
+            if len(alive) == 1 and game.pot > 0:
+                game._award_pot(alive[0])
+            winners = [p.name for p in getattr(game, 'winners', [])]
+            if not winners and hasattr(game, 'winner') and game.winner:
+                winners = [game.winner.name]
+            outputs.append({
+                'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
+                'winners': winners,
+                'player_profits': {p.name: p.stack - self.initial_stack for p in players},
+                'action_histories': env['action_records'],
+                'metrics': self._count_episode_metrics(
+                    players[0],
+                    game,
+                    env['action_records'].get("Main_AI", []),
+                    lightweight=False,
+                ),
+            })
+            env['done'] = True
+
+        while remaining > 0:
+            main_requests = []
+            main_states = []
+            progress_made = False
+
+            for env_idx, env in enumerate(envs):
+                if env['done']:
+                    continue
+                game = env['game']
+
+                if game.is_hand_over():
+                    finalize_env(env_idx)
+                    remaining -= 1
+                    progress_made = True
+                    continue
+
+                if game.is_round_over():
+                    if game.proceed_to_next_round():
+                        finalize_env(env_idx)
+                        remaining -= 1
+                    progress_made = True
+                    continue
+
+                current_player = game.next_player()
+                if not current_player or not current_player.is_active:
+                    continue
+
+                if current_player.name == "Main_AI":
+                    env['current_main_player'] = current_player
+                    main_requests.append((game, current_player))
+                    main_states.append(main_agent.state_rep.get_state(game, current_player))
+                    progress_made = True
+                else:
+                    try:
+                        opp_idx = int(current_player.name.split('_')[-1]) - 1
+                        if 0 <= opp_idx < len(opp_agents):
+                            agent = opp_agents[opp_idx]
+                        else:
+                            agent = opp_agents[0]
+                    except Exception:
+                        agent = opp_agents[0]
+                    action, amount = agent.select_action(game, current_player)
+                    env['action_records'][current_player.name].append((action, amount if amount else 0))
+                    if not game.handle_action(current_player, action, amount):
+                        game.handle_action(current_player, 'fold', None)
+                    progress_made = True
+
+            if main_requests:
+                batched_actions = main_agent.select_actions_batch_with_info(
+                    main_requests,
+                    precomputed_states=np.asarray(main_states, dtype=np.float32),
+                )
+                batched_idx = 0
+                for env_idx, env in enumerate(envs):
+                    if env['done'] or 'current_main_player' not in env:
+                        continue
+                    game = env['game']
+                    current_player = env.pop('current_main_player')
+                    action_str, amount, _ = batched_actions[batched_idx]
+                    batched_idx += 1
+                    env['action_records'][current_player.name].append(
+                        (action_str, amount if amount else 0)
+                    )
+                    success = game.handle_action(current_player, action_str, amount)
+                    if not success:
+                        game.handle_action(current_player, 'fold', None)
+
+            if not progress_made and not main_requests:
+                for env_idx, env in enumerate(envs):
+                    if not env['done']:
+                        finalize_env(env_idx)
+                        remaining -= 1
+
+        return outputs
+
     def _play_hand_inference(
         self,
         game: PokerGame,
@@ -708,34 +1063,88 @@ class SelfPlayTrainer:
                 'worker_tid': threading.get_ident()
             }
 
+        def _run_eval_chunk(chunk_size: int) -> List[Dict]:
+            if not hasattr(eval_local, 'main_agent'):
+                if hasattr(self.main_agent, 'clone_for_inference'):
+                    eval_local.main_agent = self.main_agent.clone_for_inference()
+                else:
+                    eval_local.main_agent = self.main_agent
+                eval_local.opp_agents = self._clone_opponents_for_inference()
+            if getattr(eval_local.main_agent, 'agent_type', None) == 'ppo' and chunk_size > 1:
+                results = self._play_hands_inference_batched(
+                    chunk_size,
+                    eval_local.main_agent,
+                    eval_local.opp_agents,
+                )
+            else:
+                results = []
+                for _ in range(chunk_size):
+                    game, players = self._create_game()
+                    results.append(
+                        self._play_hand_inference(
+                            game,
+                            players,
+                            eval_local.main_agent,
+                            eval_local.opp_agents,
+                        )
+                    )
+            payload = []
+            for result in results:
+                payload.append({
+                    'profit': result['player_profits']['Main_AI'],
+                    'win': 1 if 'Main_AI' in result.get('winners', []) else 0,
+                    'metrics': result.get(
+                        'metrics',
+                        {'bluffs': 0, 'aggressive': 0, 'raises': 0, 'invalid_bets': 0}
+                    ),
+                    'worker_tid': threading.get_ident(),
+                })
+            return payload
+
         if effective_eval_workers > 1:
             worker_tids = set()
+            base_chunk = self.num_eval_games // effective_eval_workers
+            extra_chunk = self.num_eval_games % effective_eval_workers
+            chunk_plan = [
+                base_chunk + (1 if idx < extra_chunk else 0)
+                for idx in range(effective_eval_workers)
+                if base_chunk + (1 if idx < extra_chunk else 0) > 0
+            ]
             with ThreadPoolExecutor(max_workers=effective_eval_workers) as executor:
-                for idx, item in enumerate(executor.map(_run_single_eval_game, range(self.num_eval_games)), start=1):
+                done_games = 0
+                for chunk_items in executor.map(_run_eval_chunk, chunk_plan):
+                    for item in chunk_items:
+                        total_profit += item['profit']
+                        wins += item['win']
+                        eval_bluffs += item['metrics']['bluffs']
+                        eval_aggressive += item['metrics']['aggressive']
+                        eval_raises += item['metrics']['raises']
+                        eval_invalid_bets += item['metrics']['invalid_bets']
+                        worker_tids.add(item['worker_tid'])
+                        done_games += 1
+                        if done_games % 10 == 0 or done_games == self.num_eval_games:
+                            logger.info(f"评估进度: {done_games}/{self.num_eval_games} 局")
+            logger.info(
+                f"评估并行生效检查: 实际线程数={len(worker_tids)}, "
+                f"配置线程数={effective_eval_workers}"
+            )
+        else:
+            chunk_size = min(self.num_eval_games, max(1, min(16, self.train_rollouts_per_worker)))
+            done_games = 0
+            remaining_games = self.num_eval_games
+            while remaining_games > 0:
+                current_chunk = min(chunk_size, remaining_games)
+                for item in _run_eval_chunk(current_chunk):
+                    done_games += 1
                     total_profit += item['profit']
                     wins += item['win']
                     eval_bluffs += item['metrics']['bluffs']
                     eval_aggressive += item['metrics']['aggressive']
                     eval_raises += item['metrics']['raises']
                     eval_invalid_bets += item['metrics']['invalid_bets']
-                    worker_tids.add(item['worker_tid'])
-                    if idx % 10 == 0 or idx == self.num_eval_games:
-                        logger.info(f"评估进度: {idx}/{self.num_eval_games} 局")
-            logger.info(
-                f"评估并行生效检查: 实际线程数={len(worker_tids)}, "
-                f"配置线程数={effective_eval_workers}"
-            )
-        else:
-            for eval_idx in range(self.num_eval_games):
-                item = _run_single_eval_game(eval_idx)
-                total_profit += item['profit']
-                wins += item['win']
-                eval_bluffs += item['metrics']['bluffs']
-                eval_aggressive += item['metrics']['aggressive']
-                eval_raises += item['metrics']['raises']
-                eval_invalid_bets += item['metrics']['invalid_bets']
-                if (eval_idx + 1) % 10 == 0 or (eval_idx + 1) == self.num_eval_games:
-                    logger.info(f"评估进度: {eval_idx + 1}/{self.num_eval_games} 局")
+                    if done_games % 10 == 0 or done_games == self.num_eval_games:
+                        logger.info(f"评估进度: {done_games}/{self.num_eval_games} 局")
+                remaining_games -= current_chunk
 
         avg_profit = total_profit / self.num_eval_games
         win_rate = wins / self.num_eval_games
@@ -1050,16 +1459,11 @@ class SelfPlayTrainer:
                             worker_opp_copies[worker_idx] = self._clone_opponents_for_inference()
                             worker_opp_versions[worker_idx] = self._opponents_version
                         copy_agent = agent_copies[worker_idx]
-                        outputs = []
-                        for _ in range(rollout_count):
-                            game, players = self._create_game()
-                            outputs.append(self._play_hand_collect(
-                                game,
-                                players,
-                                copy_agent,
-                                opponent_agents=worker_opp_copies[worker_idx]
-                            ))
-                        return outputs
+                        return self._play_hands_collect_batched(
+                            rollout_count,
+                            copy_agent,
+                            opponent_agents=worker_opp_copies[worker_idx]
+                        )
 
                     results_and_trajectories = []
                     for res_list in executor.map(run_one, worker_plan):

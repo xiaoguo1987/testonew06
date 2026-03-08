@@ -3,20 +3,135 @@
 import random
 import logging
 from typing import List, Dict, Optional, Tuple
-from .cards import Card, Deck, compare_hands
+import numpy as np
+from .cards import Card, Deck, compare_hands, card_to_code, code_to_card
 
 class Player:
     """德州扑克玩家类"""
     def __init__(self, name: str, stack: int, is_ai: bool = False):
         self.name = name
-        self.stack = stack  # 玩家筹码
-        self.cards: List[Card] = []  # 手牌
-        self.bet = 0  # 当前轮次已下注金额
-        self.is_active = True  # 是否还在游戏中
-        self.is_all_in = False  # 是否全下
         self.is_ai = is_ai  # 是否是AI玩家
-        self.position = -1  # 座位位置
         self.total_profit = 0  # 累计利润，用于测试和分析
+        self._stack = int(stack)
+        self._bet = 0
+        self._is_active = True
+        self._is_all_in = False
+        self._position = -1
+        self._table_state = None
+        self._seat_idx = -1
+        self._hole_card_codes = np.full(2, -1, dtype=np.int16)
+        self._hole_card_count = 0
+        self._cards_cache: List[Card] = []
+        self._cards_dirty = False
+
+    def _attach_table_state(self, table_state: Dict[str, np.ndarray], seat_idx: int) -> None:
+        self._table_state = table_state
+        self._seat_idx = int(seat_idx)
+
+    @property
+    def stack(self) -> int:
+        if self._table_state is None:
+            return int(self._stack)
+        return int(self._table_state['stacks'][self._seat_idx])
+
+    @stack.setter
+    def stack(self, value: int) -> None:
+        value = int(value)
+        if self._table_state is None:
+            self._stack = value
+        else:
+            self._table_state['stacks'][self._seat_idx] = value
+
+    @property
+    def bet(self) -> int:
+        if self._table_state is None:
+            return int(self._bet)
+        return int(self._table_state['bets'][self._seat_idx])
+
+    @bet.setter
+    def bet(self, value: int) -> None:
+        value = int(value)
+        if self._table_state is None:
+            self._bet = value
+        else:
+            self._table_state['bets'][self._seat_idx] = value
+
+    @property
+    def is_active(self) -> bool:
+        if self._table_state is None:
+            return bool(self._is_active)
+        return bool(self._table_state['active'][self._seat_idx])
+
+    @is_active.setter
+    def is_active(self, value: bool) -> None:
+        value = bool(value)
+        if self._table_state is None:
+            self._is_active = value
+        else:
+            self._table_state['active'][self._seat_idx] = value
+
+    @property
+    def is_all_in(self) -> bool:
+        if self._table_state is None:
+            return bool(self._is_all_in)
+        return bool(self._table_state['all_in'][self._seat_idx])
+
+    @is_all_in.setter
+    def is_all_in(self, value: bool) -> None:
+        value = bool(value)
+        if self._table_state is None:
+            self._is_all_in = value
+        else:
+            self._table_state['all_in'][self._seat_idx] = value
+
+    @property
+    def position(self) -> int:
+        if self._table_state is None:
+            return int(self._position)
+        return int(self._table_state['positions'][self._seat_idx])
+
+    @position.setter
+    def position(self, value: int) -> None:
+        value = int(value)
+        if self._table_state is None:
+            self._position = value
+        else:
+            self._table_state['positions'][self._seat_idx] = value
+
+    @property
+    def card_codes(self) -> np.ndarray:
+        return self._hole_card_codes[:self._hole_card_count].copy()
+
+    @property
+    def cards(self) -> List[Card]:
+        if self._cards_dirty:
+            self._cards_cache = [
+                code_to_card(code)
+                for code in self._hole_card_codes[:self._hole_card_count]
+                if code >= 0
+            ]
+            self._cards_dirty = False
+        return self._cards_cache
+
+    @cards.setter
+    def cards(self, value: List[Card]) -> None:
+        self.clear_cards()
+        for idx, card in enumerate(value[:2]):
+            self.set_card(idx, card)
+
+    def clear_cards(self) -> None:
+        self._hole_card_codes.fill(-1)
+        self._hole_card_count = 0
+        self._cards_cache = []
+        self._cards_dirty = False
+
+    def set_card_code(self, idx: int, card_code: int) -> None:
+        self._hole_card_codes[int(idx)] = int(card_code)
+        self._hole_card_count = max(self._hole_card_count, int(idx) + 1)
+        self._cards_dirty = True
+
+    def set_card(self, idx: int, card: Card) -> None:
+        self.set_card_code(idx, card_to_code(card))
     
     def add_bet(self, amount: int) -> None:
         """添加下注金额"""
@@ -29,7 +144,7 @@ class Player:
     
     def reset_for_new_round(self) -> None:
         """为新一轮重置状态"""
-        self.cards = []
+        self.clear_cards()
         self.bet = 0
         self.is_active = True
         self.is_all_in = False
@@ -47,7 +162,10 @@ class PokerGame:
         self.big_blind = big_blind
         self.players = players
         self.deck = Deck()
-        self.board = []  # 公共牌
+        self._board_codes = np.full(5, -1, dtype=np.int16)
+        self._board_count = 0
+        self._board_cache: List[Card] = []
+        self._board_dirty = False
         self.pot = 0  # 底池
         self.current_bet = 0  # 当前轮次最大下注
         self.dealer_pos = 0  # 庄家位置
@@ -56,16 +174,61 @@ class PokerGame:
         self.action_count = 0  # 当前轮次行动次数
         self.winner = None
         self.winners: List[Player] = []
+        self.player_stacks = np.array([int(player.stack) for player in players], dtype=np.int32)
+        self.player_bets = np.zeros(len(players), dtype=np.int32)
+        self.player_active = np.ones(len(players), dtype=np.bool_)
+        self.player_all_in = np.zeros(len(players), dtype=np.bool_)
+        self.player_positions = np.arange(len(players), dtype=np.int8)
+        self._table_state = {
+            'stacks': self.player_stacks,
+            'bets': self.player_bets,
+            'active': self.player_active,
+            'all_in': self.player_all_in,
+            'positions': self.player_positions,
+        }
         
         # 设置玩家位置
         for i, player in enumerate(players):
+            player._attach_table_state(self._table_state, i)
             player.position = i
+
+    @property
+    def board_codes(self) -> np.ndarray:
+        return self._board_codes[:self._board_count].copy()
+
+    @property
+    def board(self) -> List[Card]:
+        if self._board_dirty:
+            self._board_cache = [
+                code_to_card(code)
+                for code in self._board_codes[:self._board_count]
+                if code >= 0
+            ]
+            self._board_dirty = False
+        return self._board_cache
+
+    @board.setter
+    def board(self, value: List[Card]) -> None:
+        self._clear_board()
+        for card in value[:5]:
+            self._append_board_card(card_to_code(card))
+
+    def _clear_board(self) -> None:
+        self._board_codes.fill(-1)
+        self._board_count = 0
+        self._board_cache = []
+        self._board_dirty = False
+
+    def _append_board_card(self, card_code: int) -> None:
+        self._board_codes[self._board_count] = int(card_code)
+        self._board_count += 1
+        self._board_dirty = True
     
     def start_new_hand(self) -> None:
         """开始新的一手牌"""
         # 重置游戏状态
         self.deck = Deck()
-        self.board = []
+        self._clear_board()
         self.pot = 0
         self.current_bet = 0
         self.action_count = 0
@@ -73,8 +236,11 @@ class PokerGame:
         self.winners = []
         
         # 重置玩家状态
+        self.player_bets.fill(0)
+        self.player_active.fill(True)
+        self.player_all_in.fill(False)
         for player in self.players:
-            player.reset_for_new_round()
+            player.clear_cards()
         
         # 庄家位置顺时针移动
         self.dealer_pos = (self.dealer_pos + 1) % len(self.players)
@@ -110,9 +276,9 @@ class PokerGame:
     
     def _deal_hole_cards(self) -> None:
         """发给每个玩家两张手牌"""
-        for _ in range(2):
+        for card_idx in range(2):
             for player in self.players:
-                player.cards.append(self.deck.deal())
+                player.set_card_code(card_idx, self.deck.deal_code())
     
     def _setup_round_start(self) -> None:
         """设置轮次开始时的状态"""
@@ -217,15 +383,16 @@ class PokerGame:
         
         if self.round == 1:  # 翻牌前 -> 翻牌
             # 发三张公共牌
-            self.board.extend([self.deck.deal() for _ in range(3)])
+            for _ in range(3):
+                self._append_board_card(self.deck.deal_code())
             self.round = 2
             self._setup_round_start()
         elif self.round == 2:  # 翻牌 -> 转牌
-            self.board.append(self.deck.deal())
+            self._append_board_card(self.deck.deal_code())
             self.round = 3
             self._setup_round_start()
         elif self.round == 3:  # 转牌 -> 河牌
-            self.board.append(self.deck.deal())
+            self._append_board_card(self.deck.deal_code())
             self.round = 4
             self._setup_round_start()
         elif self.round == 4:  # 河牌 -> 摊牌

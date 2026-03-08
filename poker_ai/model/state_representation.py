@@ -53,11 +53,23 @@ class StateRepresentation:
             position = rank_idx * 4 + suit_idx
             one_hot[position] = 1
         return one_hot
+
+    def card_codes_to_one_hot(self, card_codes: np.ndarray) -> np.ndarray:
+        """整数编码卡牌直接转 one-hot，避免高频 Card 对象解包。"""
+        one_hot = np.zeros(52, dtype=np.float32)
+        if len(card_codes) > 0:
+            valid_codes = np.asarray(card_codes, dtype=np.int32)
+            valid_codes = valid_codes[valid_codes >= 0]
+            one_hot[valid_codes] = 1.0
+        return one_hot
     
     def player_info_to_vector(self, players: List[Player], current_player_idx: int, game: PokerGame) -> np.ndarray:
         """玩家状态向量，保持相对位置顺序，让AI总是在第一个位置看到自己"""
         vector = np.zeros(self.player_info_dim)
         bb = max(game.big_blind, 1)
+        stacks = getattr(game, 'player_stacks', None)
+        bets = getattr(game, 'player_bets', None)
+        active = getattr(game, 'player_active', None)
         
         for i in range(6): # 固定循环6次，确保维度固定
             # 这里的逻辑是：将当前玩家(Hero)放在向量的开头(i=0)，其他人顺时针排列
@@ -65,13 +77,18 @@ class StateRepresentation:
             target_idx = (current_player_idx + i) % len(players)
             
             if target_idx < len(players):
-                player = players[target_idx]
                 base_idx = i * 3
                 
                 # 归一化特征
-                stack_normalized = min(player.stack / (bb * 100), 1.0)
-                bet_normalized = min(player.bet / (bb * 100), 1.0)
-                is_active = 1.0 if player.is_active else 0.0
+                if stacks is not None and bets is not None and active is not None:
+                    stack_normalized = min(float(stacks[target_idx]) / (bb * 100), 1.0)
+                    bet_normalized = min(float(bets[target_idx]) / (bb * 100), 1.0)
+                    is_active = 1.0 if bool(active[target_idx]) else 0.0
+                else:
+                    player = players[target_idx]
+                    stack_normalized = min(player.stack / (bb * 100), 1.0)
+                    bet_normalized = min(player.bet / (bb * 100), 1.0)
+                    is_active = 1.0 if player.is_active else 0.0
                 
                 vector[base_idx] = stack_normalized
                 vector[base_idx + 1] = bet_normalized
@@ -108,7 +125,10 @@ class StateRepresentation:
 
     def get_active_count_vector(self, game: PokerGame) -> np.ndarray:
         """[新增] 获取活跃玩家数量特征"""
-        active_count = sum(1 for p in game.players if p.is_active)
+        if hasattr(game, 'player_active'):
+            active_count = int(np.sum(game.player_active))
+        else:
+            active_count = sum(1 for p in game.players if p.is_active)
         # 归一化：(活跃人数 - 1) / 5.0。 
         # 结果范围 0.0 (Heads-up) 到 1.0 (6人全在)
         normalized = (active_count - 1) / 5.0 if active_count > 0 else 0
@@ -117,13 +137,15 @@ class StateRepresentation:
     def get_state(self, game: PokerGame, current_player: Player) -> np.ndarray:
         """获取完整的游戏状态向量"""
         current_player_idx = game.players.index(current_player)
+        hole_codes = getattr(current_player, 'card_codes', None)
+        board_codes = getattr(game, 'board_codes', None)
         
         # 组合所有特征
         state = np.concatenate([
             # 1. 自身手牌
-            self.card_to_one_hot(current_player.cards),
+            self.card_codes_to_one_hot(hole_codes) if hole_codes is not None else self.card_to_one_hot(current_player.cards),
             # 2. 公共牌
-            self.card_to_one_hot(game.board),
+            self.card_codes_to_one_hot(board_codes) if board_codes is not None else self.card_to_one_hot(game.board),
             # 3. 所有玩家状态 (Hero排在最前)
             self.player_info_to_vector(game.players, current_player_idx, game),
             # 4. 游戏全局信息
