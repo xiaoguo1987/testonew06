@@ -1046,46 +1046,22 @@ class SelfPlayTrainer:
         eval_raises = 0
         eval_invalid_bets = 0
 
-        eval_local = threading.local()
+        # 在主线程预创建推理用克隆，避免在 worker 子线程创建 TF 模型导致 Variable shape 冲突（(64,5) vs (64,64)）
+        if hasattr(self.main_agent, 'clone_for_inference'):
+            eval_main_clones = [self.main_agent.clone_for_inference() for _ in range(effective_eval_workers)]
+            eval_opp_clones_list = [self._clone_opponents_for_inference() for _ in range(effective_eval_workers)]
+        else:
+            eval_main_clones = [self.main_agent] * effective_eval_workers
+            eval_opp_clones_list = [self.opponent_agents] * effective_eval_workers
 
-        def _run_single_eval_game(eval_idx: int) -> Dict:
-            if not hasattr(eval_local, 'main_agent'):
-                if hasattr(self.main_agent, 'clone_for_inference'):
-                    eval_local.main_agent = self.main_agent.clone_for_inference()
-                else:
-                    eval_local.main_agent = self.main_agent
-                eval_local.opp_agents = self._clone_opponents_for_inference()
-            game, players = self._create_game()
-            result = self._play_hand_inference(
-                game,
-                players,
-                eval_local.main_agent,
-                eval_local.opp_agents
-            )
-            hand_profit = result['player_profits']['Main_AI']
-            hand_win = 1 if 'Main_AI' in result.get('winners', []) else 0
-            return {
-                'profit': hand_profit,
-                'win': hand_win,
-                'metrics': result.get(
-                    'metrics',
-                    {'bluffs': 0, 'aggressive': 0, 'raises': 0, 'invalid_bets': 0}
-                ),
-                'worker_tid': threading.get_ident()
-            }
-
-        def _run_eval_chunk(chunk_size: int) -> List[Dict]:
-            if not hasattr(eval_local, 'main_agent'):
-                if hasattr(self.main_agent, 'clone_for_inference'):
-                    eval_local.main_agent = self.main_agent.clone_for_inference()
-                else:
-                    eval_local.main_agent = self.main_agent
-                eval_local.opp_agents = self._clone_opponents_for_inference()
-            if getattr(eval_local.main_agent, 'agent_type', None) == 'ppo' and chunk_size > 1:
+        def _run_eval_chunk(chunk_size: int, main_clone: "PokerAIAgent", opp_clones: List["PokerAIAgent"]) -> List[Dict]:
+            if chunk_size <= 0:
+                return []
+            if getattr(main_clone, 'agent_type', None) == 'ppo' and chunk_size > 1:
                 results = self._play_hands_inference_batched(
                     chunk_size,
-                    eval_local.main_agent,
-                    eval_local.opp_agents,
+                    main_clone,
+                    opp_clones,
                 )
             else:
                 results = []
@@ -1095,8 +1071,8 @@ class SelfPlayTrainer:
                         self._play_hand_inference(
                             game,
                             players,
-                            eval_local.main_agent,
-                            eval_local.opp_agents,
+                            main_clone,
+                            opponent_agents=opp_clones,
                         )
                     )
             payload = []
@@ -1123,7 +1099,9 @@ class SelfPlayTrainer:
             ]
             with ThreadPoolExecutor(max_workers=effective_eval_workers) as executor:
                 done_games = 0
-                for chunk_items in executor.map(_run_eval_chunk, chunk_plan):
+                for chunk_items in executor.map(
+                    _run_eval_chunk, chunk_plan, eval_main_clones, eval_opp_clones_list
+                ):
                     for item in chunk_items:
                         total_profit += item['profit']
                         wins += item['win']
@@ -1145,7 +1123,9 @@ class SelfPlayTrainer:
             remaining_games = self.num_eval_games
             while remaining_games > 0:
                 current_chunk = min(chunk_size, remaining_games)
-                for item in _run_eval_chunk(current_chunk):
+                for item in _run_eval_chunk(
+                    current_chunk, eval_main_clones[0], eval_opp_clones_list[0]
+                ):
                     done_games += 1
                     total_profit += item['profit']
                     wins += item['win']
