@@ -35,6 +35,16 @@ def _resolve_workers(requested_workers: int, reserve_cores: int = 2) -> int:
         return available
     return max(1, (available * 3) // 4)
 
+
+def _round_down_power2(n: int) -> int:
+    """将 n 向下取整到不大于 n 的 2 的幂（n<=0 返回 1）。"""
+    if n <= 0:
+        return 1
+    p = 1
+    while p * 2 <= n:
+        p *= 2
+    return p
+
 class SelfPlayTrainer:
     """德州扑克自我对弈训练器（6-Max 极速训练版）"""
     
@@ -110,7 +120,8 @@ class SelfPlayTrainer:
             self.train_sync_every_batches = int(train_sync_every_batches)
         else:
             if self.model_type == 'ppo':
-                self.train_sync_every_batches = max(12, self.train_workers // 2)
+                raw = max(12, self.train_workers // 2)
+                self.train_sync_every_batches = max(12, _round_down_power2(raw))
             else:
                 self.train_sync_every_batches = max(4, self.train_workers * 2)
         if int(dqn_replay_updates_per_hand) > 0:
@@ -1566,7 +1577,18 @@ class SelfPlayTrainer:
 
         logger.info(f"训练完成！总手牌: {self.total_hands}")
         if hasattr(self.main_agent, 'flush_pending_updates'):
-            self.main_agent.flush_pending_updates()
+            try:
+                self.main_agent.flush_pending_updates()
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "dnn library" in err_msg or "graph execution" in err_msg or "xla_compile" in err_msg:
+                    logger.warning(
+                        "收尾时 PPO 剩余样本更新失败（多为 XLA/DNN 与当前 GPU 兼容问题），"
+                        "检查点已保存，可忽略。若需避免可加 --disable-xla 重跑。错误: %s",
+                        e,
+                    )
+                else:
+                    raise
         if (
             (not self.tuning_mode)
             and self._last_regular_checkpoint_hands != self.total_hands
