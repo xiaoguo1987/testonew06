@@ -318,7 +318,17 @@ class PokerAIAgent:
         rewards = np.array(buf['rewards'], dtype=np.float32)
         dones = np.array(buf['dones'])
         old_probs = np.array(buf['old_probs'], dtype=np.float32)
-        self.agent.train(states, actions, rewards, dones, old_probs)
+        try:
+            self.agent.train(states, actions, rewards, dones, old_probs)
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "dnn library" in err_msg or "graph execution" in err_msg:
+                logger.warning(
+                    "本次 PPO 更新因 DNN/Graph 错误跳过（可尝试加 --disable-xla 与 --disable-onednn）: %s",
+                    e,
+                )
+            else:
+                raise
 
     def _ppo_train_pending_buffer(self, force: bool = False) -> None:
         """仅 PPO：当累计样本达到阈值（或 force=True）时，批量训练一次。"""
@@ -335,7 +345,17 @@ class PokerAIAgent:
         rewards = np.array(pending['rewards'], dtype=np.float32)
         dones = np.array(pending['dones'])
         old_probs = np.array(pending['old_probs'], dtype=np.float32)
-        self.agent.train(states, actions, rewards, dones, old_probs)
+        try:
+            self.agent.train(states, actions, rewards, dones, old_probs)
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "dnn library" in err_msg or "graph execution" in err_msg:
+                logger.warning(
+                    "本次 PPO 更新因 DNN/Graph 错误跳过（可尝试加 --disable-xla 与 --disable-onednn 重跑）: %s",
+                    e,
+                )
+            else:
+                raise
         self.ppo_pending_buffer = {
             'states': [], 'actions': [], 'rewards': [], 'dones': [], 'old_probs': []
         }

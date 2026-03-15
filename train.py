@@ -161,6 +161,8 @@ def parse_arguments():
                         help='禁用混合精度')
     parser.add_argument('--enable-xla', action='store_true', default=True, help='启用 TensorFlow XLA JIT')
     parser.add_argument('--disable-xla', action='store_false', dest='enable_xla', help='禁用 TensorFlow XLA JIT')
+    parser.add_argument('--disable-onednn', action='store_true', dest='disable_onednn', default=False,
+                        help='禁用 oneDNN（可避免部分 GPU 上 DNN library initialization failed）')
     parser.add_argument('--gpu-memory-growth', action='store_true', default=True,
                         help='启用GPU按需分配显存')
     parser.add_argument('--no-gpu-memory-growth', action='store_false', dest='gpu_memory_growth',
@@ -776,7 +778,12 @@ def main():
         # 解析命令行参数
         args = parse_arguments()
         _apply_hardware_profile(args)
-        
+
+        # 在 import TensorFlow 前禁用 oneDNN，避免部分环境 DNN library initialization failed
+        if getattr(args, 'disable_onednn', False):
+            os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+            logger.info("已设置 TF_ENABLE_ONEDNN_OPTS=0（禁用 oneDNN）")
+
         # 设置环境
         setup_environment(args)
         
