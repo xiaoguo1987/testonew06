@@ -65,9 +65,9 @@ class PPOConfig:
     kl_target: float = 0.015
     kl_early_stop: bool = True
 
-    # 每批轨迹更新轮次与批次（4090D优化：更大batch，更少epochs）
-    update_epochs: int = 4
-    batch_size: int = 512
+    # 每批轨迹更新轮次与批次（GPU利用率优化：提高 epochs 让 GPU 每次更新做更多计算）
+    update_epochs: int = 15
+    batch_size: int = 1024
     
     # 梯度累积
     gradient_accumulation_steps: int = 1

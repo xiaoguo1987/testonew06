@@ -112,10 +112,15 @@ class PPOModel:
         _diag_log.info(f"[GPU诊断] TF可见GPU数量: {len(gpus)}")
         for i, gpu in enumerate(gpus):
             _diag_log.info(f"[GPU诊断]   GPU {i}: {gpu.name}")
-        # 检查模型实际所在设备
+        # 检查模型实际所在设备（跳过无权重的 Input 层，取第一个有权重的层）
+        def _first_weight_device(model):
+            for _layer in model.layers:
+                if _layer.weights:
+                    return _layer.weights[0].device
+            return 'N/A (no weighted layer)'
         try:
-            actor_dev = self.actor.layers[0].weights[0].device if self.actor.layers[0].weights else 'N/A'
-            critic_dev = self.critic.layers[0].weights[0].device if self.critic.layers[0].weights else 'N/A'
+            actor_dev = _first_weight_device(self.actor)
+            critic_dev = _first_weight_device(self.critic)
             _diag_log.info(f"[GPU诊断] Actor权重设备: {actor_dev}")
             _diag_log.info(f"[GPU诊断] Critic权重设备: {critic_dev}")
         except Exception as _e:

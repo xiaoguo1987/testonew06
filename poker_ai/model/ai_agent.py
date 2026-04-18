@@ -157,7 +157,8 @@ class PokerAIAgent:
                 cfg_kwargs['batch_size'] = ppo_batch_size
             ppo_cfg = PPOConfig(**cfg_kwargs)
             self.agent = PPOModel(config=ppo_cfg)
-            auto_min_steps = max(256, int(self.agent.batch_size) * 8)
+            # GPU利用率优化：累积更多样本再触发更新，让GPU每次更新做更多计算 (batch*24 ≈ 24576)
+            auto_min_steps = max(1024, int(self.agent.batch_size) * 24)
             self.ppo_update_min_steps = int(ppo_update_min_steps) if ppo_update_min_steps else auto_min_steps
             self.ppo_pending_buffer = {
                 'states': [], 'actions': [], 'rewards': [], 'dones': [], 'old_probs': []
