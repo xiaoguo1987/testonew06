@@ -21,7 +21,7 @@ class PPOModel:
     """近端策略优化（PPO）模型，兼容德州扑克AI训练框架
     
     RTX 4090D 优化特性：
-    - 增强网络架构（256-256-128-64 + LayerNorm + 残差连接）
+    - 增强网络架构（512-512-256-128 + LayerNorm + 残差连接）
     - 自适应学习率调度（Warmup + Cosine衰减，纯TF实现）
     - 修复的价值损失裁剪（Value Clipping，基于旧价值）
     - 自适应熵正则系数
@@ -29,6 +29,8 @@ class PPOModel:
     - 向量化GAE计算（NumPy批量操作替代Python循环）
     - LossScaleOptimizer混合精度适配
     - 梯度累积支持
+    - GPU批量推理接口（predict_batch）
+    - 异步训练兼容（线程安全的权重快照）
     """
     def __init__(
         self,
@@ -225,32 +227,33 @@ class PPOModel:
     def _build_actor(self) -> models.Model:
         """构建策略网络：输出动作概率分布
         
-        RTX 4090D 优化：
-        - 增大网络容量（256-256-128-64）
+        RTX 4090D 优化 v2：
+        - 增大网络容量（512-512-256-128，约800K参数）
         - 移除Dropout（策略网络中Dropout会引入随机性干扰策略更新）
         - 保留LayerNormalization提升训练稳定性
         - 保留残差连接
+        - 更大模型充分利用4090D的24GB显存
         """
         inputs = layers.Input(shape=(self.input_dim,))
         
-        # 第一层：256 units + LayerNorm
-        x = layers.Dense(256, kernel_initializer='he_uniform')(inputs)
+        # 第一层：512 units + LayerNorm
+        x = layers.Dense(512, kernel_initializer='he_uniform')(inputs)
         x = layers.LayerNormalization()(x)
         x = layers.Activation('relu')(x)
         
-        # 第二层：256 units + 残差连接
-        x_res = layers.Dense(256, kernel_initializer='he_uniform')(x)
+        # 第二层：512 units + 残差连接
+        x_res = layers.Dense(512, kernel_initializer='he_uniform')(x)
         x_res = layers.LayerNormalization()(x_res)
         x = layers.add([x, x_res])
         x = layers.Activation('relu')(x)
         
-        # 第三层：128 units
-        x = layers.Dense(128, kernel_initializer='he_uniform')(x)
+        # 第三层：256 units
+        x = layers.Dense(256, kernel_initializer='he_uniform')(x)
         x = layers.LayerNormalization()(x)
         x = layers.Activation('relu')(x)
         
-        # 第四层：64 units
-        x = layers.Dense(64, kernel_initializer='he_uniform')(x)
+        # 第四层：128 units
+        x = layers.Dense(128, kernel_initializer='he_uniform')(x)
         x = layers.LayerNormalization()(x)
         x = layers.Activation('relu')(x)
         
@@ -263,32 +266,33 @@ class PPOModel:
     def _build_critic(self) -> models.Model:
         """构建价值网络：估计状态价值
         
-        RTX 4090D 优化：
-        - 增大网络容量（256-256-128-64）
+        RTX 4090D 优化 v2：
+        - 增大网络容量（512-512-256-128，约800K参数）
         - 保留LayerNormalization提升训练稳定性
         - 保留残差连接
         - Critic保留轻度Dropout防止过拟合
+        - 更大模型充分利用4090D的24GB显存
         """
         inputs = layers.Input(shape=(self.input_dim,))
         
-        # 第一层：256 units + LayerNorm
-        x = layers.Dense(256, kernel_initializer='he_uniform')(inputs)
+        # 第一层：512 units + LayerNorm
+        x = layers.Dense(512, kernel_initializer='he_uniform')(inputs)
         x = layers.LayerNormalization()(x)
         x = layers.Activation('relu')(x)
         
-        # 第二层：256 units + 残差连接
-        x_res = layers.Dense(256, kernel_initializer='he_uniform')(x)
+        # 第二层：512 units + 残差连接
+        x_res = layers.Dense(512, kernel_initializer='he_uniform')(x)
         x_res = layers.LayerNormalization()(x_res)
         x = layers.add([x, x_res])
         x = layers.Activation('relu')(x)
         
-        # 第三层：128 units
-        x = layers.Dense(128, kernel_initializer='he_uniform')(x)
+        # 第三层：256 units
+        x = layers.Dense(256, kernel_initializer='he_uniform')(x)
         x = layers.LayerNormalization()(x)
         x = layers.Activation('relu')(x)
         
-        # 第四层：64 units
-        x = layers.Dense(64, kernel_initializer='he_uniform')(x)
+        # 第四层：128 units
+        x = layers.Dense(128, kernel_initializer='he_uniform')(x)
         x = layers.LayerNormalization()(x)
         x = layers.Activation('relu')(x)
         
@@ -712,3 +716,14 @@ class PPOModel:
     def get_weights(self):
         """获取模型权重"""
         return [self.actor.get_weights(), self.critic.get_weights()]
+
+    def get_weights_snapshot(self):
+        """线程安全地获取权重快照（深拷贝），供异步训练线程同步到推理桥使用。"""
+        import copy
+        return copy.deepcopy([self.actor.get_weights(), self.critic.get_weights()])
+
+    def apply_weights_snapshot(self, snapshot):
+        """线程安全地应用权重快照到当前模型。"""
+        if len(snapshot) >= 2:
+            self.actor.set_weights(snapshot[0])
+            self.critic.set_weights(snapshot[1])

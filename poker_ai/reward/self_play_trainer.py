@@ -19,7 +19,9 @@ logging.basicConfig(
 logger = logging.getLogger('SelfPlayTrainer')
 
 from ..game.poker_game import PokerGame, Player
-from ..model.ai_agent import PokerAIAgent, EnsembleAgent
+from ..model.ai_agent import PokerAIAgent, EnsembleAgent, GPUInferenceBridge, LightweightInferenceAgent
+from ..model.ai_agent import _get_legal_action_mask
+from ..model.state_representation import StateRepresentation
 from ..reward.reward_calculator import RewardCalculator, AdaptiveRewardCalculator
 from ..utils.checkpoint import save_checkpoint, load_checkpoint, find_latest_checkpoint
 from ..reward.simple_reward_calculator import SimpleRewardCalculator
@@ -37,13 +39,114 @@ def _resolve_workers(requested_workers: int, reserve_cores: int = 2) -> int:
 
 
 def _round_down_power2(n: int) -> int:
-    """将 n 向下取整到不大于 n 的 2 的幂（n<=0 返回 1）。"""
+    """将 n 向下取整到不大于 n 的 2 的幂（n<=0 返回 1）."""
     if n <= 0:
         return 1
     p = 1
     while p * 2 <= n:
         p *= 2
     return p
+
+
+class _AsyncPPOTrainer:
+    """异步PPO训练器：双缓冲 + 后台训练线程。
+
+    设计要点：
+    - 主线程写入 buffer_b（采集轨迹），训练线程读取 buffer_a（训练数据）
+    - 每隔一定批次，主线程 swap_buffers() 交换 a/b，唤醒训练线程
+    - 训练线程完成后同步权重到 GPUInferenceBridge
+    - 避免采样和训练串行，GPU 训练与 CPU 采样并行
+    """
+
+    def __init__(self, main_agent: PokerAIAgent, gpu_bridge: Optional[GPUInferenceBridge] = None):
+        self.main_agent = main_agent
+        self.gpu_bridge = gpu_bridge
+        self._buffer_a = []  # 训练线程读
+        self._buffer_b = []  # 主线程写
+        self._lock = threading.Lock()
+        self._train_event = threading.Event()
+        self._stop_event = threading.Event()
+        self._train_thread = threading.Thread(target=self._train_loop, daemon=True)
+        self._train_thread.start()
+        self._total_train_count = 0
+        self._total_train_time = 0.0
+        logger.info("[AsyncPPO] 异步训练线程已启动")
+
+    def _train_loop(self):
+        """后台训练循环"""
+        while not self._stop_event.is_set():
+            self._train_event.wait(timeout=1.0)
+            self._train_event.clear()
+            # 取出 buffer_a 的数据
+            with self._lock:
+                train_data = self._buffer_a
+                self._buffer_a = []
+            if not train_data:
+                continue
+            t0 = datetime.now().timestamp()
+            try:
+                # 批量写入轨迹并触发训练
+                if hasattr(self.main_agent, 'append_trajectories_batch'):
+                    self.main_agent.append_trajectories_batch(train_data)
+                else:
+                    for traj in train_data:
+                        for s, a, p in zip(
+                            traj.get('states', []),
+                            traj.get('actions', []),
+                            traj.get('old_probs', []),
+                        ):
+                            self.main_agent.append_step(s, a, p)
+                        self.main_agent.finish_trajectory(traj.get('final_reward', 0.0))
+                # 训练完成后同步权重到推理桥
+                if self.gpu_bridge is not None and hasattr(self.main_agent.agent, 'get_weights_snapshot'):
+                    snapshot = self.main_agent.agent.get_weights_snapshot()
+                    self.gpu_bridge.sync_weights_from_main(snapshot)
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "dnn library" in err_msg or "graph execution" in err_msg:
+                    logger.warning("[AsyncPPO] 训练跳过(DNN/Graph错误): %s", e)
+                else:
+                    logger.error("[AsyncPPO] 训练异常: %s", e, exc_info=True)
+            elapsed = datetime.now().timestamp() - t0
+            self._total_train_count += len(train_data)
+            self._total_train_time += elapsed
+            logger.info(
+                f"[AsyncPPO] 训练批次完成: 轨迹数={len(train_data)}, "
+                f"耗时={elapsed:.4f}s, 累计训练{self._total_train_count}条轨迹"
+            )
+
+    def submit_trajectories(self, trajectories):
+        """主线程调用：将轨迹写入 buffer_b"""
+        with self._lock:
+            self._buffer_b.extend(trajectories)
+
+    def swap_buffers(self):
+        """主线程调用：交换 a/b 缓冲并唤醒训练线程"""
+        with self._lock:
+            self._buffer_a, self._buffer_b = self._buffer_b, self._buffer_a
+        self._train_event.set()
+
+    def pending_count(self) -> int:
+        """当前 buffer_b 中待训练的轨迹数"""
+        with self._lock:
+            return len(self._buffer_b)
+
+    def stop(self):
+        """停止训练线程，先处理剩余数据"""
+        # 先交换剩余数据
+        with self._lock:
+            if self._buffer_b:
+                self._buffer_a, self._buffer_b = self._buffer_b, self._buffer_a
+        self._train_event.set()
+        self._stop_event.set()
+        self._train_thread.join(timeout=15)
+        if self._train_thread.is_alive():
+            logger.warning("[AsyncPPO] 训练线程未能在15秒内结束")
+        else:
+            logger.info(
+                f"[AsyncPPO] 训练线程已停止，累计训练{self._total_train_count}条轨迹，"
+                f"总耗时{self._total_train_time:.2f}s"
+            )
 
 class SelfPlayTrainer:
     """德州扑克自我对弈训练器（6-Max 极速训练版）"""
@@ -1391,7 +1494,13 @@ class SelfPlayTrainer:
                 )
 
     def train(self, num_hands: int) -> None:
-        """主训练循环。当 train_workers > 1 时并行采样，主线程串行更新。"""
+        """主训练循环 - GPU流水线优化版。
+        
+        三维度优化：
+        1. 更大模型（512-512-256-128）+更大batch → 更多GPU计算
+        2. GPU批量推理桥 → 主线程统一GPU推理，worker只做环境模拟
+        3. 异步训练线程 → 采样与训练并行，GPU不再空闲
+        """
         logger.info(f"开始训练，共{num_hands}手牌")
         logger.info("从当前模型状态开始训练")
         logger.info(f"训练采样并行: workers={self.train_workers}")
@@ -1400,6 +1509,7 @@ class SelfPlayTrainer:
         start_hand = self.total_hands
         t_env_total = 0.0
         t_train_total = 0.0
+        t_gpu_infer_total = 0.0
         if self.model_type == "ppo" and hasattr(self.main_agent, "agent") and hasattr(self.main_agent.agent, "warmup"):
             self.main_agent.agent.warmup()
 
@@ -1408,16 +1518,45 @@ class SelfPlayTrainer:
             and not self.use_ensemble
             and hasattr(self.main_agent, 'clone_for_inference')
         )
+
+        # ===== 维度2+3: GPU批量推理桥 + 异步训练线程 =====
+        use_gpu_pipeline = (
+            self.model_type == 'ppo'
+            and hasattr(self.main_agent, 'agent')
+            and hasattr(self.main_agent.agent, 'predict_batch')
+        )
+        gpu_bridge = None
+        async_trainer = None
+
+        if use_gpu_pipeline:
+            # 创建 GPU 推理桥
+            gpu_bridge = GPUInferenceBridge(self.main_agent.agent)
+            logger.info("[GPU流水线] 启用GPU批量推理桥 - 所有Main_AI决策统一在GPU上执行")
+            # 创建异步训练器
+            async_trainer = _AsyncPPOTrainer(self.main_agent, gpu_bridge)
+            logger.info("[GPU流水线] 启用异步训练线程 - 采样与训练并行")
+
+        # 为每个worker创建轻量级环境模拟Agent（只做状态编码，不做推理）
+        # 同时保留对手Agent副本
         agent_copies = []
         worker_opp_copies = [None] * self.train_workers
         worker_opp_versions = [-1] * self.train_workers
+        # 轻量级worker：只持有StateRepresentation，推理由GPU桥完成
+        worker_state_reps = []
+
         if use_parallel:
-            agent_copies = [
-                self.main_agent.clone_for_inference()
-                for _ in range(self.train_workers)
-            ]
-            self._sync_copies_from_main(agent_copies)
-            # 在主线程预创建对手副本，避免在 worker 子线程中创建 TF 模型（TF 2.13+ 会报 shape 错乱）
+            if use_gpu_pipeline:
+                # GPU流水线模式：worker不需要完整模型副本，只需要StateRepresentation
+                for _ in range(self.train_workers):
+                    worker_state_reps.append(StateRepresentation())
+                logger.info(f"[GPU流水线] {self.train_workers}个worker使用轻量级状态编码，推理统一由GPU执行")
+            else:
+                agent_copies = [
+                    self.main_agent.clone_for_inference()
+                    for _ in range(self.train_workers)
+                ]
+                self._sync_copies_from_main(agent_copies)
+            # 在主线程预创建对手副本
             for w in range(self.train_workers):
                 worker_opp_copies[w] = self._clone_opponents_for_inference()
                 worker_opp_versions[w] = self._opponents_version
@@ -1430,7 +1569,14 @@ class SelfPlayTrainer:
                 remaining_hands = num_hands - hand_idx
                 t0 = datetime.now().timestamp()
 
-                if use_parallel:
+                if use_parallel and use_gpu_pipeline:
+                    # ===== GPU流水线模式：迭代式环境推进 + GPU批量推理 =====
+                    results_and_trajectories = self._gpu_pipeline_step(
+                        executor, remaining_hands, worker_state_reps,
+                        worker_opp_copies, gpu_bridge
+                    )
+                elif use_parallel:
+                    # 原始并行模式（非PPO或未启用GPU流水线）
                     worker_count = min(self.train_workers, remaining_hands)
                     target_batch_hands = min(
                         remaining_hands,
@@ -1467,10 +1613,14 @@ class SelfPlayTrainer:
                 t1 = datetime.now().timestamp()
                 t_env_total += (t1 - t0)
 
+                # 收集PPO轨迹
+                ppo_trajectories = []
                 for (result, trajectory) in results_and_trajectories:
-                    # PPO 先批量聚合轨迹，循环后统一提交，减少函数调用与阈值检查开销
                     if self.model_type != 'ppo':
                         self._apply_trajectory(trajectory)
+                    else:
+                        ppo_trajectories.append(trajectory)
+
                     self.total_hands += 1
                     self.total_profit += result['player_profits']['Main_AI']
 
@@ -1541,34 +1691,57 @@ class SelfPlayTrainer:
                         logger.info(f"保存检查点，当前手牌数: {self.total_hands}")
                         self.save_checkpoint(is_best=False)
 
-                if self.model_type == 'ppo' and results_and_trajectories:
-                    ppo_batch = [traj for _, traj in results_and_trajectories]
-                    _ppo_t0 = datetime.now().timestamp()
-                    if hasattr(self.main_agent, 'append_trajectories_batch'):
-                        self.main_agent.append_trajectories_batch(ppo_batch)
+                # ===== PPO训练提交 =====
+                if self.model_type == 'ppo' and ppo_trajectories:
+                    if async_trainer is not None:
+                        # 异步模式：提交轨迹到写入缓冲
+                        async_trainer.submit_trajectories(ppo_trajectories)
+                        # 每隔一定批次交换缓冲并触发训练
+                        if batch_counter % max(1, self.train_sync_every_batches) == 0:
+                            async_trainer.swap_buffers()
                     else:
-                        for _, traj in results_and_trajectories:
-                            self._apply_trajectory(traj)
-                    _ppo_t1 = datetime.now().timestamp()
-                    t_train_total += (_ppo_t1 - _ppo_t0)
+                        # 同步模式
+                        _ppo_t0 = datetime.now().timestamp()
+                        if hasattr(self.main_agent, 'append_trajectories_batch'):
+                            self.main_agent.append_trajectories_batch(ppo_trajectories)
+                        else:
+                            for traj in ppo_trajectories:
+                                self._apply_trajectory(traj)
+                        _ppo_t1 = datetime.now().timestamp()
+                        t_train_total += (_ppo_t1 - _ppo_t0)
 
                 hand_idx += len(results_and_trajectories)
                 batch_counter += 1
 
-                # 每隔一段时间输出环境采样vs GPU训练的耗时比例
+                # 每隔一段时间输出耗时分布
                 if batch_counter % 10 == 0 and (t_env_total + t_train_total) > 0:
                     total_t = t_env_total + t_train_total
+                    async_info = ""
+                    if async_trainer is not None:
+                        async_info = f", 异步训练累计{async_trainer._total_train_count}条/{async_trainer._total_train_time:.2f}s"
                     logger.info(
-                        f"[GPU诊断] 耗时分布: 环境采样(CPU)={t_env_total:.2f}s({t_env_total/total_t*100:.1f}%), "
-                        f"PPO训练(GPU)={t_train_total:.2f}s({t_train_total/total_t*100:.1f}%), "
-                        f"总耗时={total_t:.2f}s"
+                        f"[GPU流水线] 耗时分布: 环境采样={t_env_total:.2f}s({t_env_total/total_t*100:.1f}%), "
+                        f"同步训练={t_train_total:.2f}s({t_train_total/total_t*100:.1f}%), "
+                        f"总耗时={total_t:.2f}s{async_info}"
                     )
         finally:
+            # 停止异步训练线程
+            if async_trainer is not None:
+                async_trainer.stop()
+                # 刷新剩余数据
+                try:
+                    self.main_agent.flush_pending_updates()
+                except Exception as e:
+                    err_msg = str(e).lower()
+                    if "dnn library" in err_msg or "graph execution" in err_msg:
+                        logger.warning("收尾PPO更新跳过(DNN/Graph错误): %s", e)
+                    else:
+                        raise
             if executor is not None:
                 executor.shutdown(wait=True)
 
         logger.info(f"训练完成！总手牌: {self.total_hands}")
-        if hasattr(self.main_agent, 'flush_pending_updates'):
+        if async_trainer is None and hasattr(self.main_agent, 'flush_pending_updates'):
             try:
                 self.main_agent.flush_pending_updates()
             except Exception as e:
@@ -1596,9 +1769,245 @@ class SelfPlayTrainer:
             logger.info("已按配置跳过最终评估（--skip-final-eval）")
         if num_hands > 0:
             logger.info(
-                f"性能统计: 环境与决策总耗时={t_env_total:.2f}s, 评估总耗时={t_train_total:.2f}s, "
+                f"性能统计: 环境与决策总耗时={t_env_total:.2f}s, 同步训练总耗时={t_train_total:.2f}s, "
                 f"平均每手环境耗时={t_env_total/num_hands:.4f}s"
             )
+
+    def _gpu_pipeline_step(
+        self,
+        executor: ThreadPoolExecutor,
+        remaining_hands: int,
+        worker_state_reps: List,
+        worker_opp_copies: List,
+        gpu_bridge: GPUInferenceBridge,
+    ) -> List[Tuple[Dict, Dict]]:
+        """GPU流水线模式的一次训练步：
+        1. 多线程并行推进环境，收集所有Main_AI待决策状态
+        2. 主线程GPU批量推理
+        3. 推理结果分发回各环境继续推进
+        4. 循环直到所有手牌完成
+        """
+        worker_count = min(self.train_workers, remaining_hands)
+        target_batch_hands = min(
+            remaining_hands,
+            worker_count * max(1, self.train_rollouts_per_worker)
+        )
+
+        # 创建游戏环境
+        envs = []
+        for _ in range(target_batch_hands):
+            game, players = self._create_game()
+            game.start_new_hand()
+            envs.append({
+                'game': game,
+                'players': players,
+                'last_step_info': None,
+                'initial_stack': players[0].stack,
+                'action_records': {p.name: [] for p in players},
+                'all_in_context': {'happened': False, 'round': None, 'equity': 0.0},
+                'trajectory': {'states': [], 'actions': [], 'old_probs': []},
+                'done': False,
+            })
+
+        outputs: List[Tuple[Dict, Dict]] = []
+        remaining = len(envs)
+        gpu_infer_count = 0
+
+        def finalize_env(env_idx: int) -> None:
+            """结算单个环境"""
+            env = envs[env_idx]
+            if env['done']:
+                return
+            game = env['game']
+            players = env['players']
+            alive = [p for p in players if p.is_active]
+            if len(alive) == 1 and game.pot > 0:
+                game._award_pot(alive[0])
+            final_profit = players[0].stack - env['initial_stack']
+            winners = [p.name for p in getattr(game, 'winners', [])]
+            if not winners and hasattr(game, 'winner') and game.winner:
+                winners = [game.winner.name]
+            is_winner = "Main_AI" in winners
+
+            final_reward = self.reward_calculator.calculate_reward(
+                player=players[0], game=game, action="end",
+                action_amount=0, is_winner=is_winner,
+                profit_loss=final_profit, done=True,
+            )
+            main_actions = env['action_records'].get("Main_AI", [])
+            if len(main_actions) == 1 and main_actions[0][0] == "fold" and final_profit <= 0:
+                final_reward -= 0.25
+            allin_unlucky_bonus = 0.0
+            all_in_context = env['all_in_context']
+            if (not is_winner) and all_in_context['happened'] and all_in_context['round'] in (1, 2):
+                eq = all_in_context['equity']
+                if eq >= self.allin_unlucky_eq_threshold:
+                    unlucky_bonus = min(
+                        self.allin_unlucky_bonus_cap,
+                        0.20 + (eq - self.allin_unlucky_eq_threshold) * 2.0,
+                    )
+                    final_reward += unlucky_bonus
+                    allin_unlucky_bonus = unlucky_bonus
+
+            env['trajectory']['final_reward'] = final_reward
+            env['trajectory']['allin_unlucky'] = {
+                'triggered': allin_unlucky_bonus > 0,
+                'bonus': allin_unlucky_bonus,
+                'equity': all_in_context['equity'],
+            }
+            result = {
+                'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
+                'winners': winners,
+                'player_profits': {p.name: p.stack - self.initial_stack for p in players},
+                'action_histories': env['action_records'],
+                'metrics': self._count_episode_metrics(
+                    players[0], game,
+                    env['action_records'].get("Main_AI", []),
+                    lightweight=False,
+                ),
+            }
+            outputs.append((result, env['trajectory']))
+            env['done'] = True
+
+        def step_env_until_main_action(env_idx: int) -> Optional[np.ndarray]:
+            """推进单个环境直到Main_AI需要决策，返回状态向量或None(结束)。"""
+            env = envs[env_idx]
+            if env['done']:
+                return None
+            game = env['game']
+            players = env['players']
+
+            while not game.is_hand_over():
+                if game.is_round_over():
+                    if not game.proceed_to_next_round():
+                        finalize_env(env_idx)
+                        return None
+                    continue
+
+                current_player = game.next_player()
+                if not current_player or not current_player.is_active:
+                    continue
+
+                if current_player.name == "Main_AI":
+                    # 需要GPU推理，返回状态
+                    state_rep = worker_state_reps[env_idx % len(worker_state_reps)]
+                    current_state = state_rep.get_state(game, current_player)
+                    env['current_main_player'] = current_player
+                    env['current_main_state'] = current_state
+                    return current_state
+                else:
+                    # 对手动作：在worker本地处理
+                    opp_agents = worker_opp_copies[env_idx % len(worker_opp_copies)]
+                    try:
+                        opp_idx = int(current_player.name.split('_')[-1]) - 1
+                        if 0 <= opp_idx < len(opp_agents):
+                            agent = opp_agents[opp_idx]
+                        else:
+                            agent = opp_agents[0]
+                    except Exception:
+                        agent = opp_agents[0]
+                    action, amount = agent.select_action(game, current_player)
+                    env['action_records'][current_player.name].append(
+                        (action, amount if amount else 0)
+                    )
+                    if not game.handle_action(current_player, action, amount):
+                        game.handle_action(current_player, 'fold', None)
+
+            # 手牌结束
+            finalize_env(env_idx)
+            return None
+
+        # 迭代式推进：收集所有Main_AI待决策状态 → GPU批量推理 → 分发结果
+        max_iterations = 100  # 安全上限
+        iteration = 0
+        while remaining > 0 and iteration < max_iterations:
+            iteration += 1
+            # 1. 推进所有环境，收集待决策状态
+            pending_states = []
+            pending_env_indices = []
+
+            for env_idx in range(len(envs)):
+                state = step_env_until_main_action(env_idx)
+                if state is not None:
+                    pending_states.append(state)
+                    pending_env_indices.append(env_idx)
+
+            # 2. GPU批量推理
+            if pending_states:
+                t_gpu0 = datetime.now().timestamp()
+                states_batch = np.asarray(pending_states, dtype=np.float32)
+                action_probs_batch, values_batch = gpu_bridge.batch_predict(states_batch)
+                t_gpu1 = datetime.now().timestamp()
+                gpu_infer_count += len(pending_states)
+
+                # 3. 分发推理结果
+                for i, env_idx in enumerate(pending_env_indices):
+                    env = envs[env_idx]
+                    if env['done'] or 'current_main_player' not in env:
+                        continue
+                    game = env['game']
+                    current_player = env.pop('current_main_player')
+                    current_state = env.pop('current_main_state')
+                    action_probs = action_probs_batch[i]
+                    value = values_batch[i]
+
+                    # 应用合法动作掩码
+                    legal_mask = _get_legal_action_mask(game, current_player)
+                    masked_probs = action_probs * legal_mask
+                    prob_sum = float(np.sum(masked_probs))
+                    if prob_sum <= 1e-8:
+                        masked_probs = legal_mask / (np.sum(legal_mask) + 1e-8)
+                    else:
+                        masked_probs = masked_probs / prob_sum
+                    action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
+
+                    state_rep = worker_state_reps[env_idx % len(worker_state_reps)]
+                    hand_strength = state_rep.calculate_hand_strength(current_player, game)
+                    action_vector = np.zeros(len(action_probs), dtype=np.float32)
+                    action_vector[action_idx] = 1.0
+                    action_str, amount = state_rep.decode_action(action_vector, game, current_player, hand_strength)
+
+                    env['action_records'][current_player.name].append(
+                        (action_str, amount if amount else 0)
+                    )
+                    success = game.handle_action(current_player, action_str, amount)
+                    if success and (not env['all_in_context']['happened']) and current_player.is_all_in and game.round in (1, 2):
+                        try:
+                            eq = float(state_rep.calculate_hand_strength(current_player, game))
+                        except Exception:
+                            eq = 0.0
+                        env['all_in_context'].update({
+                            'happened': True,
+                            'round': int(game.round),
+                            'equity': max(0.0, min(1.0, eq)),
+                        })
+
+                    if not success:
+                        game.handle_action(current_player, 'fold', None)
+                        fold_prob = float(np.clip(masked_probs[0], 1e-8, 1.0))
+                        env['trajectory']['states'].append(current_state)
+                        env['trajectory']['actions'].append(0)
+                        env['trajectory']['old_probs'].append(fold_prob)
+                    else:
+                        old_prob = float(np.clip(masked_probs[action_idx], 1e-8, 1.0))
+                        env['trajectory']['states'].append(current_state)
+                        env['trajectory']['actions'].append(int(action_idx))
+                        env['trajectory']['old_probs'].append(old_prob)
+                    env['last_step_info'] = (current_state, action_idx)
+
+            # 更新剩余数
+            remaining = sum(1 for e in envs if not e['done'])
+            if not pending_states and remaining > 0:
+                # 无进展时强制结算
+                for env_idx in range(len(envs)):
+                    if not envs[env_idx]['done']:
+                        finalize_env(env_idx)
+                break
+
+        if gpu_infer_count > 0:
+            logger.debug(f"[GPU流水线] 本批次GPU推理{gpu_infer_count}次，完成{len(outputs)}手牌")
+
+        return outputs
 
 # 示例使用
 if __name__ == "__main__":

@@ -64,9 +64,10 @@ def _apply_hardware_profile(args) -> None:
     if profile == 'rtx4090d':
         cpu_total = os.cpu_count() or 32
 
-        # RTX 4090D: 24GB显存
-        # 关键：worker数不宜过高，否则CPU调度阻塞导致GPU空闲
-        # 经验值：train_workers=16, eval_workers=24 可让GPU利用率显著提升
+        # RTX 4090D: 24GB显存 - GPU流水线优化版 v2
+        # 维度1: 512-512-256-128 网络（约800K参数）+ batch_size=512
+        # 维度2: GPU批量推理桥 - 所有Main_AI决策统一在GPU上执行
+        # 维度3: 异步训练线程 - 采样与训练并行
         if int(getattr(args, 'train_workers', 0)) <= 0:
             args.train_workers = min(16, max(8, cpu_total // 8))
         if int(getattr(args, 'eval_workers', 0)) <= 0:
@@ -84,11 +85,11 @@ def _apply_hardware_profile(args) -> None:
         if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
             args.train_sync_every_batches = 8
 
-        # PPO 更大批次以充分利用4090D算力
+        # PPO 更大批次以充分利用4090D算力（v2: 512 batch）
         if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
             args.ppo_update_min_steps = 0  # 自动根据batch_size推算
-        if int(getattr(args, 'batch_size', 64)) <= 256:
-            args.batch_size = 256
+        if int(getattr(args, 'batch_size', 64)) <= 512:
+            args.batch_size = 512
 
         # 默认走 GPU + XLA + 混合精度
         if getattr(args, 'device', 'auto') == 'auto':

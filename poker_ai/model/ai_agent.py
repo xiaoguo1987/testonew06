@@ -2,6 +2,7 @@
 
 import numpy as np
 import logging
+import threading
 from typing import Tuple, Optional, Dict
 from .state_representation import StateRepresentation
 from .dqn_agent import DQNAgent, PolicyGradientAgent
@@ -51,6 +52,56 @@ def _get_legal_action_mask(game: PokerGame, player: Player) -> np.ndarray:
         if call_amount <= player.stack:
             mask[1] = 1.0
     return mask
+
+class GPUInferenceBridge:
+    """GPU批量推理桥：在主线程统一调用GPU做批量推理，避免多线程GPU竞争。
+    
+    设计目标：
+    - 采样worker不再持有完整模型副本，只持有StateRepresentation用于状态编码
+    - 所有Main_AI的决策推理统一在主线程GPU上批量执行
+    - 训练完成后自动同步权重快照给推理桥
+    """
+
+    def __init__(self, ppo_model: PPOModel):
+        self._model = ppo_model
+        self._lock = threading.Lock()
+        # 推理用快照权重（训练线程更新后同步过来）
+        self._snapshot_weights = None
+
+    def batch_predict(self, states: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """在GPU上批量推理，返回 (action_probs, values)。
+        
+        使用训练模型的 predict_batch 方法，所有推理在主线程的GPU上执行。
+        如果有未应用的权重快照，先应用再推理。
+        """
+        with self._lock:
+            if self._snapshot_weights is not None:
+                self._model.apply_weights_snapshot(self._snapshot_weights)
+                self._snapshot_weights = None
+        return self._model.predict_batch(states)
+
+    def sync_weights_from_main(self, snapshot):
+        """训练完成后，异步训练线程调用此方法更新推理权重。"""
+        with self._lock:
+            self._snapshot_weights = snapshot
+
+
+class LightweightInferenceAgent:
+    """轻量级推理Agent：只持有StateRepresentation，不做模型推理。
+    
+    用于采样worker：worker只需编码状态，不需要做模型推理。
+    推理统一由主线程的GPUInferenceBridge完成。
+    """
+
+    def __init__(self, state_rep: StateRepresentation, agent_type: str = 'ppo'):
+        self.state_rep = state_rep
+        self.agent_type = agent_type
+        self.name = f"LightweightInference_{agent_type}"
+
+    def encode_state(self, game, player) -> np.ndarray:
+        """编码游戏状态为向量"""
+        return self.state_rep.get_state(game, player)
+
 
 class PokerAIAgent:
     """德州扑克AI代理统一接口"""
