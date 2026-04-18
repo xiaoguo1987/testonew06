@@ -2,6 +2,13 @@
 """
 PPO（近端策略优化）训练配置
 集中管理 PPO 超参数，便于调参与复现。
+
+RTX 4090D 优化版：
+- 增大batch_size（256）提升GPU利用率
+- 降低update_epochs（4）避免策略退化
+- 增加warmup_steps（2000）稳定初期训练
+- 新增KL散度早停配置
+- 增大total_training_steps（200000）
 """
 
 from dataclasses import dataclass, field
@@ -12,7 +19,10 @@ from typing import Optional
 class PPOConfig:
     """PPO 模型与训练超参数
     
-    优化特性：
+    RTX 4090D 优化特性：
+    - 更大批次（256）以充分利用4090D算力
+    - 更少更新轮次（4）减少策略退化风险
+    - KL散度早停机制
     - 学习率warmup和cosine衰减
     - 自适应熵系数
     - 价值损失裁剪
@@ -30,9 +40,9 @@ class PPOConfig:
     
     # 学习率调度优化
     use_lr_warmup: bool = True
-    warmup_steps: int = 1000
+    warmup_steps: int = 2000
     use_cosine_decay: bool = True
-    total_training_steps: int = 100000
+    total_training_steps: int = 200000
 
     # PPO 核心参数
     clip_epsilon: float = 0.2
@@ -47,9 +57,13 @@ class PPOConfig:
     # 价值损失裁剪
     value_clip: float = 0.2
 
-    # 每批轨迹更新轮次与批次
-    update_epochs: int = 10
-    batch_size: int = 64
+    # KL散度早停
+    kl_target: float = 0.015
+    kl_early_stop: bool = True
+
+    # 每批轨迹更新轮次与批次（4090D优化：更大batch，更少epochs）
+    update_epochs: int = 4
+    batch_size: int = 256
     
     # 梯度累积
     gradient_accumulation_steps: int = 1
@@ -73,6 +87,8 @@ class PPOConfig:
             "use_cosine_decay": self.use_cosine_decay,
             "entropy_adaptive": self.entropy_adaptive,
             "value_clip": self.value_clip,
+            "kl_target": self.kl_target,
+            "kl_early_stop": self.kl_early_stop,
         }
 
 

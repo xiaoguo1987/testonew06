@@ -57,8 +57,45 @@ def _apply_hardware_profile(args) -> None:
     根据硬件档位应用更激进的默认参数（仅在对应参数为“自动/未显式设置”时生效）。
     当前内置:
     - rtx3090_112cpu: 112 线程级 CPU + 单卡 3090 场景
+    - rtx4090d: NVIDIA RTX 4090D (24GB VRAM) 场景，最大化GPU利用率
     """
     profile = getattr(args, 'hardware_profile', 'auto')
+
+    if profile == 'rtx4090d':
+        cpu_total = os.cpu_count() or 32
+
+        # RTX 4090D: 24GB显存，可支持更大batch和更多并行
+        if int(getattr(args, 'train_workers', 0)) <= 0:
+            args.train_workers = min(48, max(24, cpu_total // 2))
+        if int(getattr(args, 'eval_workers', 0)) <= 0:
+            args.eval_workers = min(64, max(24, (cpu_total * 3) // 4))
+
+        # TensorFlow CPU 并行参数
+        if int(getattr(args, 'cpu_threads', 0)) <= 0:
+            args.cpu_threads = min(64, cpu_total)
+        if int(getattr(args, 'tf_inter_op_threads', 0)) <= 0:
+            args.tf_inter_op_threads = 8
+
+        # PPO 训练并行批次策略
+        if int(getattr(args, 'train_rollouts_per_worker', 0)) <= 0:
+            args.train_rollouts_per_worker = 8
+        if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
+            args.train_sync_every_batches = 16
+
+        # PPO 更大批次以充分利用4090D算力
+        if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
+            args.ppo_update_min_steps = 16384
+        if int(getattr(args, 'batch_size', 64)) <= 256:
+            args.batch_size = 256
+
+        # 默认走 GPU + XLA + 混合精度
+        if getattr(args, 'device', 'auto') == 'auto':
+            args.device = 'gpu'
+        args.mixed_precision = True
+        args.enable_xla = True
+        args.gpu_memory_growth = True
+        return
+
     if profile != 'rtx3090_112cpu':
         return
 
@@ -106,8 +143,8 @@ def parse_arguments():
     parser.add_argument('--mode', type=str, choices=['train', 'eval', 'demo'],
                         default='train', help='运行模式: train(训练), eval(评估), demo(演示)')
     parser.add_argument('--hardware-profile', type=str, default='auto',
-                        choices=['auto', 'rtx3090_112cpu'],
-                        help='硬件优化档位: auto 或 rtx3090_112cpu')
+                        choices=['auto', 'rtx3090_112cpu', 'rtx4090d'],
+                        help='硬件优化档位: auto, rtx3090_112cpu 或 rtx4090d')
     parser.add_argument('--auto-tune', action='store_true',
                         help='训练前短跑多组参数，自动选择吞吐最高配置（推荐PPO）')
     parser.add_argument('--auto-tune-hands', type=int, default=4000,
