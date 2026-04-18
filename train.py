@@ -85,12 +85,12 @@ def _apply_hardware_profile(args) -> None:
         if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
             args.train_sync_every_batches = 8
 
-        # PPO 更大批次以充分利用4090D算力（GPU利用率优化: 1024 batch + 15 epochs）
+        # PPO 批次大小（根据扑克游戏实际样本生成率优化：每手约1.2个样本）
         if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
-            args.ppo_update_min_steps = 0  # 自动根据batch_size推算（ai_agent.py: batch*24）
-        if int(getattr(args, 'batch_size', 64)) <= 1024:
-            args.batch_size = 1024
-        # 提高 PPO 更新轮次，让 GPU 每次更新做更多计算（KL早停仍会保护策略稳定性）
+            args.ppo_update_min_steps = 0  # 自动推算（ai_agent.py: batch*2）
+        if int(getattr(args, 'batch_size', 64)) <= 256:
+            args.batch_size = 256
+        # PPO 更新轮次（GPU每次更新做更多计算，KL早停保护策略稳定性）
         if int(getattr(args, 'ppo_epochs', 10)) <= 10:
             args.ppo_epochs = 15
 

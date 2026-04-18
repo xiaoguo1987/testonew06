@@ -171,12 +171,10 @@ class PPOModel:
             batch_current_probs = tf.reduce_sum(probs_f32 * action_masks, axis=1)
             ratio = batch_current_probs / (old_probs_f32 + 1e-8)
 
-            # KL散度跟踪
-            kl = tf.reduce_sum(
-                old_probs_f32 * (tf.math.log(old_probs_f32 + 1e-8) - tf.math.log(probs_f32 + 1e-8)),
-                axis=1,
-            )
-            mean_kl = tf.reduce_mean(kl)
+            # KL散度跟踪（使用ratio近似法，避免old_probs标量与probs分布的维度不匹配）
+            # Schulman KL近似: kl ≈ (ratio - 1) - log(ratio)
+            log_ratio = tf.math.log(batch_current_probs + 1e-8) - tf.math.log(old_probs_f32 + 1e-8)
+            mean_kl = tf.reduce_mean((tf.exp(log_ratio) - 1.0) - log_ratio)
 
             clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
             per_sample = tf.minimum(ratio * advantages_f32, clipped_ratio * advantages_f32)
