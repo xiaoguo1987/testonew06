@@ -10,7 +10,14 @@ from typing import Optional
 
 @dataclass
 class PPOConfig:
-    """PPO 模型与训练超参数"""
+    """PPO 模型与训练超参数
+    
+    优化特性：
+    - 学习率warmup和cosine衰减
+    - 自适应熵系数
+    - 价值损失裁剪
+    - 梯度累积
+    """
 
     # 网络结构
     input_dim: int = 134  # 与 StateRepresentation.total_state_dim 一致（6-Max）
@@ -20,16 +27,32 @@ class PPOConfig:
     lr: float = 3e-4
     lr_min: float = 1e-6
     lr_decay_rate: float = 0.9999
+    
+    # 学习率调度优化
+    use_lr_warmup: bool = True
+    warmup_steps: int = 1000
+    use_cosine_decay: bool = True
+    total_training_steps: int = 100000
 
     # PPO 核心参数
     clip_epsilon: float = 0.2
     gamma: float = 0.99
     lambda_: float = 0.95
+    
+    # 熵正则优化
     entropy_coef: float = 0.02
+    entropy_adaptive: bool = True
+    entropy_coef_target: float = 0.01
+    
+    # 价值损失裁剪
+    value_clip: float = 0.2
 
     # 每批轨迹更新轮次与批次
     update_epochs: int = 10
     batch_size: int = 64
+    
+    # 梯度累积
+    gradient_accumulation_steps: int = 1
 
     # 梯度裁剪（防止爆炸）
     max_grad_norm: float = 0.5
@@ -45,6 +68,11 @@ class PPOConfig:
             "entropy_coef": self.entropy_coef,
             "update_epochs": self.update_epochs,
             "batch_size": self.batch_size,
+            "use_lr_warmup": self.use_lr_warmup,
+            "warmup_steps": self.warmup_steps,
+            "use_cosine_decay": self.use_cosine_decay,
+            "entropy_adaptive": self.entropy_adaptive,
+            "value_clip": self.value_clip,
         }
 
 
