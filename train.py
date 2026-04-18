@@ -64,27 +64,29 @@ def _apply_hardware_profile(args) -> None:
     if profile == 'rtx4090d':
         cpu_total = os.cpu_count() or 32
 
-        # RTX 4090D: 24GB显存，可支持更大batch和更多并行
+        # RTX 4090D: 24GB显存
+        # 关键：worker数不宜过高，否则CPU调度阻塞导致GPU空闲
+        # 经验值：train_workers=16, eval_workers=24 可让GPU利用率显著提升
         if int(getattr(args, 'train_workers', 0)) <= 0:
-            args.train_workers = min(48, max(24, cpu_total // 2))
+            args.train_workers = min(16, max(8, cpu_total // 8))
         if int(getattr(args, 'eval_workers', 0)) <= 0:
-            args.eval_workers = min(64, max(24, (cpu_total * 3) // 4))
+            args.eval_workers = min(24, max(8, cpu_total // 6))
 
         # TensorFlow CPU 并行参数
         if int(getattr(args, 'cpu_threads', 0)) <= 0:
-            args.cpu_threads = min(64, cpu_total)
+            args.cpu_threads = min(32, max(8, cpu_total // 4))
         if int(getattr(args, 'tf_inter_op_threads', 0)) <= 0:
-            args.tf_inter_op_threads = 8
+            args.tf_inter_op_threads = 4
 
         # PPO 训练并行批次策略
         if int(getattr(args, 'train_rollouts_per_worker', 0)) <= 0:
-            args.train_rollouts_per_worker = 8
+            args.train_rollouts_per_worker = 4
         if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
-            args.train_sync_every_batches = 16
+            args.train_sync_every_batches = 8
 
         # PPO 更大批次以充分利用4090D算力
         if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
-            args.ppo_update_min_steps = 16384
+            args.ppo_update_min_steps = 0  # 自动根据batch_size推算
         if int(getattr(args, 'batch_size', 64)) <= 256:
             args.batch_size = 256
 
