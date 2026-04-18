@@ -93,16 +93,19 @@ class PokerAIAgent:
         elif agent_type == 'policy_gradient':
             self.agent = PolicyGradientAgent(state_dim=state_dim)
         elif agent_type == 'ppo':
-            kwargs = dict(input_dim=state_dim, lr=learning_rate)
+            # 构建PPOConfig，确保所有优化参数（KL早停、value clip等）正确传递
+            from ..config.ppo_config import PPOConfig
+            cfg_kwargs = dict(input_dim=state_dim, lr=learning_rate)
             if ppo_clip_epsilon is not None:
-                kwargs['clip_epsilon'] = ppo_clip_epsilon
+                cfg_kwargs['clip_epsilon'] = ppo_clip_epsilon
             if ppo_update_epochs is not None:
-                kwargs['update_epochs'] = ppo_update_epochs
+                cfg_kwargs['update_epochs'] = ppo_update_epochs
             if ppo_entropy_coef is not None:
-                kwargs['entropy_coef'] = ppo_entropy_coef
+                cfg_kwargs['entropy_coef'] = ppo_entropy_coef
             if ppo_batch_size is not None:
-                kwargs['batch_size'] = ppo_batch_size
-            self.agent = PPOModel(**kwargs)
+                cfg_kwargs['batch_size'] = ppo_batch_size
+            ppo_cfg = PPOConfig(**cfg_kwargs)
+            self.agent = PPOModel(config=ppo_cfg)
             auto_min_steps = max(256, int(self.agent.batch_size) * 8)
             self.ppo_update_min_steps = int(ppo_update_min_steps) if ppo_update_min_steps else auto_min_steps
             self.ppo_pending_buffer = {
