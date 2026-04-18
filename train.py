@@ -64,14 +64,14 @@ def _apply_hardware_profile(args) -> None:
     if profile == 'rtx4090d':
         cpu_total = os.cpu_count() or 32
 
-        # RTX 4090D: 24GB显存 - GPU流水线优化版 v2
-        # 维度1: 512-512-256-128 网络（约800K参数）+ batch_size=512
+        # RTX 4090D: 24GB显存 - GPU流水线优化版 v3
+        # 维度1: 512-512-256-128 网络 + batch_size=256
         # 维度2: GPU批量推理桥 - 所有Main_AI决策统一在GPU上执行
-        # 维度3: 异步训练线程 - 采样与训练并行
+        # 维度3: 异步训练线程 + 多牌桌并行采样
         if int(getattr(args, 'train_workers', 0)) <= 0:
-            args.train_workers = min(16, max(8, cpu_total // 8))
+            args.train_workers = min(64, max(16, cpu_total // 4))
         if int(getattr(args, 'eval_workers', 0)) <= 0:
-            args.eval_workers = min(24, max(8, cpu_total // 6))
+            args.eval_workers = min(48, max(8, cpu_total // 6))
 
         # TensorFlow CPU 并行参数
         if int(getattr(args, 'cpu_threads', 0)) <= 0:

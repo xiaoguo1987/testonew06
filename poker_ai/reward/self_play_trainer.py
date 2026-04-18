@@ -1546,10 +1546,14 @@ class SelfPlayTrainer:
 
         if use_parallel:
             if use_gpu_pipeline:
-                # GPU流水线模式：worker不需要完整模型副本，只需要StateRepresentation
-                for _ in range(self.train_workers):
+                # GPU流水线模式：每个并发环境独立StateRepresentation，避免线程共享问题
+                max_concurrent_envs = self.train_workers * max(1, self.train_rollouts_per_worker)
+                for _ in range(max_concurrent_envs):
                     worker_state_reps.append(StateRepresentation())
-                logger.info(f"[GPU流水线] {self.train_workers}个worker使用轻量级状态编码，推理统一由GPU执行")
+                logger.info(
+                    f"[GPU流水线] {max_concurrent_envs}个并发牌桌环境，"
+                    f"每个独立状态编码器，推理统一由GPU执行"
+                )
             else:
                 agent_copies = [
                     self.main_agent.clone_for_inference()
@@ -1810,11 +1814,12 @@ class SelfPlayTrainer:
             })
 
         outputs: List[Tuple[Dict, Dict]] = []
+        _outputs_lock = threading.Lock()  # 多牌桌并行时保护outputs
         remaining = len(envs)
         gpu_infer_count = 0
 
         def finalize_env(env_idx: int) -> None:
-            """结算单个环境"""
+            """结算单个环境（线程安全）"""
             env = envs[env_idx]
             if env['done']:
                 return
@@ -1866,7 +1871,8 @@ class SelfPlayTrainer:
                     lightweight=False,
                 ),
             }
-            outputs.append((result, env['trajectory']))
+            with _outputs_lock:
+                outputs.append((result, env['trajectory']))
             env['done'] = True
 
         def step_env_until_main_action(env_idx: int) -> Optional[np.ndarray]:
@@ -1922,15 +1928,24 @@ class SelfPlayTrainer:
         iteration = 0
         while remaining > 0 and iteration < max_iterations:
             iteration += 1
-            # 1. 推进所有环境，收集待决策状态
+            # 1. 并行推进所有环境，收集待决策状态
             pending_states = []
             pending_env_indices = []
 
-            for env_idx in range(len(envs)):
-                state = step_env_until_main_action(env_idx)
-                if state is not None:
-                    pending_states.append(state)
-                    pending_env_indices.append(env_idx)
+            active_indices = [i for i in range(len(envs)) if not envs[i]['done']]
+            if len(active_indices) > 1 and executor is not None:
+                # 多牌桌并行：用线程池并行推进所有活跃环境
+                step_results = list(executor.map(step_env_until_main_action, active_indices))
+                for env_idx, state in zip(active_indices, step_results):
+                    if state is not None:
+                        pending_states.append(state)
+                        pending_env_indices.append(env_idx)
+            else:
+                for env_idx in active_indices:
+                    state = step_env_until_main_action(env_idx)
+                    if state is not None:
+                        pending_states.append(state)
+                        pending_env_indices.append(env_idx)
 
             # 2. GPU批量推理
             if pending_states:
@@ -2005,7 +2020,10 @@ class SelfPlayTrainer:
                 break
 
         if gpu_infer_count > 0:
-            logger.debug(f"[GPU流水线] 本批次GPU推理{gpu_infer_count}次，完成{len(outputs)}手牌")
+            logger.debug(
+                f"[GPU流水线] 本批次{len(envs)}个并发牌桌, "
+                f"GPU推理{gpu_infer_count}次, 完成{len(outputs)}手牌"
+            )
 
         return outputs
 
