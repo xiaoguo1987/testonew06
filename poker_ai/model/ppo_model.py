@@ -613,7 +613,7 @@ class PPOModel:
                 epoch_batches += 1
                 
                 # KL散度早停：平均KL超过阈值时提前终止该epoch
-                if self.kl_early_stop and epoch_batches > 1:
+                if self.kl_early_stop and epoch_batches >= 1:
                     avg_kl = epoch_kl_sum / epoch_batches
                     if avg_kl > self.kl_target:
                         logger.debug(
@@ -642,14 +642,9 @@ class PPOModel:
         self.last_kl = total_kl / num_batches_done
 
         _train_elapsed = _time.time() - _train_t0
-        # 检查实际计算设备
-        try:
-            _dev_info = self.actor.layers[0].weights[0].device
-        except Exception:
-            _dev_info = "unknown"
         logger.info(
             f"[GPU诊断] PPO train() 完成: 耗时={_train_elapsed:.4f}s, "
-            f"批次数={num_batches_done}, 设备={_dev_info}, "
+            f"批次数={num_batches_done}, "
             f"Actor损失={avg_actor_loss:.6f}, Critic损失={avg_critic_loss:.6f}, "
             f"KL={self.last_kl:.6f}"
         )
