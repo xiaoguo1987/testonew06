@@ -29,6 +29,8 @@
 ## 简介
 本技术文档围绕GPU优化策略展开，结合项目中的监控脚本、性能测试脚本以及训练配置，系统阐述如何在RTX 4090D等现代GPU上实现高效的深度强化学习训练。内容涵盖CUDA核心利用、显存带宽管理、Tensor Core加速、混合精度与XLA编译优化、并行采样与流水线并行、以及GPU与CPU协同优化等关键技术，并提供针对不同GPU型号的配置建议与故障诊断最佳实践。
 
+**更新** 本版本重点更新了RTX 4090D硬件配置优化，包括专门的worker数量调整策略、TensorFlow线程配置优化、批处理大小调整等，确保在24GB VRAM配置下获得最佳GPU利用率。
+
 ## 项目结构
 该项目是一个基于TensorFlow的德州扑克AI训练与评估系统，包含训练入口、评估脚本、PPO模型、配置与奖励计算模块，以及GPU监控与性能测试工具。整体结构如下：
 
@@ -187,11 +189,22 @@ MixedPrec --> Done["输出测试完成信息"]
   - 启用XLA JIT编译优化。
 - 根据硬件档位调整并行worker数量、批大小、累计步数等，最大化GPU利用率。
 
+**更新** 新增RTX 4090D硬件档位的专门优化配置，针对24GB VRAM的特性进行参数调优：
+
+- **Worker数量优化**：train_workers设置为min(16, max(8, cpu_total // 8))，eval_workers设置为min(24, max(8, cpu_total // 6))
+- **TensorFlow线程配置**：cpu_threads设置为min(32, max(8, cpu_total // 4))，tf_inter_op_threads固定为4
+- **批处理策略**：train_rollouts_per_worker=4，train_sync_every_batches=8
+- **批量大小优化**：batch_size=256（针对RTX 4090D的24GB显存）
+- **PPO更新策略**：ppo_update_min_steps=0（自动推算），确保充分利用GPU算力
+
 ```mermaid
 flowchart TD
 Start(["解析参数"]) --> Profile{"硬件档位？"}
 Profile --> |rtx4090d| Apply4090["应用RTX 4090D默认参数<br/>更大batch/更多worker/XLA/混合精度"]
 Profile --> |其他| Auto["自动推断参数"]
+Apply4090 --> WorkerCalc["worker数量计算<br/>train_workers=cpu//8<br/>eval_workers=cpu//6"]
+Apply4090 --> ThreadCalc["线程配置<br/>cpu_threads=cpu//4<br/>inter_op=4"]
+Apply4090 --> BatchCalc["批处理优化<br/>batch_size=256<br/>rollouts=4"]
 Apply4090 --> SetupTF["设置TensorFlow GPU/CPU线程/混合精度/XLA"]
 Auto --> SetupTF
 SetupTF --> GPUCheck{"检测GPU？"}
@@ -219,6 +232,12 @@ PPO模型与配置包含多项针对现代GPU的优化：
 - KL散度早停：当平均KL超过阈值时提前终止epoch，避免过度更新。
 - 梯度累积与LossScaleOptimizer：支持混合精度下的稳定训练。
 - tf.function编译：减少Python调度开销，提升执行效率。
+
+**更新** PPO配置针对RTX 4090D进行了专门优化：
+- **更大批次**：batch_size=256，充分利用4090D的24GB显存
+- **更少更新轮次**：update_epochs=4，减少策略退化风险
+- **KL散度早停**：kl_target=0.015，kl_early_stop=True，防止过度更新
+- **学习率调度**：use_lr_warmup=True，warmup_steps=2000，use_cosine_decay=True
 
 ```mermaid
 classDiagram
@@ -297,6 +316,11 @@ PPOModel --> PPOConfig : "使用配置"
 - 检查点管理与评估周期：定期保存检查点与评估模型表现。
 - 兼容性处理：对XLA/DNN与GPU兼容问题进行降级处理，保证训练稳定性。
 
+**更新** 自我对弈训练器针对RTX 4090D优化进行了相应调整：
+- **worker数量规范化**：使用_resolve_workers函数确保worker数量在合理范围内
+- **批处理策略优化**：PPO模型默认train_rollouts_per_worker=8（当train_workers>=32时），否则=4
+- **同步频率优化**：train_sync_every_batches=max(12, _round_down_power2(raw))，平衡同步开销与训练效率
+
 ```mermaid
 flowchart TD
 Start(["初始化训练器"]) --> ParseArgs["解析并规范化参数<br/>worker/rollouts/sync"]
@@ -356,6 +380,12 @@ Eval["evaluate.py"] --> TF
   - 混合精度可提升1.5-2倍训练速度并减少显存占用，需配合LossScaleOptimizer使用。
   - XLA JIT编译可优化计算图、减少内存碎片，带来10-20%的性能提升。
 
+**更新** RTX 4090D硬件优化要点：
+- **Worker数量平衡**：train_workers=16，eval_workers=24的组合经过经验验证，可显著提升GPU利用率
+- **TensorFlow线程优化**：cpu_threads=cpu_total//4，tf_inter_op_threads=4，避免过多线程导致CPU调度开销
+- **批处理策略**：batch_size=256，train_rollouts_per_worker=4，train_sync_every_batches=8，充分利用24GB显存
+- **PPO配置优化**：update_epochs=4，减少策略退化风险；kl_early_stop=True，防止过度更新
+
 **章节来源**
 - [RTX4090D配置指南.md:106-156](file://RTX4090D配置指南.md#L106-L156)
 - [poker_ai/model/ppo_model.py:94-104](file://poker_ai/model/ppo_model.py#L94-L104)
@@ -379,6 +409,11 @@ Eval["evaluate.py"] --> TF
   - 使用monitor_gpu.sh实时查看GPU利用率、显存使用、温度与功耗。
   - 通过test_gpu.py快速验证GPU工作状态与混合精度性能。
 
+**更新** RTX 4090D特定故障排查：
+- **worker数量过高**：当train_workers>16或eval_workers>24时，可能出现CPU调度阻塞，导致GPU空闲
+- **线程配置不当**：cpu_threads过高会导致CPU资源争用，影响GPU利用率
+- **批处理过大**：batch_size>256可能导致显存不足，需要适当降低
+
 **章节来源**
 - [RTX4090D配置指南.md:296-330](file://RTX4090D配置指南.md#L296-L330)
 - [train.py:280-309](file://train.py#L280-L309)
@@ -387,7 +422,7 @@ Eval["evaluate.py"] --> TF
 - [test_gpu.py:1-91](file://test_gpu.py#L1-L91)
 
 ## 结论
-通过在RTX 4090D等现代GPU上启用混合精度、XLA编译、显存按需增长与向量化优化，结合合理的并行采样与批处理策略，可显著提升训练吞吐与稳定性。项目提供的监控与测试脚本为GPU性能验证与日常运维提供了实用工具。建议在不同GPU型号上依据显存容量与架构特性调整batch size、worker数量与学习率策略，以获得最佳性能与收敛效果。
+通过在RTX 4090D等现代GPU上启用混合精度、XLA编译、显存按需增长与向量化优化，结合合理的并行采样与批处理策略，可显著提升训练吞吐与稳定性。项目提供的监控与测试脚本为GPU性能验证与日常运维提供了实用工具。RTX 4090D硬件档位的专门优化配置（train_workers=16，eval_workers=24，batch_size=256）已在实践中验证，能够在24GB VRAM下获得最佳GPU利用率。建议在不同GPU型号上依据显存容量与架构特性调整batch size、worker数量与学习率策略，以获得最佳性能与收敛效果。
 
 ## 附录
 - 常用命令参考

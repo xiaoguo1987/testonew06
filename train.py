@@ -330,6 +330,20 @@ def setup_environment(args):
             logger.info(f"GPU {i}: {gpu.name}")
         logger.info(f"TF CPU设备数: {len(cpus)}（这是TensorFlow逻辑设备数，不等于CPU核心数）")
         logger.info(f"训练将使用: {'GPU' if gpus else 'CPU'}")
+
+        # GPU 预热验证：确认 GPU 计算确实可用
+        if has_gpu:
+            try:
+                with tf.device('/GPU:0'):
+                    _a = tf.random.normal([5000, 5000])
+                    _b = tf.random.normal([5000, 5000])
+                    _c = tf.matmul(_a, _b)
+                    # 强制执行并获取设备信息
+                    _val = _c[0, 0].numpy()
+                    logger.info(f"[GPU诊断] GPU预热矩阵乘法成功，结果设备: {_c.device}")
+                    del _a, _b, _c, _val
+            except Exception as _e:
+                logger.warning(f"[GPU诊断] GPU预热失败，可能回退到CPU: {_e}")
     except ImportError:
         logger.warning("TensorFlow未安装，无法检测硬件信息")
     except Exception as e:

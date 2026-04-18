@@ -343,6 +343,14 @@ class PokerAIAgent:
         if (not force) and len(pending['states']) < self.ppo_update_min_steps:
             return
 
+        import time as _time
+        _t0 = _time.time()
+        n_samples = len(pending['states'])
+        logger.info(
+            f"[GPU诊断] 触发PPO训练: 累计样本={n_samples}, "
+            f"阈值={self.ppo_update_min_steps}, force={force}"
+        )
+
         states = np.array(pending['states'])
         actions = np.array(pending['actions'])
         rewards = np.array(pending['rewards'], dtype=np.float32)
@@ -359,6 +367,11 @@ class PokerAIAgent:
                 )
             else:
                 raise
+        _elapsed = _time.time() - _t0
+        logger.info(
+            f"[GPU诊断] PPO训练完成: 样本数={n_samples}, 耗时={_elapsed:.4f}s, "
+            f"吞吐={n_samples/_elapsed:.0f} samples/s"
+        )
         self.ppo_pending_buffer = {
             'states': [], 'actions': [], 'rewards': [], 'dones': [], 'old_probs': []
         }

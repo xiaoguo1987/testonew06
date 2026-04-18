@@ -103,6 +103,31 @@ class PPOModel:
             self.actor_optimizer = base_actor_opt
             self.critic_optimizer = base_critic_opt
 
+        # ===== GPU 设备诊断 =====
+        import logging as _logging
+        _diag_log = _logging.getLogger('PPOModel')
+        gpus = tf.config.list_physical_devices('GPU')
+        _diag_log.info(f"[GPU诊断] TF可见GPU数量: {len(gpus)}")
+        for i, gpu in enumerate(gpus):
+            _diag_log.info(f"[GPU诊断]   GPU {i}: {gpu.name}")
+        # 检查模型实际所在设备
+        try:
+            actor_dev = self.actor.layers[0].weights[0].device if self.actor.layers[0].weights else 'N/A'
+            critic_dev = self.critic.layers[0].weights[0].device if self.critic.layers[0].weights else 'N/A'
+            _diag_log.info(f"[GPU诊断] Actor权重设备: {actor_dev}")
+            _diag_log.info(f"[GPU诊断] Critic权重设备: {critic_dev}")
+        except Exception as _e:
+            _diag_log.info(f"[GPU诊断] 权重设备检查跳过: {_e}")
+        # GPU预热：强制首次计算在GPU上执行，确认无fallback
+        try:
+            _warmup_input = tf.random.normal([1, self.input_dim])
+            _ = self.actor(_warmup_input, training=False)
+            _ = self.critic(_warmup_input, training=False)
+            _diag_log.info("[GPU诊断] GPU预热完成，Actor/Critic首次前向传播成功")
+        except Exception as _e:
+            _diag_log.warning(f"[GPU诊断] GPU预热失败: {_e}")
+        _diag_log.info(f"[GPU诊断] 混合精度: {'启用(' + tf.keras.mixed_precision.global_policy().name + ')' if self._use_mixed_precision else '禁用'}")
+
     @tf.function(reduce_retracing=True)
     def _ppo_update_step(
         self,
@@ -513,10 +538,16 @@ class PPOModel:
         - 自适应熵系数
         """
         import logging
+        import time as _time
         logger = logging.getLogger('PPOModel')
+        _train_t0 = _time.time()
 
         buffer_size = len(states)
         train_batch_size = self.batch_size
+        logger.info(
+            f"[GPU诊断] PPO train() 开始: buffer_size={buffer_size}, "
+            f"batch_size={train_batch_size}, update_epochs={self.update_epochs}"
+        )
         
         # 计算状态价值和优势（仅用固定 chunk，避免 fallback 可变 shape 触发 retracing）
         values = self._predict_critic_fixed_batch(states, chunk_size=train_batch_size)
@@ -630,7 +661,19 @@ class PPOModel:
         avg_critic_loss = total_critic_loss / num_batches_done
         self.last_loss = (avg_actor_loss + avg_critic_loss) / 2  # 记录总损失
         self.last_kl = total_kl / num_batches_done
-        
+
+        _train_elapsed = _time.time() - _train_t0
+        # 检查实际计算设备
+        try:
+            _dev_info = self.actor.layers[0].weights[0].device
+        except Exception:
+            _dev_info = "unknown"
+        logger.info(
+            f"[GPU诊断] PPO train() 完成: 耗时={_train_elapsed:.4f}s, "
+            f"批次数={num_batches_done}, 设备={_dev_info}, "
+            f"Actor损失={avg_actor_loss:.6f}, Critic损失={avg_critic_loss:.6f}, "
+            f"KL={self.last_kl:.6f}"
+        )
         logger.debug(
             f"训练完成: Actor损失={avg_actor_loss:.6f}, Critic损失={avg_critic_loss:.6f}, "
             f"总损失={self.last_loss:.6f}, KL散度={self.last_kl:.6f}, "

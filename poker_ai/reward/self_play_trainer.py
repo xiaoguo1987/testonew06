@@ -1543,14 +1543,26 @@ class SelfPlayTrainer:
 
                 if self.model_type == 'ppo' and results_and_trajectories:
                     ppo_batch = [traj for _, traj in results_and_trajectories]
+                    _ppo_t0 = datetime.now().timestamp()
                     if hasattr(self.main_agent, 'append_trajectories_batch'):
                         self.main_agent.append_trajectories_batch(ppo_batch)
                     else:
                         for _, traj in results_and_trajectories:
                             self._apply_trajectory(traj)
+                    _ppo_t1 = datetime.now().timestamp()
+                    t_train_total += (_ppo_t1 - _ppo_t0)
 
                 hand_idx += len(results_and_trajectories)
                 batch_counter += 1
+
+                # 每隔一段时间输出环境采样vs GPU训练的耗时比例
+                if batch_counter % 10 == 0 and (t_env_total + t_train_total) > 0:
+                    total_t = t_env_total + t_train_total
+                    logger.info(
+                        f"[GPU诊断] 耗时分布: 环境采样(CPU)={t_env_total:.2f}s({t_env_total/total_t*100:.1f}%), "
+                        f"PPO训练(GPU)={t_train_total:.2f}s({t_train_total/total_t*100:.1f}%), "
+                        f"总耗时={total_t:.2f}s"
+                    )
         finally:
             if executor is not None:
                 executor.shutdown(wait=True)
