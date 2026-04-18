@@ -440,11 +440,13 @@ class PPOModel:
         return max(self.lr_min, lr)
     
     def update_lr(self, step: int) -> None:
-        """更新学习率"""
+        """更新学习率（兼容LossScaleOptimizer包装）"""
         new_lr = self._get_lr_with_warmup_and_decay(step)
         self.current_lr = new_lr
-        self.actor_optimizer.learning_rate.assign(new_lr)
-        self.critic_optimizer.learning_rate.assign(new_lr)
+        # LossScaleOptimizer 包装后需通过 inner_optimizer 或直接属性设置
+        for opt in (self.actor_optimizer, self.critic_optimizer):
+            inner = getattr(opt, 'inner_optimizer', opt)
+            inner.learning_rate.assign(new_lr)
     
     def _compute_entropy_loss(self, probs_f32: tf.Tensor, mask_f32: tf.Tensor) -> tf.Tensor:
         """计算熵损失
