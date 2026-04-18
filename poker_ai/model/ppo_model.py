@@ -116,7 +116,11 @@ class PPOModel:
         def _first_weight_device(model):
             for _layer in model.layers:
                 if _layer.weights:
-                    return _layer.weights[0].device
+                    w = _layer.weights[0]
+                    # TF2 兼容：ResourceVariable 可能没有 .device，用 tf.identity 取设备
+                    if hasattr(w, 'device'):
+                        return w.device
+                    return tf.identity(w).device
             return 'N/A (no weighted layer)'
         try:
             actor_dev = _first_weight_device(self.actor)

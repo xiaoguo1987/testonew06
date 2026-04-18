@@ -85,11 +85,14 @@ def _apply_hardware_profile(args) -> None:
         if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
             args.train_sync_every_batches = 8
 
-        # PPO 更大批次以充分利用4090D算力（v2: 512 batch）
+        # PPO 更大批次以充分利用4090D算力（GPU利用率优化: 1024 batch + 15 epochs）
         if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
-            args.ppo_update_min_steps = 0  # 自动根据batch_size推算
-        if int(getattr(args, 'batch_size', 64)) <= 512:
-            args.batch_size = 512
+            args.ppo_update_min_steps = 0  # 自动根据batch_size推算（ai_agent.py: batch*24）
+        if int(getattr(args, 'batch_size', 64)) <= 1024:
+            args.batch_size = 1024
+        # 提高 PPO 更新轮次，让 GPU 每次更新做更多计算（KL早停仍会保护策略稳定性）
+        if int(getattr(args, 'ppo_epochs', 10)) <= 10:
+            args.ppo_epochs = 15
 
         # 默认走 GPU + XLA + 混合精度
         if getattr(args, 'device', 'auto') == 'auto':
@@ -169,7 +172,7 @@ def parse_arguments():
     parser.add_argument('--batch-size', type=int, default=64, help='批处理大小')
     # PPO 专用
     parser.add_argument('--ppo-clip', type=float, default=0.2, help='PPO clip_epsilon')
-    parser.add_argument('--ppo-epochs', type=int, default=10, help='PPO 每批轨迹更新轮次')
+    parser.add_argument('--ppo-epochs', type=int, default=15, help='PPO 每批轨迹更新轮次（GPU利用率优化，KL早停保护策略稳定性）')
     parser.add_argument('--ppo-entropy-coef', type=float, default=0.02, help='PPO 熵正则系数，越大越鼓励探索')
     parser.add_argument('--ppo-update-min-steps', type=int, default=0,
                         help='PPO累计多少步再做一次更新（<=0 自动，能提升GPU吞吐）')
