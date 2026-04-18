@@ -105,39 +105,7 @@ class PPOModel:
             self.actor_optimizer = base_actor_opt
             self.critic_optimizer = base_critic_opt
 
-        # ===== GPU 设备诊断 =====
-        import logging as _logging
-        _diag_log = _logging.getLogger('PPOModel')
-        gpus = tf.config.list_physical_devices('GPU')
-        _diag_log.info(f"[GPU诊断] TF可见GPU数量: {len(gpus)}")
-        for i, gpu in enumerate(gpus):
-            _diag_log.info(f"[GPU诊断]   GPU {i}: {gpu.name}")
-        # 检查模型实际所在设备（跳过无权重的 Input 层，取第一个有权重的层）
-        def _first_weight_device(model):
-            for _layer in model.layers:
-                if _layer.weights:
-                    w = _layer.weights[0]
-                    # TF2 兼容：ResourceVariable 可能没有 .device，用 tf.identity 取设备
-                    if hasattr(w, 'device'):
-                        return w.device
-                    return tf.identity(w).device
-            return 'N/A (no weighted layer)'
-        try:
-            actor_dev = _first_weight_device(self.actor)
-            critic_dev = _first_weight_device(self.critic)
-            _diag_log.info(f"[GPU诊断] Actor权重设备: {actor_dev}")
-            _diag_log.info(f"[GPU诊断] Critic权重设备: {critic_dev}")
-        except Exception as _e:
-            _diag_log.info(f"[GPU诊断] 权重设备检查跳过: {_e}")
-        # GPU预热：强制首次计算在GPU上执行，确认无fallback
-        try:
-            _warmup_input = tf.random.normal([1, self.input_dim])
-            _ = self.actor(_warmup_input, training=False)
-            _ = self.critic(_warmup_input, training=False)
-            _diag_log.info("[GPU诊断] GPU预热完成，Actor/Critic首次前向传播成功")
-        except Exception as _e:
-            _diag_log.warning(f"[GPU诊断] GPU预热失败: {_e}")
-        _diag_log.info(f"[GPU诊断] 混合精度: {'启用(' + tf.keras.mixed_precision.global_policy().name + ')' if self._use_mixed_precision else '禁用'}")
+
 
     @tf.function(reduce_retracing=True)
     def _ppo_update_step(
