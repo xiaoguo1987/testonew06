@@ -222,22 +222,21 @@ def env_worker_loop(
         )
         ma = arecs.get("Main_AI", [])
 
-        # ---- Anti-Fold-Bot 勇气奖励：让「主动玩」比「永远弃牌」更有利可图 ----
+        # ---- Anti-Fold-Bot 勇气奖励（降低版：避免奖励淹没真实胜负信号） ----
         total_actions = len(ma)
         fold_count = sum(1 for a, _ in ma if a == 'fold')
         vpip_count = sum(1 for a, _ in ma if a in ('call', 'raise'))
 
         if total_actions >= 1:
-            # 全弃牌且亏钱 → 明确的负反馈，让 AI 知道「永远弃牌」不是好策略
+            # 全弃牌且亏钱 → 轻微负反馈
             if fold_count == total_actions and fp <= 0:
-                fr -= 1.0
-            # 勇气奖励：只要主动入池了（call/raise），就给 +2.0 奖励
-            # 数学逻辑：折叠每手亨盲注~2.5，勇气奖励+2.0让「玩」比「弃」更划算
+                fr -= 0.3
+            # 勇气奖励：主动入池 +0.3（原 +2.0 太大，导致无脑 call 策略）
             if vpip_count > 0:
-                fr += 2.0
-            # 翻牌前单手弃牌 → 小惩罚
+                fr += 0.3
+            # 翻牌前单手弃牌 → 微弱惩罚
             if total_actions == 1 and ma[0][0] == 'fold':
-                fr -= 0.5
+                fr -= 0.1
 
         # all-in 补偿
         ab = 0.0
@@ -513,7 +512,7 @@ def _env_worker_loop_cc(
         if iw:
             fr += 0.5
 
-        # ---- Anti-Fold-Bot 勇气奖励 ----
+        # ---- Anti-Fold-Bot 勇气奖励（降低版） ----
         ma = arecs.get(MAIN_IDX, [])
         total_actions = len(ma)
         fold_count = sum(1 for a, _ in ma if a == 'fold')
@@ -521,11 +520,11 @@ def _env_worker_loop_cc(
 
         if total_actions >= 1:
             if fold_count == total_actions and fp <= 0:
-                fr -= 1.0
+                fr -= 0.3
             if vpip_count > 0:
-                fr += 2.0
+                fr += 0.3
             if total_actions == 1 and ma[0][0] == 'fold':
-                fr -= 0.5
+                fr -= 0.1
 
         # all-in 补偿
         ab = 0.0

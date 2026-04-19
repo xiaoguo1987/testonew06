@@ -1,0 +1,425 @@
+2026-04-19 19:02:35,336 - PokerAITrainer - INFO - 日志已配置，记录到: logs/poker_ai_20260419_190235.log
+2026-04-19 19:02:38,513 - PokerAITrainer - INFO - mixed precision 已禁用，使用 float32
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - 已启用 XLA JIT
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - TensorFlow版本: 2.21.0
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - DEBUG: 平台=Linux, 逻辑核心数=256, 进程可用核心数=256
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - 并行配置: TF intra_op=32, inter_op=4
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - 并行配置: train_workers=16, eval_workers=42
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - 引擎状态: C++ Engine, tables_per_worker=32
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - 并行配置: train_rollouts_per_worker=8, train_sync_every_batches=8
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - PPO配置: batch_size=4096, ppo_update_min_steps=0
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - 可用GPU数量: 1
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - GPU 0: /physical_device:GPU:0
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - TF CPU设备数: 1（这是TensorFlow逻辑设备数，不等于CPU核心数）
+2026-04-19 19:02:38,514 - PokerAITrainer - INFO - 训练将使用: GPU
+2026-04-19 19:02:38,784 - PokerAITrainer - INFO - [GPU诊断] GPU预热矩阵乘法成功，结果设备: /job:localhost/replica:0/task:0/device:GPU:0
+2026-04-19 19:02:38,784 - PokerAITrainer - INFO - 环境设置完成: 检查点目录=./checkpoints
+2026-04-19 19:02:38,784 - PokerAITrainer - INFO - 当前运行模式: train
+2026-04-19 19:02:38,784 - PokerAITrainer - INFO - 使用模型类型: ppo
+2026-04-19 19:02:38,784 - PokerAITrainer - INFO - [SEED RL] 启动 GPU-Centric 训练架构
+2026-04-19 19:02:38,784 - PokerAITrainer - INFO - 训练参数: {'mode': 'train', 'hardware_profile': 'rtx4090d', 'arch': 'seed-rl', 'auto_tune': False, 'auto_tune_hands': 4000, 'auto_tune_max_candidates': 3, 'model_type': 'ppo', 'model_path': None, 'checkpoint_dir': './checkpoints', 'num_hands': 200000, 'learning_rate': 3e-05, 'batch_size': 4096, 'ppo_clip': 0.2, 'ppo_epochs': 15, 'ppo_entropy_coef': 0.05, 'ppo_update_min_steps': 0, 'target_update': 10, 'optimizer': 'adam', 'eval_interval': 5000, 'checkpoint_interval': 20000, 'num_eval_games': 100, 'eval_workers': 42, 'train_workers': 16, 'skip_final_eval': False, 'allin_unlucky_eq_threshold': 0.65, 'allin_unlucky_bonus_cap': 0.8, 'cpu_threads': 32, 'tf_inter_op_threads': 4, 'train_rollouts_per_worker': 8, 'train_sync_every_batches': 8, 'dqn_replay_updates_per_hand': 0, 'device': 'gpu', 'mixed_precision': False, 'enable_xla': True, 'disable_onednn': False, 'gpu_memory_growth': True, 'small_blind': 5, 'big_blind': 10, 'initial_stack': 1000, 'num_players': 6, 'use_ensemble': False, 'resume': False, 'save_best_only': False, 'verbose': False, 'eval_opponent': 'previous_version', 'eval_output': 'eval_results.json', 'demo_hands': 10, 'use_self_play': True, 'opponent_update_interval': 1000, 'eps_start': 1.0, 'eps_end': 0.01, 'eps_decay': 0.0001, 'hidden_dims': [2048, 2048, 1024, 512], 'ppo_buffer_size': 16384, 'inference_min_batch': 32, 'inference_max_batch': 512, 'tables_per_worker': 32}
+2026-04-19 19:02:39,752 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M)
+2026-04-19 19:02:39,840 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M)
+2026-04-19 19:02:39,952 - PokerAITrainer - INFO - [SEED RL] 开始训练 200000 手牌...
+2026-04-19 19:02:39,954 - SeedRLTrainer - INFO - [SEED RL] 训练开始: num_hands=200000, workers=16, tables_per_worker=32, 并发牌桌=512, ppo_buffer=16384, inference_batch=[32, 512]
+2026-04-19 19:02:40,897 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+2026-04-19 19:02:40,946 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+2026-04-19 19:02:41,263 - SeedRLTrainer - INFO - [SEED RL] 16 个 worker 进程已启动
+2026-04-19 19:04:10,946 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @1018
+2026-04-19 19:05:16,180 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @2053
+2026-04-19 19:05:16,850 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @3191
+2026-04-19 19:05:17,506 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @4217
+2026-04-19 19:05:18,476 - SeedRLTrainer - INFO - [SEED RL] 评估@5024: 胜率=0.000, 平均收益=-518.10, 无效下注率=0.000
+2026-04-19 19:05:18,616 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_5024
+2026-04-19 19:05:18,771 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-19 19:05:18,979 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @5238
+2026-04-19 19:05:19,592 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @6239
+2026-04-19 19:05:20,194 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @7251
+2026-04-19 19:05:20,618 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:05:20,691 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.049552, returns_mean=-0.1009
+2026-04-19 19:05:46,215 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.208274 > target=5.0
+2026-04-19 19:05:46,215 - LargePPOModel - INFO - [LargePPO] train() 完成: 25.597s, batches=5, actor_loss=0.011631, critic_loss=1.471673, KL=20.208274
+2026-04-19 19:05:46,215 - SeedRLTrainer - INFO - [SEED RL] hands=8013/200000, PPO更新#1, loss=0.741652, 速度=43.3 hands/s
+2026-04-19 19:05:46,442 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @8313
+2026-04-19 19:05:47,190 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @9340
+2026-04-19 19:05:48,091 - SeedRLTrainer - INFO - [SEED RL] 评估@10037: 胜率=0.000, 平均收益=-749.70, 无效下注率=0.000
+2026-04-19 19:05:48,391 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @10354
+2026-04-19 19:05:49,270 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @11367
+2026-04-19 19:05:50,045 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @12393
+2026-04-19 19:05:50,733 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @13403
+2026-04-19 19:05:51,457 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @14405
+2026-04-19 19:05:52,096 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:05:52,170 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.441107, returns_mean=-0.1962
+2026-04-19 19:05:52,238 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.114862 > target=5.0
+2026-04-19 19:05:52,238 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.142s, batches=5, actor_loss=0.185758, critic_loss=1.017041, KL=20.114862
+2026-04-19 19:05:52,238 - SeedRLTrainer - INFO - [SEED RL] hands=14760/200000, PPO更新#2, loss=0.601400, 速度=77.3 hands/s
+2026-04-19 19:05:52,968 - SeedRLTrainer - INFO - [SEED RL] 评估@15043: 胜率=0.000, 平均收益=-747.35, 无效下注率=0.000
+2026-04-19 19:05:53,220 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @15406
+2026-04-19 19:05:53,961 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @16428
+2026-04-19 19:05:54,772 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @17428
+2026-04-19 19:05:55,575 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @18443
+2026-04-19 19:05:56,302 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @19456
+2026-04-19 19:05:57,142 - SeedRLTrainer - INFO - [SEED RL] 评估@20053: 胜率=0.010, 平均收益=-752.60, 无效下注率=0.000
+2026-04-19 19:05:57,250 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_20053
+2026-04-19 19:05:57,585 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @20467
+2026-04-19 19:05:58,004 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:05:58,080 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=4.314605, returns_mean=-0.1646
+2026-04-19 19:05:58,150 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.079750 > target=5.0
+2026-04-19 19:05:58,150 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.146s, batches=5, actor_loss=-0.258930, critic_loss=1.359741, KL=20.079750
+2026-04-19 19:05:58,151 - SeedRLTrainer - INFO - [SEED RL] hands=21043/200000, PPO更新#3, loss=0.550406, 速度=106.9 hands/s
+2026-04-19 19:05:58,489 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @21482
+2026-04-19 19:05:59,295 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @22500
+2026-04-19 19:06:00,097 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @23522
+2026-04-19 19:06:00,859 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @24532
+2026-04-19 19:06:01,760 - SeedRLTrainer - INFO - [SEED RL] 评估@25056: 胜率=0.000, 平均收益=-783.40, 无效下注率=0.000
+2026-04-19 19:06:02,171 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @25536
+2026-04-19 19:06:02,984 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @26536
+2026-04-19 19:06:03,511 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:06:03,574 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.444757, returns_mean=-0.1650
+2026-04-19 19:06:04,360 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.849s, batches=60, actor_loss=-0.038647, critic_loss=0.966625, KL=0.069400
+2026-04-19 19:06:04,360 - SeedRLTrainer - INFO - [SEED RL] hands=27278/200000, PPO更新#4, loss=0.463989, 速度=134.3 hands/s
+2026-04-19 19:06:04,610 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @27573
+2026-04-19 19:06:05,381 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @28600
+2026-04-19 19:06:06,604 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @29607
+2026-04-19 19:06:07,436 - SeedRLTrainer - INFO - [SEED RL] 评估@30076: 胜率=0.000, 平均收益=-823.70, 无效下注率=0.000
+2026-04-19 19:06:07,891 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @30620
+2026-04-19 19:06:08,722 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @31645
+2026-04-19 19:06:09,586 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @32677
+2026-04-19 19:06:09,950 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:06:10,012 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.865726, returns_mean=-0.1819
+2026-04-19 19:06:10,799 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.849s, batches=60, actor_loss=-0.040563, critic_loss=0.963029, KL=0.040277
+2026-04-19 19:06:10,799 - SeedRLTrainer - INFO - [SEED RL] hands=33163/200000, PPO更新#5, loss=0.461233, 速度=158.3 hands/s
+2026-04-19 19:06:11,287 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @33686
+2026-04-19 19:06:12,175 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @34702
+2026-04-19 19:06:13,019 - SeedRLTrainer - INFO - [SEED RL] 评估@35083: 胜率=0.000, 平均收益=-839.20, 无效下注率=0.000
+2026-04-19 19:06:13,570 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @35719
+2026-04-19 19:06:14,392 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @36740
+2026-04-19 19:06:15,166 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @37756
+2026-04-19 19:06:15,990 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @38770
+2026-04-19 19:06:16,078 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16392, batch=4096, epochs=15
+2026-04-19 19:06:16,152 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.451959, returns_mean=-0.2081
+2026-04-19 19:06:16,220 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.024209 > target=5.0
+2026-04-19 19:06:16,221 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.142s, batches=5, actor_loss=-0.094646, critic_loss=1.064577, KL=20.024209
+2026-04-19 19:06:16,221 - SeedRLTrainer - INFO - [SEED RL] hands=38866/200000, PPO更新#6, loss=0.484965, 速度=180.8 hands/s
+2026-04-19 19:06:16,974 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @39793
+2026-04-19 19:06:17,291 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_40059
+2026-04-19 19:06:17,911 - SeedRLTrainer - INFO - [SEED RL] 评估@40089: 胜率=0.010, 平均收益=-828.25, 无效下注率=0.000
+2026-04-19 19:06:18,549 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @40811
+2026-04-19 19:06:19,450 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @41841
+2026-04-19 19:06:20,338 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @42867
+2026-04-19 19:06:21,225 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @43885
+2026-04-19 19:06:21,742 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:06:21,803 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.365938, returns_mean=-0.2147
+2026-04-19 19:06:22,587 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.844s, batches=60, actor_loss=-0.039263, critic_loss=0.968944, KL=0.030175
+2026-04-19 19:06:22,587 - SeedRLTrainer - INFO - [SEED RL] hands=44465/200000, PPO更新#7, loss=0.464841, 速度=200.9 hands/s
+2026-04-19 19:06:22,985 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @44909
+2026-04-19 19:06:23,727 - SeedRLTrainer - INFO - [SEED RL] 评估@45110: 胜率=0.000, 平均收益=-860.10, 无效下注率=0.000
+2026-04-19 19:06:24,410 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @45942
+2026-04-19 19:06:25,831 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @46963
+2026-04-19 19:06:26,668 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @47989
+2026-04-19 19:06:27,483 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @48999
+2026-04-19 19:06:28,343 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @50017
+2026-04-19 19:06:28,446 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:06:28,509 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.389428, returns_mean=-0.2255
+2026-04-19 19:06:29,307 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.861s, batches=60, actor_loss=-0.037597, critic_loss=0.967837, KL=0.029884
+2026-04-19 19:06:29,307 - SeedRLTrainer - INFO - [SEED RL] hands=50096/200000, PPO更新#8, loss=0.465120, 速度=219.7 hands/s
+2026-04-19 19:06:29,898 - SeedRLTrainer - INFO - [SEED RL] 评估@50121: 胜率=0.000, 平均收益=-837.10, 无效下注率=0.000
+2026-04-19 19:06:30,705 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @51022
+2026-04-19 19:06:31,594 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @52048
+2026-04-19 19:06:32,421 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @53060
+2026-04-19 19:06:33,241 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @54080
+2026-04-19 19:06:34,073 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @55108
+2026-04-19 19:06:34,764 - SeedRLTrainer - INFO - [SEED RL] 评估@55121: 胜率=0.000, 平均收益=-832.00, 无效下注率=0.000
+2026-04-19 19:06:35,283 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:06:35,346 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.313959, returns_mean=-0.2219
+2026-04-19 19:06:36,137 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.855s, batches=60, actor_loss=-0.038598, critic_loss=0.967905, KL=0.020723
+2026-04-19 19:06:36,138 - SeedRLTrainer - INFO - [SEED RL] hands=55749/200000, PPO更新#9, loss=0.464653, 速度=237.4 hands/s
+2026-04-19 19:06:36,467 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @56122
+2026-04-19 19:06:37,450 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @57150
+2026-04-19 19:06:38,265 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @58158
+2026-04-19 19:06:39,102 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @59178
+2026-04-19 19:06:39,879 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_60089
+2026-04-19 19:06:40,490 - SeedRLTrainer - INFO - [SEED RL] 评估@60138: 胜率=0.000, 平均收益=-827.40, 无效下注率=0.000
+2026-04-19 19:06:40,594 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @60183
+2026-04-19 19:06:41,413 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @61196
+2026-04-19 19:06:41,651 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:06:41,714 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.351280, returns_mean=-0.2466
+2026-04-19 19:06:42,494 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.843s, batches=60, actor_loss=-0.036622, critic_loss=0.968982, KL=0.024772
+2026-04-19 19:06:42,494 - SeedRLTrainer - INFO - [SEED RL] hands=61482/200000, PPO更新#10, loss=0.466180, 速度=254.9 hands/s
+2026-04-19 19:06:43,123 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @62212
+2026-04-19 19:06:43,981 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @63218
+2026-04-19 19:06:44,881 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @64218
+2026-04-19 19:06:46,246 - SeedRLTrainer - INFO - [SEED RL] 评估@65140: 胜率=0.010, 平均收益=-879.50, 无效下注率=0.000
+2026-04-19 19:06:46,403 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @65231
+2026-04-19 19:06:47,252 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @66257
+2026-04-19 19:06:48,128 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @67267
+2026-04-19 19:06:48,176 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:06:48,254 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.332627, returns_mean=-0.2680
+2026-04-19 19:06:48,324 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.015722 > target=5.0
+2026-04-19 19:06:48,324 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.147s, batches=5, actor_loss=0.099552, critic_loss=0.906200, KL=20.015722
+2026-04-19 19:06:48,324 - SeedRLTrainer - INFO - [SEED RL] hands=67289/200000, PPO更新#11, loss=0.502876, 速度=272.4 hands/s
+2026-04-19 19:06:49,856 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @68273
+2026-04-19 19:06:50,676 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @69274
+2026-04-19 19:06:51,905 - SeedRLTrainer - INFO - [SEED RL] 评估@70153: 胜率=0.000, 平均收益=-849.40, 无效下注率=0.000
+2026-04-19 19:06:52,086 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @70275
+2026-04-19 19:06:52,955 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @71309
+2026-04-19 19:06:53,799 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @72324
+2026-04-19 19:06:54,469 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:06:54,544 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.361298, returns_mean=-0.2824
+2026-04-19 19:06:54,615 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.012990 > target=5.0
+2026-04-19 19:06:54,615 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.146s, batches=5, actor_loss=0.078663, critic_loss=0.871868, KL=20.012990
+2026-04-19 19:06:54,615 - SeedRLTrainer - INFO - [SEED RL] hands=73161/200000, PPO更新#12, loss=0.475266, 速度=288.8 hands/s
+2026-04-19 19:06:54,831 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @73345
+2026-04-19 19:06:55,658 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @74365
+2026-04-19 19:06:56,815 - SeedRLTrainer - INFO - [SEED RL] 评估@75154: 胜率=0.000, 平均收益=-865.55, 无效下注率=0.000
+2026-04-19 19:06:57,068 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @75389
+2026-04-19 19:06:57,886 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @76407
+2026-04-19 19:06:58,688 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @77434
+2026-04-19 19:06:59,457 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @78453
+2026-04-19 19:07:00,116 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16388, batch=4096, epochs=15
+2026-04-19 19:07:00,189 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.535037, returns_mean=-0.3057
+2026-04-19 19:07:00,257 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.021446 > target=5.0
+2026-04-19 19:07:00,257 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.141s, batches=5, actor_loss=-0.062770, critic_loss=0.932115, KL=20.021446
+2026-04-19 19:07:00,257 - SeedRLTrainer - INFO - [SEED RL] hands=79318/200000, PPO更新#13, loss=0.434673, 速度=306.3 hands/s
+2026-04-19 19:07:00,427 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @79480
+2026-04-19 19:07:00,964 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_80102
+2026-04-19 19:07:01,591 - SeedRLTrainer - INFO - [SEED RL] 评估@80185: 胜率=0.020, 平均收益=-864.15, 无效下注率=0.000
+2026-04-19 19:07:01,889 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @80480
+2026-04-19 19:07:02,702 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @81487
+2026-04-19 19:07:03,496 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @82497
+2026-04-19 19:07:04,288 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @83523
+2026-04-19 19:07:05,094 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @84533
+2026-04-19 19:07:06,042 - SeedRLTrainer - INFO - [SEED RL] 评估@85195: 胜率=0.000, 平均收益=-901.00, 无效下注率=0.000
+2026-04-19 19:07:06,390 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @85541
+2026-04-19 19:07:06,552 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:07:06,615 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.217255, returns_mean=-0.3228
+2026-04-19 19:07:07,406 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.855s, batches=60, actor_loss=-0.030999, critic_loss=0.967005, KL=0.021556
+2026-04-19 19:07:07,407 - SeedRLTrainer - INFO - [SEED RL] hands=85734/200000, PPO更新#14, loss=0.468003, 速度=322.1 hands/s
+2026-04-19 19:07:08,088 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @86556
+2026-04-19 19:07:08,885 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @87577
+2026-04-19 19:07:09,634 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @88592
+2026-04-19 19:07:10,460 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @89613
+2026-04-19 19:07:11,335 - SeedRLTrainer - INFO - [SEED RL] 评估@90232: 胜率=0.000, 平均收益=-867.60, 无效下注率=0.000
+2026-04-19 19:07:11,693 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @90632
+2026-04-19 19:07:12,483 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @91647
+2026-04-19 19:07:12,780 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:07:12,842 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.268118, returns_mean=-0.3161
+2026-04-19 19:07:13,637 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.857s, batches=60, actor_loss=-0.036048, critic_loss=0.969627, KL=0.014833
+2026-04-19 19:07:13,637 - SeedRLTrainer - INFO - [SEED RL] hands=92026/200000, PPO更新#15, loss=0.466790, 速度=337.9 hands/s
+2026-04-19 19:07:14,132 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @92659
+2026-04-19 19:07:14,869 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @93684
+2026-04-19 19:07:16,532 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @94705
+2026-04-19 19:07:17,448 - SeedRLTrainer - INFO - [SEED RL] 评估@95242: 胜率=0.000, 平均收益=-873.70, 无效下注率=0.000
+2026-04-19 19:07:17,861 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @95711
+2026-04-19 19:07:18,606 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @96741
+2026-04-19 19:07:19,361 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @97758
+2026-04-19 19:07:19,943 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:07:20,017 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.496359, returns_mean=-0.3213
+2026-04-19 19:07:20,085 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.020438 > target=5.0
+2026-04-19 19:07:20,085 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.142s, batches=5, actor_loss=0.065268, critic_loss=0.853112, KL=20.020438
+2026-04-19 19:07:20,085 - SeedRLTrainer - INFO - [SEED RL] hands=98552/200000, PPO更新#16, loss=0.459190, 速度=353.5 hands/s
+2026-04-19 19:07:20,275 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @98759
+2026-04-19 19:07:21,071 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @99763
+2026-04-19 19:07:21,433 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_100113
+2026-04-19 19:07:21,984 - SeedRLTrainer - INFO - [SEED RL] 评估@100291: 胜率=0.000, 平均收益=-880.00, 无效下注率=0.000
+2026-04-19 19:07:22,403 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @100789
+2026-04-19 19:07:23,192 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @101791
+2026-04-19 19:07:23,962 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @102794
+2026-04-19 19:07:24,770 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @103808
+2026-04-19 19:07:25,581 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @104810
+2026-04-19 19:07:25,667 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:07:25,741 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.307170, returns_mean=-0.3066
+2026-04-19 19:07:25,811 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.013165 > target=5.0
+2026-04-19 19:07:25,811 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.144s, batches=5, actor_loss=-0.377069, critic_loss=1.374132, KL=20.013165
+2026-04-19 19:07:25,811 - SeedRLTrainer - INFO - [SEED RL] hands=104877/200000, PPO更新#17, loss=0.498532, 速度=368.6 hands/s
+2026-04-19 19:07:26,779 - SeedRLTrainer - INFO - [SEED RL] 评估@105294: 胜率=0.000, 平均收益=-911.30, 无效下注率=0.000
+2026-04-19 19:07:27,285 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @105824
+2026-04-19 19:07:28,049 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @106830
+2026-04-19 19:07:28,856 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @107836
+2026-04-19 19:07:29,613 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @108841
+2026-04-19 19:07:30,322 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @109868
+2026-04-19 19:07:31,219 - SeedRLTrainer - INFO - [SEED RL] 评估@110303: 胜率=0.000, 平均收益=-857.95, 无效下注率=0.000
+2026-04-19 19:07:31,698 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @110883
+2026-04-19 19:07:32,111 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:07:32,175 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.534223, returns_mean=-0.2923
+2026-04-19 19:07:32,954 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.843s, batches=60, actor_loss=-0.036697, critic_loss=0.968008, KL=0.017911
+2026-04-19 19:07:32,954 - SeedRLTrainer - INFO - [SEED RL] hands=111474/200000, PPO更新#18, loss=0.465655, 速度=382.2 hands/s
+2026-04-19 19:07:33,298 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @111884
+2026-04-19 19:07:34,066 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @112896
+2026-04-19 19:07:34,870 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @113911
+2026-04-19 19:07:35,617 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @114944
+2026-04-19 19:07:36,555 - SeedRLTrainer - INFO - [SEED RL] 评估@115334: 胜率=0.000, 平均收益=-867.10, 无效下注率=0.000
+2026-04-19 19:07:37,096 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @115978
+2026-04-19 19:07:37,761 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @116989
+2026-04-19 19:07:38,488 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @117996
+2026-04-19 19:07:38,653 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:07:38,729 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.374264, returns_mean=-0.3072
+2026-04-19 19:07:38,798 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.012509 > target=5.0
+2026-04-19 19:07:38,798 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.145s, batches=5, actor_loss=0.062290, critic_loss=0.852730, KL=20.012509
+2026-04-19 19:07:38,798 - SeedRLTrainer - INFO - [SEED RL] hands=118160/200000, PPO更新#19, loss=0.457510, 速度=397.1 hands/s
+2026-04-19 19:07:39,441 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @119020
+2026-04-19 19:07:40,148 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @120052
+2026-04-19 19:07:40,312 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_120113
+2026-04-19 19:07:41,053 - SeedRLTrainer - INFO - [SEED RL] 评估@120374: 胜率=0.010, 平均收益=-879.15, 无效下注率=0.000
+2026-04-19 19:07:41,618 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @121065
+2026-04-19 19:07:42,335 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @122092
+2026-04-19 19:07:43,050 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @123092
+2026-04-19 19:07:43,739 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @124105
+2026-04-19 19:07:44,350 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16388, batch=4096, epochs=15
+2026-04-19 19:07:44,424 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.424287, returns_mean=-0.3139
+2026-04-19 19:07:44,492 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.028099 > target=5.0
+2026-04-19 19:07:44,492 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=-0.050842, critic_loss=1.133106, KL=20.028099
+2026-04-19 19:07:44,492 - SeedRLTrainer - INFO - [SEED RL] hands=124966/200000, PPO更新#20, loss=0.541132, 速度=412.1 hands/s
+2026-04-19 19:07:44,671 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @125116
+2026-04-19 19:07:45,389 - SeedRLTrainer - INFO - [SEED RL] 评估@125376: 胜率=0.010, 平均收益=-846.80, 无效下注率=0.000
+2026-04-19 19:07:45,971 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @126116
+2026-04-19 19:07:47,755 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @127118
+2026-04-19 19:07:48,499 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @128140
+2026-04-19 19:07:49,275 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @129171
+2026-04-19 19:07:50,021 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @130208
+2026-04-19 19:07:50,746 - SeedRLTrainer - INFO - [SEED RL] 评估@130379: 胜率=0.010, 平均收益=-796.00, 无效下注率=0.000
+2026-04-19 19:07:51,347 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @131219
+2026-04-19 19:07:51,798 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:07:51,872 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.531342, returns_mean=-0.3110
+2026-04-19 19:07:51,941 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.017097 > target=5.0
+2026-04-19 19:07:51,942 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=0.084839, critic_loss=0.869527, KL=20.017097
+2026-04-19 19:07:51,942 - SeedRLTrainer - INFO - [SEED RL] hands=131805/200000, PPO更新#21, loss=0.477183, 速度=424.2 hands/s
+2026-04-19 19:07:52,281 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @132237
+2026-04-19 19:07:53,022 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @133253
+2026-04-19 19:07:53,751 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @134274
+2026-04-19 19:07:54,460 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @135310
+2026-04-19 19:07:55,103 - SeedRLTrainer - INFO - [SEED RL] 评估@135407: 胜率=0.000, 平均收益=-896.50, 无效下注率=0.000
+2026-04-19 19:07:55,720 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @136334
+2026-04-19 19:07:56,499 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @137337
+2026-04-19 19:07:57,224 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @138369
+2026-04-19 19:07:57,583 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:07:57,657 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.298930, returns_mean=-0.3154
+2026-04-19 19:07:57,726 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.025507 > target=5.0
+2026-04-19 19:07:57,726 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=0.070826, critic_loss=0.839260, KL=20.025507
+2026-04-19 19:07:57,726 - SeedRLTrainer - INFO - [SEED RL] hands=138904/200000, PPO更新#22, loss=0.455043, 速度=438.9 hands/s
+2026-04-19 19:07:58,083 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @139412
+2026-04-19 19:07:58,689 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_140130
+2026-04-19 19:07:59,499 - SeedRLTrainer - INFO - [SEED RL] 评估@140411: 胜率=0.000, 平均收益=-899.00, 无效下注率=0.000
+2026-04-19 19:07:59,602 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @140459
+2026-04-19 19:08:00,363 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @141459
+2026-04-19 19:08:01,122 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @142491
+2026-04-19 19:08:01,846 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @143542
+2026-04-19 19:08:02,605 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @144555
+2026-04-19 19:08:03,746 - SeedRLTrainer - INFO - [SEED RL] 评估@145417: 胜率=0.010, 平均收益=-881.60, 无效下注率=0.000
+2026-04-19 19:08:03,920 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @145579
+2026-04-19 19:08:04,059 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:08:04,132 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.170265, returns_mean=-0.3487
+2026-04-19 19:08:04,201 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.014894 > target=5.0
+2026-04-19 19:08:04,202 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=0.094554, critic_loss=0.913994, KL=20.014894
+2026-04-19 19:08:04,202 - SeedRLTrainer - INFO - [SEED RL] hands=145752/200000, PPO更新#23, loss=0.504274, 速度=451.3 hands/s
+2026-04-19 19:08:04,850 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @146583
+2026-04-19 19:08:05,627 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @147604
+2026-04-19 19:08:06,409 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @148634
+2026-04-19 19:08:07,206 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @149657
+2026-04-19 19:08:08,314 - SeedRLTrainer - INFO - [SEED RL] 评估@150447: 胜率=0.000, 平均收益=-894.60, 无效下注率=0.000
+2026-04-19 19:08:08,578 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @150685
+2026-04-19 19:08:09,383 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @151721
+2026-04-19 19:08:09,986 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16387, batch=4096, epochs=15
+2026-04-19 19:08:10,060 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.910434, returns_mean=-0.3557
+2026-04-19 19:08:10,130 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.016547 > target=5.0
+2026-04-19 19:08:10,130 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.144s, batches=5, actor_loss=-0.071698, critic_loss=1.022709, KL=20.016547
+2026-04-19 19:08:10,131 - SeedRLTrainer - INFO - [SEED RL] hands=152476/200000, PPO更新#24, loss=0.475505, 速度=463.6 hands/s
+2026-04-19 19:08:10,356 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @152737
+2026-04-19 19:08:11,148 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @153753
+2026-04-19 19:08:11,904 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @154768
+2026-04-19 19:08:12,977 - SeedRLTrainer - INFO - [SEED RL] 评估@155468: 胜率=0.000, 平均收益=-859.95, 无效下注率=0.000
+2026-04-19 19:08:13,281 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @155776
+2026-04-19 19:08:14,028 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @156807
+2026-04-19 19:08:14,799 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @157826
+2026-04-19 19:08:15,615 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @158859
+2026-04-19 19:08:15,944 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 19:08:16,020 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.243541, returns_mean=-0.3284
+2026-04-19 19:08:16,091 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.017662 > target=5.0
+2026-04-19 19:08:16,091 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.147s, batches=5, actor_loss=-0.018145, critic_loss=0.856386, KL=20.017662
+2026-04-19 19:08:16,091 - SeedRLTrainer - INFO - [SEED RL] hands=159309/200000, PPO更新#25, loss=0.419120, 速度=475.8 hands/s
+2026-04-19 19:08:16,535 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @159891
+2026-04-19 19:08:16,840 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_160140
+2026-04-19 19:08:17,697 - SeedRLTrainer - INFO - [SEED RL] 评估@160505: 胜率=0.010, 平均收益=-798.90, 无效下注率=0.000
+2026-04-19 19:08:18,026 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @160903
+2026-04-19 19:08:18,682 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @161922
+2026-04-19 19:08:19,428 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @162949
+2026-04-19 19:08:20,093 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @163953
+2026-04-19 19:08:20,785 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @164987
+2026-04-19 19:08:21,612 - SeedRLTrainer - INFO - [SEED RL] 评估@165524: 胜率=0.000, 平均收益=-917.60, 无效下注率=0.000
+2026-04-19 19:08:21,964 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @166013
+2026-04-19 19:08:22,330 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:08:22,404 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.474737, returns_mean=-0.3462
+2026-04-19 19:08:22,473 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.025777 > target=5.0
+2026-04-19 19:08:22,474 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.144s, batches=5, actor_loss=0.116634, critic_loss=0.894532, KL=20.025777
+2026-04-19 19:08:22,474 - SeedRLTrainer - INFO - [SEED RL] hands=166579/200000, PPO更新#26, loss=0.505583, 速度=488.2 hands/s
+2026-04-19 19:08:22,834 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @167033
+2026-04-19 19:08:24,865 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @168087
+2026-04-19 19:08:25,579 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @169102
+2026-04-19 19:08:26,261 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @170115
+2026-04-19 19:08:27,093 - SeedRLTrainer - INFO - [SEED RL] 评估@170538: 胜率=0.000, 平均收益=-816.30, 无效下注率=0.000
+2026-04-19 19:08:27,545 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @171138
+2026-04-19 19:08:28,257 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @172150
+2026-04-19 19:08:28,936 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @173178
+2026-04-19 19:08:29,473 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:08:29,547 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.180843, returns_mean=-0.3776
+2026-04-19 19:08:29,618 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.020678 > target=5.0
+2026-04-19 19:08:29,618 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.146s, batches=5, actor_loss=0.067191, critic_loss=0.844962, KL=20.020678
+2026-04-19 19:08:29,618 - SeedRLTrainer - INFO - [SEED RL] hands=173999/200000, PPO更新#27, loss=0.456077, 速度=499.5 hands/s
+2026-04-19 19:08:29,782 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @174186
+2026-04-19 19:08:30,496 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @175207
+2026-04-19 19:08:31,130 - SeedRLTrainer - INFO - [SEED RL] 评估@175562: 胜率=0.010, 平均收益=-863.35, 无效下注率=0.000
+2026-04-19 19:08:31,610 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @176227
+2026-04-19 19:08:32,273 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @177237
+2026-04-19 19:08:32,975 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @178252
+2026-04-19 19:08:33,656 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @179269
+2026-04-19 19:08:34,322 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_180160
+2026-04-19 19:08:34,455 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @180283
+2026-04-19 19:08:35,114 - SeedRLTrainer - INFO - [SEED RL] 评估@180595: 胜率=0.020, 平均收益=-807.80, 无效下注率=0.000
+2026-04-19 19:08:35,638 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @181318
+2026-04-19 19:08:35,763 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:08:35,840 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.297004, returns_mean=-0.4123
+2026-04-19 19:08:35,910 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.030226 > target=5.0
+2026-04-19 19:08:35,910 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.147s, batches=5, actor_loss=0.063178, critic_loss=0.834503, KL=20.030226
+2026-04-19 19:08:35,910 - SeedRLTrainer - INFO - [SEED RL] hands=181461/200000, PPO更新#28, loss=0.448840, 速度=511.7 hands/s
+2026-04-19 19:08:36,491 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @182331
+2026-04-19 19:08:37,234 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @183363
+2026-04-19 19:08:37,915 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @184385
+2026-04-19 19:08:38,592 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @185398
+2026-04-19 19:08:39,297 - SeedRLTrainer - INFO - [SEED RL] 评估@185638: 胜率=0.000, 平均收益=-807.10, 无效下注率=0.000
+2026-04-19 19:08:39,842 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @186408
+2026-04-19 19:08:40,608 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @187466
+2026-04-19 19:08:41,316 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @188477
+2026-04-19 19:08:41,620 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 19:08:41,681 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.071308, returns_mean=-0.4361
+2026-04-19 19:08:42,479 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.858s, batches=60, actor_loss=-0.032597, critic_loss=0.981068, KL=0.018165
+2026-04-19 19:08:42,479 - SeedRLTrainer - INFO - [SEED RL] hands=188906/200000, PPO更新#29, loss=0.474235, 速度=523.0 hands/s
+2026-04-19 19:08:42,899 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @189530
+2026-04-19 19:08:43,613 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @190537
+2026-04-19 19:08:44,177 - SeedRLTrainer - INFO - [SEED RL] 评估@190638: 胜率=0.000, 平均收益=-871.45, 无效下注率=0.000
+2026-04-19 19:08:44,826 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @191563
+2026-04-19 19:08:45,531 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @192596
+2026-04-19 19:08:46,282 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @193635
+2026-04-19 19:08:46,922 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @194665
+2026-04-19 19:08:48,072 - SeedRLTrainer - INFO - [SEED RL] 评估@195658: 胜率=0.010, 平均收益=-856.80, 无效下注率=0.000
+2026-04-19 19:08:48,181 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @195720
+2026-04-19 19:08:48,541 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 19:08:48,617 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.362481, returns_mean=-0.4419
+2026-04-19 19:08:48,687 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.016247 > target=5.0
+2026-04-19 19:08:48,688 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.146s, batches=5, actor_loss=0.132736, critic_loss=0.929278, KL=20.016247
+2026-04-19 19:08:48,688 - SeedRLTrainer - INFO - [SEED RL] hands=196257/200000, PPO更新#30, loss=0.531007, 速度=534.1 hands/s
+2026-04-19 19:08:49,051 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @196734
+2026-04-19 19:08:49,757 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @197753
+2026-04-19 19:08:50,479 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @198754
+2026-04-19 19:08:51,375 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @199767
+2026-04-19 19:08:53,086 - SeedRLTrainer - INFO - [SEED RL] 处理剩余 buffer: 8120 steps
+2026-04-19 19:08:53,095 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=8120, batch=4096, epochs=15
+2026-04-19 19:08:53,127 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.405781, returns_mean=-0.4396
+2026-04-19 19:08:53,156 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=2, avg_kl=33.907474 > target=5.0
+2026-04-19 19:08:53,156 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.061s, batches=2, actor_loss=-0.026924, critic_loss=1.000124, KL=33.907474
+2026-04-19 19:08:53,156 - SeedRLTrainer - INFO - [SEED RL] 训练完成: 总手牌=200024, 总PPO更新=31, 耗时=371.9s, 速度=537.9 hands/s
+2026-04-19 19:08:53,267 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_200024
+2026-04-19 19:08:53,267 - SeedRLTrainer - INFO - [SEED RL] 最终评估...
+2026-04-19 19:08:53,873 - SeedRLTrainer - INFO - [SEED RL] 最终评估结果: 胜率=0.000, 平均收益=-910.60, 无效下注率=0.000
+2026-04-19 19:08:54,957 - PokerAITrainer - INFO - [SEED RL] 训练完成！总耗时: 376.17s
+2026-04-19 19:08:54,958 - PokerAITrainer - INFO - 训练总结已保存到: ./checkpoints/training_summary_20260419_190854.json
+2026-04-19 19:08:55,011 - PokerAITrainer - INFO - 任务执行成功！

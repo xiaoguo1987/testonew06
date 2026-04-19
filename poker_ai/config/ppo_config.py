@@ -67,7 +67,7 @@ class PPOConfig:
     value_clip: float = 0.2
 
     # KL散度早停（14M大模型从scratch训练，自然KL远高于微调场景，需要更宽松的阈值）
-    kl_target: float = 5.0
+    kl_target: float = 15.0
     kl_early_stop: bool = True
 
     # 每批轨迹更新轮次与批次（根据扑克游戏样本生成率优化）
