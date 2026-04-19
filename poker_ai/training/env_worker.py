@@ -159,6 +159,11 @@ def env_worker_loop(
     sr = StateRepresentation()
     rc = RewardCalculator()
 
+    # 打印引擎类型
+    import sys
+    engine_tag = "C++ Engine" if USE_CC_ENGINE else "Python Engine"
+    print(f"[Worker {worker_id}] 使用 {engine_tag}", file=sys.stderr, flush=True)
+
     sb = game_cfg['small_blind']
     bb = game_cfg['big_blind']
     stack = game_cfg['initial_stack']
