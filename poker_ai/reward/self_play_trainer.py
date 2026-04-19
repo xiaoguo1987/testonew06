@@ -26,6 +26,7 @@ from ..model.state_representation import StateRepresentation
 from ..reward.reward_calculator import RewardCalculator, AdaptiveRewardCalculator
 from ..utils.checkpoint import save_checkpoint, load_checkpoint, find_latest_checkpoint
 from ..reward.simple_reward_calculator import SimpleRewardCalculator
+from ..reward.mp_worker import mp_init_worker, mp_run_hands
 
 
 def _resolve_workers(requested_workers: int, reserve_cores: int = 2) -> int:
@@ -1494,13 +1495,67 @@ class SelfPlayTrainer:
                     self.main_agent.agent, 'epsilon_decay', 0.995
                 )
 
+    # ------------------------------------------------------------------
+    #  多进程采样辅助方法
+    # ------------------------------------------------------------------
+
+    def _get_opp_weights_for_mp(self) -> list:
+        """获取所有对手的权重列表，供多进程 worker 初始化使用。
+
+        返回长度 = len(self.opponent_agents) 的列表，
+        每个元素为 (actor_weights, critic_weights) 或 None（鱼玩家）。
+        """
+        opp_w: list = []
+        for i, agent in enumerate(self.opponent_agents):
+            is_fish = (i == len(self.opponent_agents) - 1)
+            if is_fish:
+                opp_w.append(None)
+            elif (
+                hasattr(agent, 'agent')
+                and hasattr(agent.agent, 'get_weights')
+                and getattr(agent, 'agent_type', None) == 'ppo'
+            ):
+                w = agent.agent.get_weights()  # [actor_w_list, critic_w_list]
+                opp_w.append((w[0], w[1]))
+            else:
+                opp_w.append(None)
+        return opp_w
+
+    def _mp_sampling_step(
+        self,
+        pool,
+        remaining_hands: int,
+        main_actor_w: list,
+        main_critic_w: list,
+    ) -> List[Tuple[Dict, Dict]]:
+        """使用 multiprocessing.Pool 并行采样一个批次的手牌。"""
+        worker_count = min(self.train_workers, remaining_hands)
+        target_hands = min(
+            remaining_hands,
+            worker_count * max(1, self.train_rollouts_per_worker),
+        )
+        base = target_hands // worker_count
+        extra = target_hands % worker_count
+
+        tasks = []
+        for w in range(worker_count):
+            n = base + (1 if w < extra else 0)
+            if n > 0:
+                tasks.append((n, main_actor_w, main_critic_w))
+
+        all_results: List[Tuple[Dict, Dict]] = []
+        for batch in pool.map(mp_run_hands, tasks):
+            all_results.extend(batch)
+        return all_results
+
     def train(self, num_hands: int) -> None:
-        """主训练循环 - GPU流水线优化版。
+        """主训练循环 - 多进程优化版。
         
-        三维度优化：
-        1. 更大模型（512-512-256-128）+更大batch → 更多GPU计算
-        2. GPU批量推理桥 → 主线程统一GPU推理，worker只做环境模拟
-        3. 异步训练线程 → 采样与训练并行，GPU不再空闲
+        优化维度：
+        1. 多进程(multiprocessing)采样 → 绕过GIL，真正利用多核CPU
+        2. 纯NumPy推理(worker内) → 无TF依赖，无CUDA竞争
+        3. GPU仅负责PPO训练 → 采样与训练并行
+        4. 保留GPU流水线模式作为fallback
         """
         logger.info(f"开始训练，共{num_hands}手牌")
         logger.info("从当前模型状态开始训练")
@@ -1520,16 +1575,52 @@ class SelfPlayTrainer:
             and hasattr(self.main_agent, 'clone_for_inference')
         )
 
-        # ===== 维度2+3: GPU批量推理桥 + 异步训练线程 =====
-        use_gpu_pipeline = (
+        # ===== 优先级1: 多进程采样（绕过GIL） =====
+        use_multiprocess = (
             self.model_type == 'ppo'
+            and self.train_workers > 1
+            and not self.use_ensemble
+            and hasattr(self.main_agent, 'agent')
+            and hasattr(self.main_agent.agent, 'get_weights')
+        )
+
+        # ===== 优先级2: GPU流水线（ThreadPoolExecutor, 受GIL限制） =====
+        use_gpu_pipeline = (
+            not use_multiprocess
+            and self.model_type == 'ppo'
             and hasattr(self.main_agent, 'agent')
             and hasattr(self.main_agent.agent, 'predict_batch')
         )
         gpu_bridge = None
         async_trainer = None
+        mp_pool = None
 
-        if use_gpu_pipeline:
+        if use_multiprocess:
+            import multiprocessing as _mp
+            # 获取初始权重
+            _w_snap = self.main_agent.agent.get_weights()  # [actor_list, critic_list]
+            _main_actor_w = [w.copy() for w in _w_snap[0]]
+            _main_critic_w = [w.copy() for w in _w_snap[1]]
+            opp_w_list = self._get_opp_weights_for_mp()
+            game_cfg = {
+                'small_blind': self.small_blind,
+                'big_blind': self.big_blind,
+                'initial_stack': self.initial_stack,
+            }
+            reward_cfg = {
+                'allin_eq_threshold': self.allin_unlucky_eq_threshold,
+                'allin_bonus_cap': self.allin_unlucky_bonus_cap,
+            }
+            mp_pool = _mp.Pool(
+                processes=self.train_workers,
+                initializer=mp_init_worker,
+                initargs=(game_cfg, reward_cfg, opp_w_list),
+            )
+            logger.info(
+                f"[多进程] 启用 {self.train_workers} 个worker进程，"
+                f"纯NumPy推理，绕过GIL瓶颈"
+            )
+        elif use_gpu_pipeline:
             # 创建 GPU 推理桥
             gpu_bridge = GPUInferenceBridge(self.main_agent.agent)
             logger.info("[GPU流水线] 启用GPU批量推理桥 - 所有Main_AI决策统一在GPU上执行")
@@ -1545,7 +1636,7 @@ class SelfPlayTrainer:
         # 轻量级worker：只持有StateRepresentation，推理由GPU桥完成
         worker_state_reps = []
 
-        if use_parallel:
+        if use_parallel and not use_multiprocess:
             if use_gpu_pipeline:
                 # GPU流水线模式：每个并发环境独立StateRepresentation，避免线程共享问题
                 max_concurrent_envs = self.train_workers * max(1, self.train_rollouts_per_worker)
@@ -1568,13 +1659,19 @@ class SelfPlayTrainer:
 
         hand_idx = 0
         batch_counter = 0
-        executor = ThreadPoolExecutor(max_workers=self.train_workers) if use_parallel else None
+        executor = ThreadPoolExecutor(max_workers=self.train_workers) if (use_parallel and not use_multiprocess) else None
         try:
             while hand_idx < num_hands:
                 remaining_hands = num_hands - hand_idx
                 t0 = datetime.now().timestamp()
 
-                if use_parallel and use_gpu_pipeline:
+                if use_multiprocess:
+                    # ===== 多进程采样模式 =====
+                    results_and_trajectories = self._mp_sampling_step(
+                        mp_pool, remaining_hands,
+                        _main_actor_w, _main_critic_w,
+                    )
+                elif use_parallel and use_gpu_pipeline:
                     # ===== GPU流水线模式：迭代式环境推进 + GPU批量推理 =====
                     results_and_trajectories = self._gpu_pipeline_step(
                         executor, remaining_hands, worker_state_reps,
@@ -1687,7 +1784,19 @@ class SelfPlayTrainer:
                     if (not self.tuning_mode) and self.total_hands % self.opponent_update_interval == 0:
                         logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
                         self.update_opponents()
-                        if use_parallel:
+                        if use_multiprocess and mp_pool is not None:
+                            # 重建进程池以更新对手权重
+                            import multiprocessing as _mp
+                            mp_pool.terminate()
+                            mp_pool.join()
+                            opp_w_list = self._get_opp_weights_for_mp()
+                            mp_pool = _mp.Pool(
+                                processes=self.train_workers,
+                                initializer=mp_init_worker,
+                                initargs=(game_cfg, reward_cfg, opp_w_list),
+                            )
+                            logger.info("[多进程] 对手权重已更新，重建worker进程池")
+                        elif use_parallel:
                             for w in range(self.train_workers):
                                 worker_opp_copies[w] = self._clone_opponents_for_inference()
                                 worker_opp_versions[w] = self._opponents_version
@@ -1698,7 +1807,21 @@ class SelfPlayTrainer:
 
                 # ===== PPO训练提交 =====
                 if self.model_type == 'ppo' and ppo_trajectories:
-                    if async_trainer is not None:
+                    if use_multiprocess:
+                        # 多进程模式：主进程同步训练 + 更新权重快照
+                        _ppo_t0 = datetime.now().timestamp()
+                        if hasattr(self.main_agent, 'append_trajectories_batch'):
+                            self.main_agent.append_trajectories_batch(ppo_trajectories)
+                        else:
+                            for traj in ppo_trajectories:
+                                self._apply_trajectory(traj)
+                        # 更新worker使用的权重（下一批采样会用新权重）
+                        _w_snap = self.main_agent.agent.get_weights()
+                        _main_actor_w = [w.copy() for w in _w_snap[0]]
+                        _main_critic_w = [w.copy() for w in _w_snap[1]]
+                        _ppo_t1 = datetime.now().timestamp()
+                        t_train_total += (_ppo_t1 - _ppo_t0)
+                    elif async_trainer is not None:
                         # 异步模式：提交轨迹到写入缓冲
                         async_trainer.submit_trajectories(ppo_trajectories)
                         # 每隔一定批次交换缓冲并触发训练
@@ -1730,6 +1853,11 @@ class SelfPlayTrainer:
                         f"总耗时={total_t:.2f}s{async_info}"
                     )
         finally:
+            # 关闭多进程池
+            if mp_pool is not None:
+                mp_pool.terminate()
+                mp_pool.join()
+                logger.info("[多进程] worker进程池已关闭")
             # 停止异步训练线程
             if async_trainer is not None:
                 async_trainer.stop()
