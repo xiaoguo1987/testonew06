@@ -101,9 +101,10 @@ def _apply_hardware_profile(args) -> None:
                 args.tables_per_worker = 32 if _cc else 8
             # RL 训练禁用混合精度：PPO 的 log-prob 计算在 FP16 下不稳定
             args.mixed_precision = False
-            # 14M 大模型学习率：使用默认 3e-4，配合 KL target=15.0 和 critic_lr_multiplier=3.0
-            # 注意：不再强制降低学习率，之前 3e-5 太低导致模型无法有效学习
-            pass
+            # 14M 大模型学习率：使用 1e-4（折中值）
+            # 3e-5 太低导致模型无法学习，3e-4 太高导致 KL 爆炸/速度崩塌
+            if float(getattr(args, 'learning_rate', 3e-4)) >= 1e-4:
+                args.learning_rate = 1e-4
         else:
             # Legacy 架构：CPU 多进程采样 + 小模型
             if int(getattr(args, 'train_workers', 0)) <= 0:
