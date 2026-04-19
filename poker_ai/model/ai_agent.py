@@ -13,6 +13,47 @@ from ..game.poker_game import Player, PokerGame
 logger = logging.getLogger('PokerAIAgent')
 
 
+# 翻牌前各位置加注所需的最低手牌强度阈值
+# 位置编号 = (seat - dealer) % num_players: 0=BTN, 1=SB, 2=BB, 3=UTG, 4=MP, 5=CO
+_PREFLOP_RAISE_THRESHOLDS = [0.30, 0.35, 0.25, 0.50, 0.45, 0.35]
+
+
+def _apply_preflop_position_filter(
+    masked_probs: np.ndarray,
+    game: PokerGame,
+    player: Player,
+    hand_strength: float,
+) -> np.ndarray:
+    """翻牌前根据位置和手牌强度调整加注概率。
+
+    核心思想：UTG/MP 位需要更强的牌才能加注，BTN/CO 可以用更宽范围加注。
+    不是硬性禁止，而是按比例压低加注概率，保留探索空间。
+    翻牌后不做任何限制，让模型自行学习。
+    """
+    if game.round != 1:  # 仅翻牌前生效
+        return masked_probs
+
+    num_players = len(game.players)
+    hero_idx = game.players.index(player)
+    dist = (hero_idx - game.dealer_pos + num_players) % num_players
+    threshold = _PREFLOP_RAISE_THRESHOLDS[min(dist, len(_PREFLOP_RAISE_THRESHOLDS) - 1)]
+
+    if hand_strength >= threshold:
+        return masked_probs  # 手牌够强，不限制
+
+    # 手牌低于位置阈值：按比例压低加注概率
+    ratio = max(0.05, hand_strength / threshold)  # 0.05 ~ 1.0
+    adjusted = masked_probs.copy()
+    adjusted[2] *= ratio          # raise x2: 适度压低
+    adjusted[3] *= ratio * 0.5    # raise x4: 更多压低
+    adjusted[4] *= ratio * 0.2    # all-in:   最强压低
+
+    prob_sum = float(np.sum(adjusted))
+    if prob_sum > 1e-8:
+        adjusted /= prob_sum
+    return adjusted
+
+
 def _get_legal_action_mask(game: PokerGame, player: Player) -> np.ndarray:
     """
     5 维动作合法性掩码:
@@ -193,8 +234,10 @@ class PokerAIAgent:
                 masked_probs = legal_mask / (np.sum(legal_mask) + 1e-8)
             else:
                 masked_probs = masked_probs / prob_sum
-            action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
+            # 翻牌前位置感知过滤：压低弱牌在前位的加注概率
             hand_strength = self.state_rep.calculate_hand_strength(player, game)
+            masked_probs = _apply_preflop_position_filter(masked_probs, game, player, hand_strength)
+            action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
             action_vector = np.zeros(len(action_probs))
             action_vector[action_idx] = 1
             action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)
@@ -285,8 +328,10 @@ class PokerAIAgent:
                 masked_probs = legal_mask / (np.sum(legal_mask) + 1e-8)
             else:
                 masked_probs = masked_probs / prob_sum
-            action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
+            # 翻牌前位置感知过滤
             hand_strength = self.state_rep.calculate_hand_strength(player, game)
+            masked_probs = _apply_preflop_position_filter(masked_probs, game, player, hand_strength)
+            action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
             action_vector = np.zeros(len(action_probs), dtype=np.float32)
             action_vector[action_idx] = 1.0
             action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)

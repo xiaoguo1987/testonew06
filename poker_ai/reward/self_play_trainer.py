@@ -21,6 +21,7 @@ logger = logging.getLogger('SelfPlayTrainer')
 from ..game.poker_game import PokerGame, Player
 from ..model.ai_agent import PokerAIAgent, EnsembleAgent, GPUInferenceBridge, LightweightInferenceAgent
 from ..model.ai_agent import _get_legal_action_mask
+from ..model.ai_agent import _apply_preflop_position_filter
 from ..model.state_representation import StateRepresentation
 from ..reward.reward_calculator import RewardCalculator, AdaptiveRewardCalculator
 from ..utils.checkpoint import save_checkpoint, load_checkpoint, find_latest_checkpoint
@@ -1974,10 +1975,11 @@ class SelfPlayTrainer:
                         masked_probs = legal_mask / (np.sum(legal_mask) + 1e-8)
                     else:
                         masked_probs = masked_probs / prob_sum
-                    action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
-
+                    # 翻牌前位置感知过滤：压低弱牌在前位的加注概率
                     state_rep = worker_state_reps[env_idx % len(worker_state_reps)]
                     hand_strength = state_rep.calculate_hand_strength(current_player, game)
+                    masked_probs = _apply_preflop_position_filter(masked_probs, game, current_player, hand_strength)
+                    action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
                     action_vector = np.zeros(len(action_probs), dtype=np.float32)
                     action_vector[action_idx] = 1.0
                     action_str, amount = state_rep.decode_action(action_vector, game, current_player, hand_strength)
