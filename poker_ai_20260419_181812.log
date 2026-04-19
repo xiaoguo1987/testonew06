@@ -1,0 +1,1291 @@
+2026-04-19 18:18:12,806 - PokerAITrainer - INFO - 日志已配置，记录到: logs/poker_ai_20260419_181812.log
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - mixed precision 已禁用，使用 float32
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - 已启用 XLA JIT
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - TensorFlow版本: 2.21.0
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - DEBUG: 平台=Linux, 逻辑核心数=256, 进程可用核心数=256
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - 并行配置: TF intra_op=32, inter_op=4
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - 并行配置: train_workers=64, eval_workers=42
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - 并行配置: train_rollouts_per_worker=8, train_sync_every_batches=8
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - PPO配置: batch_size=4096, ppo_update_min_steps=0
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - 可用GPU数量: 1
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - GPU 0: /physical_device:GPU:0
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - TF CPU设备数: 1（这是TensorFlow逻辑设备数，不等于CPU核心数）
+2026-04-19 18:18:15,867 - PokerAITrainer - INFO - 训练将使用: GPU
+2026-04-19 18:18:16,134 - PokerAITrainer - INFO - [GPU诊断] GPU预热矩阵乘法成功，结果设备: /job:localhost/replica:0/task:0/device:GPU:0
+2026-04-19 18:18:16,134 - PokerAITrainer - INFO - 环境设置完成: 检查点目录=./checkpoints
+2026-04-19 18:18:16,134 - PokerAITrainer - INFO - 当前运行模式: train
+2026-04-19 18:18:16,134 - PokerAITrainer - INFO - 使用模型类型: ppo
+2026-04-19 18:18:16,134 - PokerAITrainer - INFO - [SEED RL] 启动 GPU-Centric 训练架构
+2026-04-19 18:18:16,134 - PokerAITrainer - INFO - 训练参数: {'mode': 'train', 'hardware_profile': 'rtx4090d', 'arch': 'seed-rl', 'auto_tune': False, 'auto_tune_hands': 4000, 'auto_tune_max_candidates': 3, 'model_type': 'ppo', 'model_path': None, 'checkpoint_dir': './checkpoints', 'num_hands': 200000, 'learning_rate': 3e-05, 'batch_size': 4096, 'ppo_clip': 0.2, 'ppo_epochs': 15, 'ppo_entropy_coef': 0.05, 'ppo_update_min_steps': 0, 'target_update': 10, 'optimizer': 'adam', 'eval_interval': 200, 'checkpoint_interval': 20000, 'num_eval_games': 100, 'eval_workers': 42, 'train_workers': 64, 'skip_final_eval': False, 'allin_unlucky_eq_threshold': 0.65, 'allin_unlucky_bonus_cap': 0.8, 'cpu_threads': 32, 'tf_inter_op_threads': 4, 'train_rollouts_per_worker': 8, 'train_sync_every_batches': 8, 'dqn_replay_updates_per_hand': 0, 'device': 'gpu', 'mixed_precision': False, 'enable_xla': True, 'disable_onednn': False, 'gpu_memory_growth': True, 'small_blind': 5, 'big_blind': 10, 'initial_stack': 1000, 'num_players': 6, 'use_ensemble': False, 'resume': False, 'save_best_only': False, 'verbose': False, 'eval_opponent': 'previous_version', 'eval_output': 'eval_results.json', 'demo_hands': 10, 'use_self_play': True, 'opponent_update_interval': 1000, 'eps_start': 1.0, 'eps_end': 0.01, 'eps_decay': 0.0001, 'hidden_dims': [2048, 2048, 1024, 512], 'ppo_buffer_size': 16384, 'inference_min_batch': 32, 'inference_max_batch': 512, 'tables_per_worker': 8}
+2026-04-19 18:18:17,161 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M)
+2026-04-19 18:18:17,248 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M)
+2026-04-19 18:18:17,363 - PokerAITrainer - INFO - [SEED RL] 开始训练 200000 手牌...
+2026-04-19 18:18:17,373 - SeedRLTrainer - INFO - [SEED RL] 训练开始: num_hands=200000, workers=64, tables_per_worker=8, 并发牌桌=512, ppo_buffer=16384, inference_batch=[32, 512]
+2026-04-19 18:18:18,314 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+2026-04-19 18:18:18,360 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+2026-04-19 18:18:19,509 - SeedRLTrainer - INFO - [SEED RL] 64 个 worker 进程已启动
+2026-04-19 18:18:55,278 - SeedRLTrainer - INFO - [SEED RL] 评估@273: 胜率=0.000, 平均收益=-208.15, 无效下注率=0.000
+2026-04-19 18:18:55,429 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_273
+2026-04-19 18:18:55,622 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-19 18:19:01,919 - SeedRLTrainer - INFO - [SEED RL] 评估@493: 胜率=0.010, 平均收益=-164.05, 无效下注率=0.000
+2026-04-19 18:19:02,073 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_493
+2026-04-19 18:19:02,301 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-19 18:19:09,253 - SeedRLTrainer - INFO - [SEED RL] 评估@777: 胜率=0.020, 平均收益=-199.20, 无效下注率=0.000
+2026-04-19 18:19:15,448 - SeedRLTrainer - INFO - [SEED RL] 评估@986: 胜率=0.030, 平均收益=-191.65, 无效下注率=0.000
+2026-04-19 18:19:15,562 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @1038
+2026-04-19 18:19:29,425 - SeedRLTrainer - INFO - [SEED RL] 评估@1223: 胜率=0.010, 平均收益=-182.30, 无效下注率=0.000
+2026-04-19 18:19:54,480 - SeedRLTrainer - INFO - [SEED RL] 评估@1465: 胜率=0.010, 平均收益=-136.25, 无效下注率=0.000
+2026-04-19 18:19:54,606 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_1465
+2026-04-19 18:19:54,758 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-19 18:20:08,665 - SeedRLTrainer - INFO - [SEED RL] 评估@1713: 胜率=0.020, 平均收益=-202.50, 无效下注率=0.000
+2026-04-19 18:20:27,056 - SeedRLTrainer - INFO - [SEED RL] 评估@1947: 胜率=0.000, 平均收益=-235.40, 无效下注率=0.000
+2026-04-19 18:20:27,190 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @2069
+2026-04-19 18:20:34,698 - SeedRLTrainer - INFO - [SEED RL] 评估@2205: 胜率=0.010, 平均收益=-193.80, 无效下注率=0.000
+2026-04-19 18:20:46,935 - SeedRLTrainer - INFO - [SEED RL] 评估@2430: 胜率=0.000, 平均收益=-213.90, 无效下注率=0.000
+2026-04-19 18:21:00,175 - SeedRLTrainer - INFO - [SEED RL] 评估@2640: 胜率=0.010, 平均收益=-237.70, 无效下注率=0.000
+2026-04-19 18:21:14,289 - SeedRLTrainer - INFO - [SEED RL] 评估@2861: 胜率=0.000, 平均收益=-191.90, 无效下注率=0.000
+2026-04-19 18:21:26,749 - SeedRLTrainer - INFO - [SEED RL] 评估@3068: 胜率=0.000, 平均收益=-208.35, 无效下注率=0.000
+2026-04-19 18:21:26,850 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @3121
+2026-04-19 18:21:27,141 - SeedRLTrainer - INFO - [SEED RL] 评估@3278: 胜率=0.010, 平均收益=-234.00, 无效下注率=0.000
+2026-04-19 18:21:33,399 - SeedRLTrainer - INFO - [SEED RL] 评估@3522: 胜率=0.010, 平均收益=-183.15, 无效下注率=0.000
+2026-04-19 18:21:40,011 - SeedRLTrainer - INFO - [SEED RL] 评估@3768: 胜率=0.010, 平均收益=-259.75, 无效下注率=0.000
+2026-04-19 18:21:40,330 - SeedRLTrainer - INFO - [SEED RL] 评估@4015: 胜率=0.010, 平均收益=-263.00, 无效下注率=0.000
+2026-04-19 18:21:40,448 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @4138
+2026-04-19 18:21:46,846 - SeedRLTrainer - INFO - [SEED RL] 评估@4244: 胜率=0.000, 平均收益=-215.95, 无效下注率=0.000
+2026-04-19 18:21:53,242 - SeedRLTrainer - INFO - [SEED RL] 评估@4485: 胜率=0.020, 平均收益=-152.95, 无效下注率=0.000
+2026-04-19 18:21:59,747 - SeedRLTrainer - INFO - [SEED RL] 评估@4740: 胜率=0.010, 平均收益=-203.75, 无效下注率=0.000
+2026-04-19 18:22:00,060 - SeedRLTrainer - INFO - [SEED RL] 评估@4995: 胜率=0.040, 平均收益=-231.95, 无效下注率=0.000
+2026-04-19 18:22:06,149 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @5165
+2026-04-19 18:22:06,389 - SeedRLTrainer - INFO - [SEED RL] 评估@5228: 胜率=0.000, 平均收益=-234.85, 无效下注率=0.000
+2026-04-19 18:22:06,693 - SeedRLTrainer - INFO - [SEED RL] 评估@5481: 胜率=0.000, 平均收益=-228.90, 无效下注率=0.000
+2026-04-19 18:22:06,993 - SeedRLTrainer - INFO - [SEED RL] 评估@5707: 胜率=0.000, 平均收益=-213.20, 无效下注率=0.000
+2026-04-19 18:22:13,555 - SeedRLTrainer - INFO - [SEED RL] 评估@5974: 胜率=0.000, 平均收益=-267.25, 无效下注率=0.000
+2026-04-19 18:22:26,057 - SeedRLTrainer - INFO - [SEED RL] 评估@6193: 胜率=0.010, 平均收益=-176.50, 无效下注率=0.000
+2026-04-19 18:22:26,122 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @6193
+2026-04-19 18:22:32,754 - SeedRLTrainer - INFO - [SEED RL] 评估@6393: 胜率=0.010, 平均收益=-263.25, 无效下注率=0.000
+2026-04-19 18:22:39,385 - SeedRLTrainer - INFO - [SEED RL] 评估@6626: 胜率=0.010, 平均收益=-179.75, 无效下注率=0.000
+2026-04-19 18:22:39,668 - SeedRLTrainer - INFO - [SEED RL] 评估@6827: 胜率=0.000, 平均收益=-260.85, 无效下注率=0.000
+2026-04-19 18:22:46,429 - SeedRLTrainer - INFO - [SEED RL] 评估@7049: 胜率=0.010, 平均收益=-211.15, 无效下注率=0.000
+2026-04-19 18:22:46,713 - SeedRLTrainer - INFO - [SEED RL] 评估@7252: 胜率=0.010, 平均收益=-253.35, 无效下注率=0.000
+2026-04-19 18:22:46,786 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @7252
+2026-04-19 18:22:47,076 - SeedRLTrainer - INFO - [SEED RL] 评估@7454: 胜率=0.010, 平均收益=-236.10, 无效下注率=0.000
+2026-04-19 18:22:47,404 - SeedRLTrainer - INFO - [SEED RL] 评估@7723: 胜率=0.010, 平均收益=-281.95, 无效下注率=0.000
+2026-04-19 18:22:47,686 - SeedRLTrainer - INFO - [SEED RL] 评估@7927: 胜率=0.000, 平均收益=-209.05, 无效下注率=0.000
+2026-04-19 18:22:47,991 - SeedRLTrainer - INFO - [SEED RL] 评估@8174: 胜率=0.020, 平均收益=-264.90, 无效下注率=0.000
+2026-04-19 18:22:48,117 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @8321
+2026-04-19 18:22:48,337 - SeedRLTrainer - INFO - [SEED RL] 评估@8386: 胜率=0.010, 平均收益=-182.00, 无效下注率=0.000
+2026-04-19 18:22:54,459 - SeedRLTrainer - INFO - [SEED RL] 评估@8601: 胜率=0.000, 平均收益=-220.15, 无效下注率=0.000
+2026-04-19 18:22:54,739 - SeedRLTrainer - INFO - [SEED RL] 评估@8823: 胜率=0.000, 平均收益=-159.20, 无效下注率=0.000
+2026-04-19 18:22:55,053 - SeedRLTrainer - INFO - [SEED RL] 评估@9056: 胜率=0.000, 平均收益=-231.45, 无效下注率=0.000
+2026-04-19 18:22:55,356 - SeedRLTrainer - INFO - [SEED RL] 评估@9293: 胜率=0.000, 平均收益=-283.60, 无效下注率=0.000
+2026-04-19 18:22:55,456 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @9357
+2026-04-19 18:22:55,739 - SeedRLTrainer - INFO - [SEED RL] 评估@9548: 胜率=0.000, 平均收益=-346.45, 无效下注率=0.000
+2026-04-19 18:22:56,021 - SeedRLTrainer - INFO - [SEED RL] 评估@9750: 胜率=0.010, 平均收益=-158.90, 无效下注率=0.000
+2026-04-19 18:22:56,325 - SeedRLTrainer - INFO - [SEED RL] 评估@9954: 胜率=0.000, 平均收益=-199.15, 无效下注率=0.000
+2026-04-19 18:23:02,476 - SeedRLTrainer - INFO - [SEED RL] 评估@10205: 胜率=0.000, 平均收益=-111.60, 无效下注率=0.000
+2026-04-19 18:23:02,599 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_10205
+2026-04-19 18:23:02,747 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-19 18:23:02,909 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @10386
+2026-04-19 18:23:03,144 - SeedRLTrainer - INFO - [SEED RL] 评估@10440: 胜率=0.030, 平均收益=-213.85, 无效下注率=0.000
+2026-04-19 18:23:03,456 - SeedRLTrainer - INFO - [SEED RL] 评估@10701: 胜率=0.000, 平均收益=-265.10, 无效下注率=0.000
+2026-04-19 18:23:03,759 - SeedRLTrainer - INFO - [SEED RL] 评估@10940: 胜率=0.010, 平均收益=-163.15, 无效下注率=0.000
+2026-04-19 18:23:04,046 - SeedRLTrainer - INFO - [SEED RL] 评估@11157: 胜率=0.000, 平均收益=-210.20, 无效下注率=0.000
+2026-04-19 18:23:04,174 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 18:23:04,249 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.637334, returns_mean=-0.3871
+2026-04-19 18:23:29,673 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.372473 > target=5.0
+2026-04-19 18:23:29,673 - LargePPOModel - INFO - [LargePPO] train() 完成: 25.500s, batches=5, actor_loss=-0.129815, critic_loss=0.781675, KL=20.372473
+2026-04-19 18:23:29,673 - SeedRLTrainer - INFO - [SEED RL] hands=11345/200000, PPO更新#1, loss=0.325930, 速度=36.6 hands/s
+2026-04-19 18:23:35,854 - SeedRLTrainer - INFO - [SEED RL] 评估@11451: 胜率=0.030, 平均收益=-279.40, 无效下注率=0.000
+2026-04-19 18:23:35,930 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @11451
+2026-04-19 18:23:42,516 - SeedRLTrainer - INFO - [SEED RL] 评估@11661: 胜率=0.000, 平均收益=-362.85, 无效下注率=0.000
+2026-04-19 18:23:42,831 - SeedRLTrainer - INFO - [SEED RL] 评估@11865: 胜率=0.010, 平均收益=-366.90, 无效下注率=0.000
+2026-04-19 18:23:43,143 - SeedRLTrainer - INFO - [SEED RL] 评估@12087: 胜率=0.010, 平均收益=-304.70, 无效下注率=0.000
+2026-04-19 18:23:43,436 - SeedRLTrainer - INFO - [SEED RL] 评估@12299: 胜率=0.000, 平均收益=-354.80, 无效下注率=0.000
+2026-04-19 18:23:43,604 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @12471
+2026-04-19 18:23:43,851 - SeedRLTrainer - INFO - [SEED RL] 评估@12502: 胜率=0.000, 平均收益=-344.25, 无效下注率=0.000
+2026-04-19 18:23:50,334 - SeedRLTrainer - INFO - [SEED RL] 评估@12752: 胜率=0.000, 平均收益=-322.20, 无效下注率=0.000
+2026-04-19 18:23:56,993 - SeedRLTrainer - INFO - [SEED RL] 评估@12990: 胜率=0.000, 平均收益=-373.65, 无效下注率=0.000
+2026-04-19 18:23:57,308 - SeedRLTrainer - INFO - [SEED RL] 评估@13229: 胜率=0.000, 平均收益=-398.95, 无效下注率=0.000
+2026-04-19 18:23:57,626 - SeedRLTrainer - INFO - [SEED RL] 评估@13452: 胜率=0.000, 平均收益=-392.95, 无效下注率=0.000
+2026-04-19 18:23:57,719 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @13514
+2026-04-19 18:23:58,010 - SeedRLTrainer - INFO - [SEED RL] 评估@13684: 胜率=0.000, 平均收益=-397.75, 无效下注率=0.000
+2026-04-19 18:23:58,331 - SeedRLTrainer - INFO - [SEED RL] 评估@13893: 胜率=0.020, 平均收益=-362.75, 无效下注率=0.000
+2026-04-19 18:24:03,723 - SeedRLTrainer - INFO - [SEED RL] 评估@14116: 胜率=0.000, 平均收益=-323.90, 无效下注率=0.000
+2026-04-19 18:24:04,035 - SeedRLTrainer - INFO - [SEED RL] 评估@14324: 胜率=0.000, 平均收益=-330.40, 无效下注率=0.000
+2026-04-19 18:24:15,721 - SeedRLTrainer - INFO - [SEED RL] 评估@14552: 胜率=0.010, 平均收益=-334.25, 无效下注率=0.000
+2026-04-19 18:24:15,787 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @14552
+2026-04-19 18:24:16,094 - SeedRLTrainer - INFO - [SEED RL] 评估@14780: 胜率=0.000, 平均收益=-353.00, 无效下注率=0.000
+2026-04-19 18:24:16,455 - SeedRLTrainer - INFO - [SEED RL] 评估@15027: 胜率=0.010, 平均收益=-437.05, 无效下注率=0.000
+2026-04-19 18:24:16,777 - SeedRLTrainer - INFO - [SEED RL] 评估@15250: 胜率=0.000, 平均收益=-353.50, 无效下注率=0.000
+2026-04-19 18:24:17,100 - SeedRLTrainer - INFO - [SEED RL] 评估@15491: 胜率=0.000, 平均收益=-426.25, 无效下注率=0.000
+2026-04-19 18:24:17,218 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @15614
+2026-04-19 18:24:17,493 - SeedRLTrainer - INFO - [SEED RL] 评估@15732: 胜率=0.010, 平均收益=-392.35, 无效下注率=0.000
+2026-04-19 18:24:17,804 - SeedRLTrainer - INFO - [SEED RL] 评估@15962: 胜率=0.010, 平均收益=-424.05, 无效下注率=0.000
+2026-04-19 18:24:18,112 - SeedRLTrainer - INFO - [SEED RL] 评估@16170: 胜率=0.000, 平均收益=-311.60, 无效下注率=0.000
+2026-04-19 18:24:18,815 - SeedRLTrainer - INFO - [SEED RL] 评估@16427: 胜率=0.000, 平均收益=-308.55, 无效下注率=0.000
+2026-04-19 18:24:25,424 - SeedRLTrainer - INFO - [SEED RL] 评估@16649: 胜率=0.010, 平均收益=-329.70, 无效下注率=0.000
+2026-04-19 18:24:25,492 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @16649
+2026-04-19 18:24:25,824 - SeedRLTrainer - INFO - [SEED RL] 评估@16887: 胜率=0.010, 平均收益=-371.40, 无效下注率=0.000
+2026-04-19 18:24:26,139 - SeedRLTrainer - INFO - [SEED RL] 评估@17128: 胜率=0.020, 平均收益=-365.45, 无效下注率=0.000
+2026-04-19 18:24:26,448 - SeedRLTrainer - INFO - [SEED RL] 评估@17373: 胜率=0.010, 平均收益=-330.80, 无效下注率=0.000
+2026-04-19 18:24:26,766 - SeedRLTrainer - INFO - [SEED RL] 评估@17615: 胜率=0.000, 平均收益=-390.50, 无效下注率=0.000
+2026-04-19 18:24:26,860 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @17661
+2026-04-19 18:24:27,160 - SeedRLTrainer - INFO - [SEED RL] 评估@17827: 胜率=0.020, 平均收益=-290.05, 无效下注率=0.000
+2026-04-19 18:24:27,486 - SeedRLTrainer - INFO - [SEED RL] 评估@18031: 胜率=0.000, 平均收益=-293.05, 无效下注率=0.000
+2026-04-19 18:24:27,817 - SeedRLTrainer - INFO - [SEED RL] 评估@18252: 胜率=0.020, 平均收益=-316.85, 无效下注率=0.000
+2026-04-19 18:24:28,126 - SeedRLTrainer - INFO - [SEED RL] 评估@18493: 胜率=0.000, 平均收益=-363.40, 无效下注率=0.000
+2026-04-19 18:24:28,457 - SeedRLTrainer - INFO - [SEED RL] 评估@18693: 胜率=0.000, 平均收益=-449.20, 无效下注率=0.000
+2026-04-19 18:24:28,527 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @18693
+2026-04-19 18:24:28,859 - SeedRLTrainer - INFO - [SEED RL] 评估@18940: 胜率=0.000, 平均收益=-382.65, 无效下注率=0.000
+2026-04-19 18:24:29,171 - SeedRLTrainer - INFO - [SEED RL] 评估@19150: 胜率=0.010, 平均收益=-350.95, 无效下注率=0.000
+2026-04-19 18:24:29,485 - SeedRLTrainer - INFO - [SEED RL] 评估@19355: 胜率=0.010, 平均收益=-371.90, 无效下注率=0.000
+2026-04-19 18:24:29,807 - SeedRLTrainer - INFO - [SEED RL] 评估@19584: 胜率=0.020, 平均收益=-254.00, 无效下注率=0.000
+2026-04-19 18:24:29,926 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @19712
+2026-04-19 18:24:30,186 - SeedRLTrainer - INFO - [SEED RL] 评估@19834: 胜率=0.020, 平均收益=-324.85, 无效下注率=0.000
+2026-04-19 18:24:30,378 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_20003
+2026-04-19 18:24:30,617 - SeedRLTrainer - INFO - [SEED RL] 评估@20057: 胜率=0.010, 平均收益=-416.05, 无效下注率=0.000
+2026-04-19 18:24:30,928 - SeedRLTrainer - INFO - [SEED RL] 评估@20279: 胜率=0.000, 平均收益=-395.85, 无效下注率=0.000
+2026-04-19 18:24:31,248 - SeedRLTrainer - INFO - [SEED RL] 评估@20502: 胜率=0.000, 平均收益=-314.50, 无效下注率=0.000
+2026-04-19 18:24:31,543 - SeedRLTrainer - INFO - [SEED RL] 评估@20758: 胜率=0.000, 平均收益=-350.85, 无效下注率=0.000
+2026-04-19 18:24:31,602 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @20758
+2026-04-19 18:24:31,913 - SeedRLTrainer - INFO - [SEED RL] 评估@20978: 胜率=0.000, 平均收益=-299.85, 无效下注率=0.000
+2026-04-19 18:24:32,243 - SeedRLTrainer - INFO - [SEED RL] 评估@21190: 胜率=0.000, 平均收益=-340.15, 无效下注率=0.000
+2026-04-19 18:24:32,569 - SeedRLTrainer - INFO - [SEED RL] 评估@21433: 胜率=0.030, 平均收益=-380.00, 无效下注率=0.000
+2026-04-19 18:24:38,748 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:24:38,809 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.889381, returns_mean=-0.4023
+2026-04-19 18:24:39,603 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.855s, batches=60, actor_loss=-0.059297, critic_loss=0.948294, KL=0.369904
+2026-04-19 18:24:39,603 - SeedRLTrainer - INFO - [SEED RL] hands=21607/200000, PPO更新#2, loss=0.444498, 速度=56.8 hands/s
+2026-04-19 18:24:39,863 - SeedRLTrainer - INFO - [SEED RL] 评估@21708: 胜率=0.000, 平均收益=-645.30, 无效下注率=0.000
+2026-04-19 18:24:39,956 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @21760
+2026-04-19 18:24:40,262 - SeedRLTrainer - INFO - [SEED RL] 评估@21919: 胜率=0.010, 平均收益=-666.35, 无效下注率=0.000
+2026-04-19 18:24:40,635 - SeedRLTrainer - INFO - [SEED RL] 评估@22122: 胜率=0.000, 平均收益=-699.85, 无效下注率=0.000
+2026-04-19 18:24:40,996 - SeedRLTrainer - INFO - [SEED RL] 评估@22342: 胜率=0.000, 平均收益=-562.25, 无效下注率=0.000
+2026-04-19 18:24:41,323 - SeedRLTrainer - INFO - [SEED RL] 评估@22552: 胜率=0.010, 平均收益=-645.90, 无效下注率=0.000
+2026-04-19 18:24:41,666 - SeedRLTrainer - INFO - [SEED RL] 评估@22754: 胜率=0.010, 平均收益=-688.30, 无效下注率=0.000
+2026-04-19 18:24:41,762 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @22795
+2026-04-19 18:24:42,104 - SeedRLTrainer - INFO - [SEED RL] 评估@22994: 胜率=0.010, 平均收益=-636.95, 无效下注率=0.000
+2026-04-19 18:24:47,791 - SeedRLTrainer - INFO - [SEED RL] 评估@23213: 胜率=0.000, 平均收益=-642.70, 无效下注率=0.000
+2026-04-19 18:24:48,172 - SeedRLTrainer - INFO - [SEED RL] 评估@23455: 胜率=0.020, 平均收益=-593.60, 无效下注率=0.000
+2026-04-19 18:24:48,534 - SeedRLTrainer - INFO - [SEED RL] 评估@23679: 胜率=0.000, 平均收益=-691.60, 无效下注率=0.000
+2026-04-19 18:24:48,681 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @23809
+2026-04-19 18:24:49,004 - SeedRLTrainer - INFO - [SEED RL] 评估@23927: 胜率=0.000, 平均收益=-674.20, 无效下注率=0.000
+2026-04-19 18:24:49,385 - SeedRLTrainer - INFO - [SEED RL] 评估@24135: 胜率=0.000, 平均收益=-697.45, 无效下注率=0.000
+2026-04-19 18:24:49,748 - SeedRLTrainer - INFO - [SEED RL] 评估@24357: 胜率=0.000, 平均收益=-602.10, 无效下注率=0.000
+2026-04-19 18:24:50,137 - SeedRLTrainer - INFO - [SEED RL] 评估@24578: 胜率=0.000, 平均收益=-526.00, 无效下注率=0.000
+2026-04-19 18:24:50,503 - SeedRLTrainer - INFO - [SEED RL] 评估@24784: 胜率=0.010, 平均收益=-623.25, 无效下注率=0.000
+2026-04-19 18:24:50,600 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @24835
+2026-04-19 18:24:50,931 - SeedRLTrainer - INFO - [SEED RL] 评估@25032: 胜率=0.000, 平均收益=-613.55, 无效下注率=0.000
+2026-04-19 18:24:51,317 - SeedRLTrainer - INFO - [SEED RL] 评估@25269: 胜率=0.010, 平均收益=-686.10, 无效下注率=0.000
+2026-04-19 18:24:51,725 - SeedRLTrainer - INFO - [SEED RL] 评估@25492: 胜率=0.000, 平均收益=-703.95, 无效下注率=0.000
+2026-04-19 18:24:52,123 - SeedRLTrainer - INFO - [SEED RL] 评估@25711: 胜率=0.020, 平均收益=-689.15, 无效下注率=0.000
+2026-04-19 18:24:52,271 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @25861
+2026-04-19 18:24:52,573 - SeedRLTrainer - INFO - [SEED RL] 评估@25952: 胜率=0.010, 平均收益=-595.10, 无效下注率=0.000
+2026-04-19 18:24:52,961 - SeedRLTrainer - INFO - [SEED RL] 评估@26190: 胜率=0.000, 平均收益=-657.40, 无效下注率=0.000
+2026-04-19 18:24:53,343 - SeedRLTrainer - INFO - [SEED RL] 评估@26425: 胜率=0.000, 平均收益=-638.75, 无效下注率=0.000
+2026-04-19 18:24:53,697 - SeedRLTrainer - INFO - [SEED RL] 评估@26629: 胜率=0.010, 平均收益=-613.65, 无效下注率=0.000
+2026-04-19 18:24:54,065 - SeedRLTrainer - INFO - [SEED RL] 评估@26839: 胜率=0.000, 平均收益=-688.80, 无效下注率=0.000
+2026-04-19 18:24:54,159 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @26868
+2026-04-19 18:24:59,949 - SeedRLTrainer - INFO - [SEED RL] 评估@27072: 胜率=0.000, 平均收益=-651.05, 无效下注率=0.000
+2026-04-19 18:25:00,312 - SeedRLTrainer - INFO - [SEED RL] 评估@27290: 胜率=0.020, 平均收益=-559.65, 无效下注率=0.000
+2026-04-19 18:25:00,672 - SeedRLTrainer - INFO - [SEED RL] 评估@27499: 胜率=0.000, 平均收益=-682.95, 无效下注率=0.000
+2026-04-19 18:25:01,041 - SeedRLTrainer - INFO - [SEED RL] 评估@27709: 胜率=0.020, 平均收益=-666.25, 无效下注率=0.000
+2026-04-19 18:25:01,215 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @27868
+2026-04-19 18:25:01,488 - SeedRLTrainer - INFO - [SEED RL] 评估@27913: 胜率=0.010, 平均收益=-606.10, 无效下注率=0.000
+2026-04-19 18:25:01,881 - SeedRLTrainer - INFO - [SEED RL] 评估@28149: 胜率=0.000, 平均收益=-733.45, 无效下注率=0.000
+2026-04-19 18:25:02,192 - SeedRLTrainer - INFO - [SEED RL] 评估@28349: 胜率=0.000, 平均收益=-627.00, 无效下注率=0.000
+2026-04-19 18:25:02,524 - SeedRLTrainer - INFO - [SEED RL] 评估@28563: 胜率=0.000, 平均收益=-612.00, 无效下注率=0.000
+2026-04-19 18:25:02,902 - SeedRLTrainer - INFO - [SEED RL] 评估@28765: 胜率=0.000, 平均收益=-643.55, 无效下注率=0.000
+2026-04-19 18:25:03,052 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @28903
+2026-04-19 18:25:03,374 - SeedRLTrainer - INFO - [SEED RL] 评估@29000: 胜率=0.000, 平均收益=-646.55, 无效下注率=0.000
+2026-04-19 18:25:09,177 - SeedRLTrainer - INFO - [SEED RL] 评估@29230: 胜率=0.000, 平均收益=-644.80, 无效下注率=0.000
+2026-04-19 18:25:09,224 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:25:09,286 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.671989, returns_mean=-0.3936
+2026-04-19 18:25:10,088 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.863s, batches=60, actor_loss=-0.057370, critic_loss=0.961122, KL=0.140930
+2026-04-19 18:25:10,088 - SeedRLTrainer - INFO - [SEED RL] hands=29241/200000, PPO更新#3, loss=0.451876, 速度=71.2 hands/s
+2026-04-19 18:25:10,446 - SeedRLTrainer - INFO - [SEED RL] 评估@29440: 胜率=0.000, 平均收益=-765.75, 无效下注率=0.000
+2026-04-19 18:25:17,334 - SeedRLTrainer - INFO - [SEED RL] 评估@29660: 胜率=0.010, 平均收益=-701.80, 无效下注率=0.000
+2026-04-19 18:25:17,716 - SeedRLTrainer - INFO - [SEED RL] 评估@29880: 胜率=0.010, 平均收益=-778.05, 无效下注率=0.000
+2026-04-19 18:25:17,812 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @29926
+2026-04-19 18:25:18,166 - SeedRLTrainer - INFO - [SEED RL] 评估@30085: 胜率=0.000, 平均收益=-798.45, 无效下注率=0.000
+2026-04-19 18:25:18,552 - SeedRLTrainer - INFO - [SEED RL] 评估@30311: 胜率=0.000, 平均收益=-837.80, 无效下注率=0.000
+2026-04-19 18:25:18,943 - SeedRLTrainer - INFO - [SEED RL] 评估@30549: 胜率=0.000, 平均收益=-806.60, 无效下注率=0.000
+2026-04-19 18:25:19,350 - SeedRLTrainer - INFO - [SEED RL] 评估@30759: 胜率=0.000, 平均收益=-761.50, 无效下注率=0.000
+2026-04-19 18:25:19,549 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @30930
+2026-04-19 18:25:19,823 - SeedRLTrainer - INFO - [SEED RL] 评估@30968: 胜率=0.010, 平均收益=-739.15, 无效下注率=0.000
+2026-04-19 18:25:20,240 - SeedRLTrainer - INFO - [SEED RL] 评估@31197: 胜率=0.010, 平均收益=-763.75, 无效下注率=0.000
+2026-04-19 18:25:21,090 - SeedRLTrainer - INFO - [SEED RL] 评估@31418: 胜率=0.000, 平均收益=-772.65, 无效下注率=0.000
+2026-04-19 18:25:27,682 - SeedRLTrainer - INFO - [SEED RL] 评估@31643: 胜率=0.000, 平均收益=-784.75, 无效下注率=0.000
+2026-04-19 18:25:28,063 - SeedRLTrainer - INFO - [SEED RL] 评估@31845: 胜率=0.000, 平均收益=-760.90, 无效下注率=0.000
+2026-04-19 18:25:28,217 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @31960
+2026-04-19 18:25:28,508 - SeedRLTrainer - INFO - [SEED RL] 评估@32050: 胜率=0.000, 平均收益=-762.70, 无效下注率=0.000
+2026-04-19 18:25:28,910 - SeedRLTrainer - INFO - [SEED RL] 评估@32277: 胜率=0.010, 平均收益=-779.40, 无效下注率=0.000
+2026-04-19 18:25:29,318 - SeedRLTrainer - INFO - [SEED RL] 评估@32486: 胜率=0.000, 平均收益=-735.25, 无效下注率=0.000
+2026-04-19 18:25:29,718 - SeedRLTrainer - INFO - [SEED RL] 评估@32735: 胜率=0.000, 平均收益=-849.10, 无效下注率=0.000
+2026-04-19 18:25:30,090 - SeedRLTrainer - INFO - [SEED RL] 评估@32947: 胜率=0.010, 平均收益=-809.30, 无效下注率=0.000
+2026-04-19 18:25:30,182 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @32974
+2026-04-19 18:25:30,624 - SeedRLTrainer - INFO - [SEED RL] 评估@33153: 胜率=0.000, 平均收益=-736.40, 无效下注率=0.000
+2026-04-19 18:25:31,013 - SeedRLTrainer - INFO - [SEED RL] 评估@33380: 胜率=0.000, 平均收益=-760.20, 无效下注率=0.000
+2026-04-19 18:25:31,407 - SeedRLTrainer - INFO - [SEED RL] 评估@33609: 胜率=0.010, 平均收益=-780.75, 无效下注率=0.000
+2026-04-19 18:25:31,827 - SeedRLTrainer - INFO - [SEED RL] 评估@33833: 胜率=0.000, 平均收益=-763.75, 无效下注率=0.000
+2026-04-19 18:25:32,001 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @33985
+2026-04-19 18:25:32,298 - SeedRLTrainer - INFO - [SEED RL] 评估@34067: 胜率=0.000, 平均收益=-779.00, 无效下注率=0.000
+2026-04-19 18:25:32,675 - SeedRLTrainer - INFO - [SEED RL] 评估@34268: 胜率=0.000, 平均收益=-776.70, 无效下注率=0.000
+2026-04-19 18:25:33,138 - SeedRLTrainer - INFO - [SEED RL] 评估@34498: 胜率=0.000, 平均收益=-812.15, 无效下注率=0.000
+2026-04-19 18:25:33,515 - SeedRLTrainer - INFO - [SEED RL] 评估@34718: 胜率=0.000, 平均收益=-714.30, 无效下注率=0.000
+2026-04-19 18:25:33,933 - SeedRLTrainer - INFO - [SEED RL] 评估@34946: 胜率=0.000, 平均收益=-718.45, 无效下注率=0.000
+2026-04-19 18:25:34,024 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @34986
+2026-04-19 18:25:34,403 - SeedRLTrainer - INFO - [SEED RL] 评估@35157: 胜率=0.000, 平均收益=-748.65, 无效下注率=0.000
+2026-04-19 18:25:34,834 - SeedRLTrainer - INFO - [SEED RL] 评估@35379: 胜率=0.000, 平均收益=-709.40, 无效下注率=0.000
+2026-04-19 18:25:35,222 - SeedRLTrainer - INFO - [SEED RL] 评估@35614: 胜率=0.000, 平均收益=-788.10, 无效下注率=0.000
+2026-04-19 18:25:35,292 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=4096, epochs=15
+2026-04-19 18:25:35,366 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.271435, returns_mean=-0.3913
+2026-04-19 18:25:35,435 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.050729 > target=5.0
+2026-04-19 18:25:35,435 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=0.063123, critic_loss=0.939564, KL=20.050729
+2026-04-19 18:25:35,435 - SeedRLTrainer - INFO - [SEED RL] hands=35668/200000, PPO更新#4, loss=0.501343, 速度=81.8 hands/s
+2026-04-19 18:25:35,811 - SeedRLTrainer - INFO - [SEED RL] 评估@35868: 胜率=0.010, 平均收益=-806.45, 无效下注率=0.000
+2026-04-19 18:25:35,954 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @35994
+2026-04-19 18:25:36,260 - SeedRLTrainer - INFO - [SEED RL] 评估@36077: 胜率=0.000, 平均收益=-735.70, 无效下注率=0.000
+2026-04-19 18:25:36,702 - SeedRLTrainer - INFO - [SEED RL] 评估@36303: 胜率=0.000, 平均收益=-769.50, 无效下注率=0.000
+2026-04-19 18:25:37,091 - SeedRLTrainer - INFO - [SEED RL] 评估@36544: 胜率=0.000, 平均收益=-811.55, 无效下注率=0.000
+2026-04-19 18:25:37,505 - SeedRLTrainer - INFO - [SEED RL] 评估@36759: 胜率=0.000, 平均收益=-735.15, 无效下注率=0.000
+2026-04-19 18:25:37,929 - SeedRLTrainer - INFO - [SEED RL] 评估@36969: 胜率=0.000, 平均收益=-731.00, 无效下注率=0.000
+2026-04-19 18:25:38,020 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @37001
+2026-04-19 18:25:38,393 - SeedRLTrainer - INFO - [SEED RL] 评估@37190: 胜率=0.000, 平均收益=-783.40, 无效下注率=0.000
+2026-04-19 18:25:38,789 - SeedRLTrainer - INFO - [SEED RL] 评估@37402: 胜率=0.000, 平均收益=-767.40, 无效下注率=0.000
+2026-04-19 18:25:39,205 - SeedRLTrainer - INFO - [SEED RL] 评估@37627: 胜率=0.010, 平均收益=-754.85, 无效下注率=0.000
+2026-04-19 18:25:39,597 - SeedRLTrainer - INFO - [SEED RL] 评估@37836: 胜率=0.000, 平均收益=-802.05, 无效下注率=0.000
+2026-04-19 18:25:39,800 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @38013
+2026-04-19 18:25:40,074 - SeedRLTrainer - INFO - [SEED RL] 评估@38061: 胜率=0.010, 平均收益=-723.40, 无效下注率=0.000
+2026-04-19 18:25:40,468 - SeedRLTrainer - INFO - [SEED RL] 评估@38284: 胜率=0.000, 平均收益=-782.25, 无效下注率=0.000
+2026-04-19 18:25:40,878 - SeedRLTrainer - INFO - [SEED RL] 评估@38508: 胜率=0.000, 平均收益=-790.35, 无效下注率=0.000
+2026-04-19 18:25:41,282 - SeedRLTrainer - INFO - [SEED RL] 评估@38708: 胜率=0.000, 平均收益=-729.15, 无效下注率=0.000
+2026-04-19 18:25:41,656 - SeedRLTrainer - INFO - [SEED RL] 评估@38908: 胜率=0.000, 平均收益=-809.00, 无效下注率=0.000
+2026-04-19 18:25:41,805 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @39031
+2026-04-19 18:25:42,090 - SeedRLTrainer - INFO - [SEED RL] 评估@39108: 胜率=0.000, 平均收益=-786.40, 无效下注率=0.000
+2026-04-19 18:25:48,925 - SeedRLTrainer - INFO - [SEED RL] 评估@39333: 胜率=0.000, 平均收益=-770.55, 无效下注率=0.000
+2026-04-19 18:25:55,223 - SeedRLTrainer - INFO - [SEED RL] 评估@39555: 胜率=0.000, 平均收益=-798.05, 无效下注率=0.000
+2026-04-19 18:25:55,615 - SeedRLTrainer - INFO - [SEED RL] 评估@39781: 胜率=0.000, 平均收益=-812.60, 无效下注率=0.000
+2026-04-19 18:25:56,030 - SeedRLTrainer - INFO - [SEED RL] 评估@39994: 胜率=0.000, 平均收益=-641.90, 无效下注率=0.000
+2026-04-19 18:25:56,165 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_40032
+2026-04-19 18:25:56,225 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @40032
+2026-04-19 18:25:56,554 - SeedRLTrainer - INFO - [SEED RL] 评估@40197: 胜率=0.000, 平均收益=-841.05, 无效下注率=0.000
+2026-04-19 18:25:56,952 - SeedRLTrainer - INFO - [SEED RL] 评估@40404: 胜率=0.010, 平均收益=-832.70, 无效下注率=0.000
+2026-04-19 18:25:57,382 - SeedRLTrainer - INFO - [SEED RL] 评估@40610: 胜率=0.000, 平均收益=-822.10, 无效下注率=0.000
+2026-04-19 18:25:57,808 - SeedRLTrainer - INFO - [SEED RL] 评估@40842: 胜率=0.020, 平均收益=-776.90, 无效下注率=0.000
+2026-04-19 18:25:58,216 - SeedRLTrainer - INFO - [SEED RL] 评估@41042: 胜率=0.010, 平均收益=-750.75, 无效下注率=0.000
+2026-04-19 18:25:58,284 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @41042
+2026-04-19 18:25:58,688 - SeedRLTrainer - INFO - [SEED RL] 评估@41273: 胜率=0.010, 平均收益=-788.10, 无效下注率=0.000
+2026-04-19 18:25:59,096 - SeedRLTrainer - INFO - [SEED RL] 评估@41482: 胜率=0.000, 平均收益=-766.45, 无效下注率=0.000
+2026-04-19 18:25:59,531 - SeedRLTrainer - INFO - [SEED RL] 评估@41705: 胜率=0.020, 平均收益=-749.25, 无效下注率=0.000
+2026-04-19 18:25:59,679 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 18:25:59,754 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.694568, returns_mean=-0.3924
+2026-04-19 18:25:59,825 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.044013 > target=5.0
+2026-04-19 18:25:59,825 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.147s, batches=5, actor_loss=0.307618, critic_loss=1.785225, KL=20.044013
+2026-04-19 18:25:59,825 - SeedRLTrainer - INFO - [SEED RL] hands=41900/200000, PPO更新#5, loss=1.046421, 速度=91.0 hands/s
+2026-04-19 18:26:00,081 - SeedRLTrainer - INFO - [SEED RL] 评估@41933: 胜率=0.000, 平均收益=-775.40, 无效下注率=0.000
+2026-04-19 18:26:00,227 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @42048
+2026-04-19 18:26:00,562 - SeedRLTrainer - INFO - [SEED RL] 评估@42145: 胜率=0.000, 平均收益=-740.00, 无效下注率=0.000
+2026-04-19 18:26:01,007 - SeedRLTrainer - INFO - [SEED RL] 评估@42378: 胜率=0.000, 平均收益=-812.75, 无效下注率=0.000
+2026-04-19 18:26:01,413 - SeedRLTrainer - INFO - [SEED RL] 评估@42601: 胜率=0.000, 平均收益=-754.50, 无效下注率=0.000
+2026-04-19 18:26:01,831 - SeedRLTrainer - INFO - [SEED RL] 评估@42820: 胜率=0.010, 平均收益=-806.60, 无效下注率=0.000
+2026-04-19 18:26:02,234 - SeedRLTrainer - INFO - [SEED RL] 评估@43041: 胜率=0.000, 平均收益=-738.20, 无效下注率=0.000
+2026-04-19 18:26:02,325 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @43072
+2026-04-19 18:26:02,740 - SeedRLTrainer - INFO - [SEED RL] 评估@43268: 胜率=0.000, 平均收益=-865.70, 无效下注率=0.000
+2026-04-19 18:26:03,133 - SeedRLTrainer - INFO - [SEED RL] 评估@43495: 胜率=0.000, 平均收益=-778.05, 无效下注率=0.000
+2026-04-19 18:26:03,569 - SeedRLTrainer - INFO - [SEED RL] 评估@43720: 胜率=0.000, 平均收益=-790.90, 无效下注率=0.000
+2026-04-19 18:26:03,974 - SeedRLTrainer - INFO - [SEED RL] 评估@43925: 胜率=0.000, 平均收益=-786.80, 无效下注率=0.000
+2026-04-19 18:26:04,173 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @44099
+2026-04-19 18:26:04,438 - SeedRLTrainer - INFO - [SEED RL] 评估@44152: 胜率=0.000, 平均收益=-772.30, 无效下注率=0.000
+2026-04-19 18:26:04,819 - SeedRLTrainer - INFO - [SEED RL] 评估@44376: 胜率=0.000, 平均收益=-797.85, 无效下注率=0.000
+2026-04-19 18:26:05,249 - SeedRLTrainer - INFO - [SEED RL] 评估@44593: 胜率=0.000, 平均收益=-801.00, 无效下注率=0.000
+2026-04-19 18:26:05,618 - SeedRLTrainer - INFO - [SEED RL] 评估@44797: 胜率=0.000, 平均收益=-822.65, 无效下注率=0.000
+2026-04-19 18:26:06,016 - SeedRLTrainer - INFO - [SEED RL] 评估@45003: 胜率=0.010, 平均收益=-819.20, 无效下注率=0.000
+2026-04-19 18:26:06,188 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @45106
+2026-04-19 18:26:06,504 - SeedRLTrainer - INFO - [SEED RL] 评估@45211: 胜率=0.000, 平均收益=-792.00, 无效下注率=0.000
+2026-04-19 18:26:06,912 - SeedRLTrainer - INFO - [SEED RL] 评估@45449: 胜率=0.010, 平均收益=-728.15, 无效下注率=0.000
+2026-04-19 18:26:07,339 - SeedRLTrainer - INFO - [SEED RL] 评估@45684: 胜率=0.010, 平均收益=-823.25, 无效下注率=0.000
+2026-04-19 18:26:07,756 - SeedRLTrainer - INFO - [SEED RL] 评估@45910: 胜率=0.000, 平均收益=-876.55, 无效下注率=0.000
+2026-04-19 18:26:07,985 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @46108
+2026-04-19 18:26:08,262 - SeedRLTrainer - INFO - [SEED RL] 评估@46145: 胜率=0.000, 平均收益=-768.50, 无效下注率=0.000
+2026-04-19 18:26:08,686 - SeedRLTrainer - INFO - [SEED RL] 评估@46384: 胜率=0.010, 平均收益=-794.20, 无效下注率=0.000
+2026-04-19 18:26:09,116 - SeedRLTrainer - INFO - [SEED RL] 评估@46614: 胜率=0.000, 平均收益=-870.85, 无效下注率=0.000
+2026-04-19 18:26:09,536 - SeedRLTrainer - INFO - [SEED RL] 评估@46825: 胜率=0.000, 平均收益=-793.30, 无效下注率=0.000
+2026-04-19 18:26:09,949 - SeedRLTrainer - INFO - [SEED RL] 评估@47029: 胜率=0.000, 平均收益=-809.90, 无效下注率=0.000
+2026-04-19 18:26:10,099 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @47146
+2026-04-19 18:26:10,392 - SeedRLTrainer - INFO - [SEED RL] 评估@47258: 胜率=0.000, 平均收益=-812.90, 无效下注率=0.000
+2026-04-19 18:26:10,802 - SeedRLTrainer - INFO - [SEED RL] 评估@47493: 胜率=0.010, 平均收益=-760.30, 无效下注率=0.000
+2026-04-19 18:26:11,203 - SeedRLTrainer - INFO - [SEED RL] 评估@47718: 胜率=0.010, 平均收益=-789.70, 无效下注率=0.000
+2026-04-19 18:26:11,621 - SeedRLTrainer - INFO - [SEED RL] 评估@47935: 胜率=0.000, 平均收益=-770.95, 无效下注率=0.000
+2026-04-19 18:26:11,667 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:26:11,730 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.236763, returns_mean=-0.3918
+2026-04-19 18:26:12,524 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.856s, batches=60, actor_loss=-0.044218, critic_loss=0.956643, KL=0.052463
+2026-04-19 18:26:12,524 - SeedRLTrainer - INFO - [SEED RL] hands=47975/200000, PPO更新#6, loss=0.456212, 速度=101.4 hands/s
+2026-04-19 18:26:12,903 - SeedRLTrainer - INFO - [SEED RL] 评估@48163: 胜率=0.000, 平均收益=-803.80, 无效下注率=0.000
+2026-04-19 18:26:12,970 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @48163
+2026-04-19 18:26:13,376 - SeedRLTrainer - INFO - [SEED RL] 评估@48383: 胜率=0.000, 平均收益=-811.05, 无效下注率=0.000
+2026-04-19 18:26:13,769 - SeedRLTrainer - INFO - [SEED RL] 评估@48602: 胜率=0.000, 平均收益=-781.95, 无效下注率=0.000
+2026-04-19 18:26:14,204 - SeedRLTrainer - INFO - [SEED RL] 评估@48832: 胜率=0.000, 平均收益=-802.35, 无效下注率=0.000
+2026-04-19 18:26:14,577 - SeedRLTrainer - INFO - [SEED RL] 评估@49034: 胜率=0.000, 平均收益=-846.75, 无效下注率=0.000
+2026-04-19 18:26:14,774 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @49188
+2026-04-19 18:26:15,089 - SeedRLTrainer - INFO - [SEED RL] 评估@49272: 胜率=0.000, 平均收益=-829.40, 无效下注率=0.000
+2026-04-19 18:26:15,540 - SeedRLTrainer - INFO - [SEED RL] 评估@49489: 胜率=0.000, 平均收益=-745.90, 无效下注率=0.000
+2026-04-19 18:26:16,554 - SeedRLTrainer - INFO - [SEED RL] 评估@49694: 胜率=0.000, 平均收益=-756.25, 无效下注率=0.000
+2026-04-19 18:26:16,962 - SeedRLTrainer - INFO - [SEED RL] 评估@49911: 胜率=0.000, 平均收益=-807.50, 无效下注率=0.000
+2026-04-19 18:26:17,379 - SeedRLTrainer - INFO - [SEED RL] 评估@50121: 胜率=0.000, 平均收益=-836.05, 无效下注率=0.000
+2026-04-19 18:26:17,529 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @50213
+2026-04-19 18:26:17,849 - SeedRLTrainer - INFO - [SEED RL] 评估@50328: 胜率=0.000, 平均收益=-873.30, 无效下注率=0.000
+2026-04-19 18:26:18,290 - SeedRLTrainer - INFO - [SEED RL] 评估@50550: 胜率=0.000, 平均收益=-787.60, 无效下注率=0.000
+2026-04-19 18:26:18,702 - SeedRLTrainer - INFO - [SEED RL] 评估@50767: 胜率=0.000, 平均收益=-769.10, 无效下注率=0.000
+2026-04-19 18:26:19,129 - SeedRLTrainer - INFO - [SEED RL] 评估@50982: 胜率=0.000, 平均收益=-797.40, 无效下注率=0.000
+2026-04-19 18:26:19,541 - SeedRLTrainer - INFO - [SEED RL] 评估@51215: 胜率=0.010, 平均收益=-763.95, 无效下注率=0.000
+2026-04-19 18:26:19,609 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @51215
+2026-04-19 18:26:20,021 - SeedRLTrainer - INFO - [SEED RL] 评估@51415: 胜率=0.010, 平均收益=-827.40, 无效下注率=0.000
+2026-04-19 18:26:20,428 - SeedRLTrainer - INFO - [SEED RL] 评估@51653: 胜率=0.000, 平均收益=-844.60, 无效下注率=0.000
+2026-04-19 18:26:20,856 - SeedRLTrainer - INFO - [SEED RL] 评估@51876: 胜率=0.000, 平均收益=-804.75, 无效下注率=0.000
+2026-04-19 18:26:21,273 - SeedRLTrainer - INFO - [SEED RL] 评估@52091: 胜率=0.010, 平均收益=-813.80, 无效下注率=0.000
+2026-04-19 18:26:21,473 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @52251
+2026-04-19 18:26:21,790 - SeedRLTrainer - INFO - [SEED RL] 评估@52323: 胜率=0.000, 平均收益=-814.65, 无效下注率=0.000
+2026-04-19 18:26:22,202 - SeedRLTrainer - INFO - [SEED RL] 评估@52552: 胜率=0.000, 平均收益=-751.70, 无效下注率=0.000
+2026-04-19 18:26:22,607 - SeedRLTrainer - INFO - [SEED RL] 评估@52756: 胜率=0.000, 平均收益=-822.05, 无效下注率=0.000
+2026-04-19 18:26:23,040 - SeedRLTrainer - INFO - [SEED RL] 评估@52983: 胜率=0.010, 平均收益=-798.95, 无效下注率=0.000
+2026-04-19 18:26:23,447 - SeedRLTrainer - INFO - [SEED RL] 评估@53187: 胜率=0.010, 平均收益=-803.70, 无效下注率=0.000
+2026-04-19 18:26:23,566 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @53261
+2026-04-19 18:26:23,947 - SeedRLTrainer - INFO - [SEED RL] 评估@53432: 胜率=0.000, 平均收益=-844.10, 无效下注率=0.000
+2026-04-19 18:26:24,381 - SeedRLTrainer - INFO - [SEED RL] 评估@53640: 胜率=0.010, 平均收益=-837.05, 无效下注率=0.000
+2026-04-19 18:26:31,133 - SeedRLTrainer - INFO - [SEED RL] 评估@53843: 胜率=0.010, 平均收益=-850.75, 无效下注率=0.000
+2026-04-19 18:26:31,544 - SeedRLTrainer - INFO - [SEED RL] 评估@54049: 胜率=0.000, 平均收益=-806.20, 无效下注率=0.000
+2026-04-19 18:26:31,642 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16388, batch=4096, epochs=15
+2026-04-19 18:26:31,717 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.331121, returns_mean=-0.3926
+2026-04-19 18:26:31,787 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.029139 > target=5.0
+2026-04-19 18:26:31,788 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.146s, batches=5, actor_loss=-0.094362, critic_loss=0.994871, KL=20.029139
+2026-04-19 18:26:31,788 - SeedRLTrainer - INFO - [SEED RL] hands=54127/200000, PPO更新#7, loss=0.450255, 速度=110.0 hands/s
+2026-04-19 18:26:38,109 - SeedRLTrainer - INFO - [SEED RL] 评估@54269: 胜率=0.000, 平均收益=-837.90, 无效下注率=0.000
+2026-04-19 18:26:38,177 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @54269
+2026-04-19 18:26:38,593 - SeedRLTrainer - INFO - [SEED RL] 评估@54479: 胜率=0.000, 平均收益=-806.75, 无效下注率=0.000
+2026-04-19 18:26:39,006 - SeedRLTrainer - INFO - [SEED RL] 评估@54702: 胜率=0.010, 平均收益=-857.05, 无效下注率=0.000
+2026-04-19 18:26:39,411 - SeedRLTrainer - INFO - [SEED RL] 评估@54925: 胜率=0.000, 平均收益=-859.45, 无效下注率=0.000
+2026-04-19 18:26:39,841 - SeedRLTrainer - INFO - [SEED RL] 评估@55154: 胜率=0.000, 平均收益=-815.20, 无效下注率=0.000
+2026-04-19 18:26:40,038 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @55298
+2026-04-19 18:26:40,328 - SeedRLTrainer - INFO - [SEED RL] 评估@55358: 胜率=0.000, 平均收益=-835.20, 无效下注率=0.000
+2026-04-19 18:26:40,734 - SeedRLTrainer - INFO - [SEED RL] 评估@55563: 胜率=0.000, 平均收益=-839.20, 无效下注率=0.000
+2026-04-19 18:26:41,125 - SeedRLTrainer - INFO - [SEED RL] 评估@55790: 胜率=0.000, 平均收益=-765.00, 无效下注率=0.000
+2026-04-19 18:26:41,556 - SeedRLTrainer - INFO - [SEED RL] 评估@56003: 胜率=0.000, 平均收益=-806.15, 无效下注率=0.000
+2026-04-19 18:26:41,983 - SeedRLTrainer - INFO - [SEED RL] 评估@56221: 胜率=0.010, 平均收益=-811.15, 无效下注率=0.000
+2026-04-19 18:26:42,141 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @56330
+2026-04-19 18:26:42,452 - SeedRLTrainer - INFO - [SEED RL] 评估@56421: 胜率=0.000, 平均收益=-796.95, 无效下注率=0.000
+2026-04-19 18:26:42,849 - SeedRLTrainer - INFO - [SEED RL] 评估@56628: 胜率=0.000, 平均收益=-805.30, 无效下注率=0.000
+2026-04-19 18:26:43,254 - SeedRLTrainer - INFO - [SEED RL] 评估@56846: 胜率=0.000, 平均收益=-857.00, 无效下注率=0.000
+2026-04-19 18:26:43,657 - SeedRLTrainer - INFO - [SEED RL] 评估@57055: 胜率=0.010, 平均收益=-815.35, 无效下注率=0.000
+2026-04-19 18:26:44,049 - SeedRLTrainer - INFO - [SEED RL] 评估@57266: 胜率=0.000, 平均收益=-821.45, 无效下注率=0.000
+2026-04-19 18:26:44,166 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @57340
+2026-04-19 18:26:44,522 - SeedRLTrainer - INFO - [SEED RL] 评估@57468: 胜率=0.000, 平均收益=-763.10, 无效下注率=0.000
+2026-04-19 18:26:44,926 - SeedRLTrainer - INFO - [SEED RL] 评估@57687: 胜率=0.000, 平均收益=-855.70, 无效下注率=0.000
+2026-04-19 18:26:45,345 - SeedRLTrainer - INFO - [SEED RL] 评估@57903: 胜率=0.000, 平均收益=-840.00, 无效下注率=0.000
+2026-04-19 18:26:45,752 - SeedRLTrainer - INFO - [SEED RL] 评估@58107: 胜率=0.000, 平均收益=-777.90, 无效下注率=0.000
+2026-04-19 18:26:46,126 - SeedRLTrainer - INFO - [SEED RL] 评估@58312: 胜率=0.020, 平均收益=-839.85, 无效下注率=0.000
+2026-04-19 18:26:46,245 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @58375
+2026-04-19 18:26:46,619 - SeedRLTrainer - INFO - [SEED RL] 评估@58513: 胜率=0.000, 平均收益=-847.80, 无效下注率=0.000
+2026-04-19 18:26:47,057 - SeedRLTrainer - INFO - [SEED RL] 评估@58733: 胜率=0.000, 平均收益=-845.05, 无效下注率=0.000
+2026-04-19 18:26:47,501 - SeedRLTrainer - INFO - [SEED RL] 评估@58971: 胜率=0.000, 平均收益=-771.70, 无效下注率=0.000
+2026-04-19 18:26:47,903 - SeedRLTrainer - INFO - [SEED RL] 评估@59174: 胜率=0.000, 平均收益=-797.90, 无效下注率=0.000
+2026-04-19 18:26:48,370 - SeedRLTrainer - INFO - [SEED RL] 评估@59393: 胜率=0.000, 平均收益=-753.25, 无效下注率=0.000
+2026-04-19 18:26:48,437 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @59393
+2026-04-19 18:26:48,914 - SeedRLTrainer - INFO - [SEED RL] 评估@59616: 胜率=0.000, 平均收益=-864.75, 无效下注率=0.000
+2026-04-19 18:26:49,355 - SeedRLTrainer - INFO - [SEED RL] 评估@59855: 胜率=0.000, 平均收益=-723.90, 无效下注率=0.000
+2026-04-19 18:26:49,599 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_60040
+2026-04-19 18:26:49,880 - SeedRLTrainer - INFO - [SEED RL] 评估@60069: 胜率=0.000, 平均收益=-866.30, 无效下注率=0.000
+2026-04-19 18:26:49,927 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16391, batch=4096, epochs=15
+2026-04-19 18:26:50,002 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.378348, returns_mean=-0.3848
+2026-04-19 18:26:50,073 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.032816 > target=5.0
+2026-04-19 18:26:50,073 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.146s, batches=5, actor_loss=-0.051404, critic_loss=1.044010, KL=20.032816
+2026-04-19 18:26:50,073 - SeedRLTrainer - INFO - [SEED RL] hands=60099/200000, PPO更新#8, loss=0.496303, 速度=117.7 hands/s
+2026-04-19 18:26:50,432 - SeedRLTrainer - INFO - [SEED RL] 评估@60272: 胜率=0.000, 平均收益=-757.70, 无效下注率=0.000
+2026-04-19 18:26:50,620 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @60417
+2026-04-19 18:26:50,958 - SeedRLTrainer - INFO - [SEED RL] 评估@60511: 胜率=0.010, 平均收益=-863.50, 无效下注率=0.000
+2026-04-19 18:26:51,379 - SeedRLTrainer - INFO - [SEED RL] 评估@60711: 胜率=0.000, 平均收益=-744.95, 无效下注率=0.000
+2026-04-19 18:26:51,807 - SeedRLTrainer - INFO - [SEED RL] 评估@60950: 胜率=0.010, 平均收益=-843.25, 无效下注率=0.000
+2026-04-19 18:26:52,289 - SeedRLTrainer - INFO - [SEED RL] 评估@61175: 胜率=0.000, 平均收益=-784.95, 无效下注率=0.000
+2026-04-19 18:26:52,759 - SeedRLTrainer - INFO - [SEED RL] 评估@61405: 胜率=0.000, 平均收益=-821.65, 无效下注率=0.000
+2026-04-19 18:26:52,850 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @61430
+2026-04-19 18:26:53,274 - SeedRLTrainer - INFO - [SEED RL] 评估@61626: 胜率=0.000, 平均收益=-841.10, 无效下注率=0.000
+2026-04-19 18:26:53,667 - SeedRLTrainer - INFO - [SEED RL] 评估@61830: 胜率=0.010, 平均收益=-808.45, 无效下注率=0.000
+2026-04-19 18:26:54,097 - SeedRLTrainer - INFO - [SEED RL] 评估@62052: 胜率=0.000, 平均收益=-798.50, 无效下注率=0.000
+2026-04-19 18:26:54,553 - SeedRLTrainer - INFO - [SEED RL] 评估@62274: 胜率=0.000, 平均收益=-851.05, 无效下注率=0.000
+2026-04-19 18:26:54,754 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @62449
+2026-04-19 18:26:55,022 - SeedRLTrainer - INFO - [SEED RL] 评估@62481: 胜率=0.010, 平均收益=-849.10, 无效下注率=0.000
+2026-04-19 18:26:55,451 - SeedRLTrainer - INFO - [SEED RL] 评估@62686: 胜率=0.000, 平均收益=-798.20, 无效下注率=0.000
+2026-04-19 18:26:55,868 - SeedRLTrainer - INFO - [SEED RL] 评估@62899: 胜率=0.000, 平均收益=-822.85, 无效下注率=0.000
+2026-04-19 18:26:56,296 - SeedRLTrainer - INFO - [SEED RL] 评估@63102: 胜率=0.010, 平均收益=-799.20, 无效下注率=0.000
+2026-04-19 18:26:56,757 - SeedRLTrainer - INFO - [SEED RL] 评估@63330: 胜率=0.010, 平均收益=-818.65, 无效下注率=0.000
+2026-04-19 18:26:56,905 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @63450
+2026-04-19 18:26:57,201 - SeedRLTrainer - INFO - [SEED RL] 评估@63534: 胜率=0.000, 平均收益=-810.60, 无效下注率=0.000
+2026-04-19 18:26:57,626 - SeedRLTrainer - INFO - [SEED RL] 评估@63764: 胜率=0.000, 平均收益=-832.10, 无效下注率=0.000
+2026-04-19 18:26:58,039 - SeedRLTrainer - INFO - [SEED RL] 评估@63968: 胜率=0.000, 平均收益=-778.60, 无效下注率=0.000
+2026-04-19 18:26:58,460 - SeedRLTrainer - INFO - [SEED RL] 评估@64169: 胜率=0.010, 平均收益=-861.70, 无效下注率=0.000
+2026-04-19 18:26:58,891 - SeedRLTrainer - INFO - [SEED RL] 评估@64374: 胜率=0.000, 平均收益=-796.30, 无效下注率=0.000
+2026-04-19 18:26:59,041 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @64480
+2026-04-19 18:26:59,368 - SeedRLTrainer - INFO - [SEED RL] 评估@64581: 胜率=0.000, 平均收益=-839.85, 无效下注率=0.000
+2026-04-19 18:26:59,833 - SeedRLTrainer - INFO - [SEED RL] 评估@64788: 胜率=0.000, 平均收益=-827.55, 无效下注率=0.000
+2026-04-19 18:27:00,227 - SeedRLTrainer - INFO - [SEED RL] 评估@64988: 胜率=0.000, 平均收益=-829.55, 无效下注率=0.000
+2026-04-19 18:27:00,655 - SeedRLTrainer - INFO - [SEED RL] 评估@65200: 胜率=0.000, 平均收益=-882.75, 无效下注率=0.000
+2026-04-19 18:27:01,090 - SeedRLTrainer - INFO - [SEED RL] 评估@65427: 胜率=0.000, 平均收益=-825.80, 无效下注率=0.000
+2026-04-19 18:27:07,469 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @65497
+2026-04-19 18:27:07,803 - SeedRLTrainer - INFO - [SEED RL] 评估@65650: 胜率=0.000, 平均收益=-793.25, 无效下注率=0.000
+2026-04-19 18:27:14,395 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:27:14,457 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.368868, returns_mean=-0.3828
+2026-04-19 18:27:15,264 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.869s, batches=60, actor_loss=-0.042857, critic_loss=0.963579, KL=0.022219
+2026-04-19 18:27:15,264 - SeedRLTrainer - INFO - [SEED RL] hands=65729/200000, PPO更新#9, loss=0.460361, 速度=122.7 hands/s
+2026-04-19 18:27:15,589 - SeedRLTrainer - INFO - [SEED RL] 评估@65857: 胜率=0.000, 平均收益=-848.40, 无效下注率=0.000
+2026-04-19 18:27:16,022 - SeedRLTrainer - INFO - [SEED RL] 评估@66078: 胜率=0.000, 平均收益=-841.30, 无效下注率=0.000
+2026-04-19 18:27:16,451 - SeedRLTrainer - INFO - [SEED RL] 评估@66281: 胜率=0.000, 平均收益=-800.40, 无效下注率=0.000
+2026-04-19 18:27:16,924 - SeedRLTrainer - INFO - [SEED RL] 评估@66494: 胜率=0.000, 平均收益=-824.55, 无效下注率=0.000
+2026-04-19 18:27:17,018 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @66519
+2026-04-19 18:27:17,427 - SeedRLTrainer - INFO - [SEED RL] 评估@66709: 胜率=0.010, 平均收益=-846.20, 无效下注率=0.000
+2026-04-19 18:27:17,857 - SeedRLTrainer - INFO - [SEED RL] 评估@66925: 胜率=0.020, 平均收益=-796.60, 无效下注率=0.000
+2026-04-19 18:27:18,295 - SeedRLTrainer - INFO - [SEED RL] 评估@67138: 胜率=0.000, 平均收益=-846.60, 无效下注率=0.000
+2026-04-19 18:27:18,732 - SeedRLTrainer - INFO - [SEED RL] 评估@67348: 胜率=0.000, 平均收益=-829.20, 无效下注率=0.000
+2026-04-19 18:27:18,960 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @67534
+2026-04-19 18:27:19,274 - SeedRLTrainer - INFO - [SEED RL] 评估@67566: 胜率=0.000, 平均收益=-861.35, 无效下注率=0.000
+2026-04-19 18:27:19,718 - SeedRLTrainer - INFO - [SEED RL] 评估@67771: 胜率=0.010, 平均收益=-835.40, 无效下注率=0.000
+2026-04-19 18:27:20,158 - SeedRLTrainer - INFO - [SEED RL] 评估@67991: 胜率=0.000, 平均收益=-816.30, 无效下注率=0.000
+2026-04-19 18:27:20,590 - SeedRLTrainer - INFO - [SEED RL] 评估@68217: 胜率=0.000, 平均收益=-791.10, 无效下注率=0.000
+2026-04-19 18:27:21,006 - SeedRLTrainer - INFO - [SEED RL] 评估@68436: 胜率=0.000, 平均收益=-831.10, 无效下注率=0.000
+2026-04-19 18:27:21,154 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @68557
+2026-04-19 18:27:21,467 - SeedRLTrainer - INFO - [SEED RL] 评估@68641: 胜率=0.000, 平均收益=-840.10, 无效下注率=0.000
+2026-04-19 18:27:21,893 - SeedRLTrainer - INFO - [SEED RL] 评估@68860: 胜率=0.000, 平均收益=-818.50, 无效下注率=0.000
+2026-04-19 18:27:22,309 - SeedRLTrainer - INFO - [SEED RL] 评估@69096: 胜率=0.010, 平均收益=-767.90, 无效下注率=0.000
+2026-04-19 18:27:22,701 - SeedRLTrainer - INFO - [SEED RL] 评估@69309: 胜率=0.000, 平均收益=-846.70, 无效下注率=0.000
+2026-04-19 18:27:23,118 - SeedRLTrainer - INFO - [SEED RL] 评估@69538: 胜率=0.000, 平均收益=-852.65, 无效下注率=0.000
+2026-04-19 18:27:23,216 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @69575
+2026-04-19 18:27:23,621 - SeedRLTrainer - INFO - [SEED RL] 评估@69753: 胜率=0.000, 平均收益=-816.90, 无效下注率=0.000
+2026-04-19 18:27:24,046 - SeedRLTrainer - INFO - [SEED RL] 评估@69988: 胜率=0.000, 平均收益=-768.90, 无效下注率=0.000
+2026-04-19 18:27:24,480 - SeedRLTrainer - INFO - [SEED RL] 评估@70213: 胜率=0.000, 平均收益=-793.25, 无效下注率=0.000
+2026-04-19 18:27:24,880 - SeedRLTrainer - INFO - [SEED RL] 评估@70439: 胜率=0.000, 平均收益=-874.70, 无效下注率=0.000
+2026-04-19 18:27:25,050 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @70585
+2026-04-19 18:27:25,362 - SeedRLTrainer - INFO - [SEED RL] 评估@70639: 胜率=0.000, 平均收益=-865.30, 无效下注率=0.000
+2026-04-19 18:27:25,742 - SeedRLTrainer - INFO - [SEED RL] 评估@70840: 胜率=0.000, 平均收益=-859.00, 无效下注率=0.000
+2026-04-19 18:27:26,166 - SeedRLTrainer - INFO - [SEED RL] 评估@71072: 胜率=0.000, 平均收益=-806.75, 无效下注率=0.000
+2026-04-19 18:27:26,578 - SeedRLTrainer - INFO - [SEED RL] 评估@71296: 胜率=0.020, 平均收益=-872.90, 无效下注率=0.000
+2026-04-19 18:27:26,755 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:27:26,818 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.590476, returns_mean=-0.3960
+2026-04-19 18:27:27,608 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.854s, batches=60, actor_loss=-0.040642, critic_loss=0.964353, KL=0.025846
+2026-04-19 18:27:27,608 - SeedRLTrainer - INFO - [SEED RL] hands=71461/200000, PPO更新#10, loss=0.461855, 速度=130.4 hands/s
+2026-04-19 18:27:27,877 - SeedRLTrainer - INFO - [SEED RL] 评估@71518: 胜率=0.000, 平均收益=-852.60, 无效下注率=0.000
+2026-04-19 18:27:28,029 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @71608
+2026-04-19 18:27:28,384 - SeedRLTrainer - INFO - [SEED RL] 评估@71734: 胜率=0.000, 平均收益=-843.45, 无效下注率=0.000
+2026-04-19 18:27:29,507 - SeedRLTrainer - INFO - [SEED RL] 评估@71935: 胜率=0.010, 平均收益=-783.40, 无效下注率=0.000
+2026-04-19 18:27:29,915 - SeedRLTrainer - INFO - [SEED RL] 评估@72143: 胜率=0.010, 平均收益=-864.95, 无效下注率=0.000
+2026-04-19 18:27:30,319 - SeedRLTrainer - INFO - [SEED RL] 评估@72349: 胜率=0.010, 平均收益=-869.40, 无效下注率=0.000
+2026-04-19 18:27:30,711 - SeedRLTrainer - INFO - [SEED RL] 评估@72553: 胜率=0.000, 平均收益=-851.00, 无效下注率=0.000
+2026-04-19 18:27:30,830 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @72608
+2026-04-19 18:27:31,199 - SeedRLTrainer - INFO - [SEED RL] 评估@72763: 胜率=0.000, 平均收益=-845.40, 无效下注率=0.000
+2026-04-19 18:27:31,601 - SeedRLTrainer - INFO - [SEED RL] 评估@72990: 胜率=0.000, 平均收益=-851.60, 无效下注率=0.000
+2026-04-19 18:27:31,998 - SeedRLTrainer - INFO - [SEED RL] 评估@73222: 胜率=0.020, 平均收益=-820.05, 无效下注率=0.000
+2026-04-19 18:27:32,434 - SeedRLTrainer - INFO - [SEED RL] 评估@73465: 胜率=0.000, 平均收益=-842.15, 无效下注率=0.000
+2026-04-19 18:27:32,631 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @73625
+2026-04-19 18:27:32,936 - SeedRLTrainer - INFO - [SEED RL] 评估@73693: 胜率=0.000, 平均收益=-871.30, 无效下注率=0.000
+2026-04-19 18:27:33,361 - SeedRLTrainer - INFO - [SEED RL] 评估@73922: 胜率=0.000, 平均收益=-853.00, 无效下注率=0.000
+2026-04-19 18:27:33,783 - SeedRLTrainer - INFO - [SEED RL] 评估@74138: 胜率=0.000, 平均收益=-823.65, 无效下注率=0.000
+2026-04-19 18:27:34,176 - SeedRLTrainer - INFO - [SEED RL] 评估@74362: 胜率=0.000, 平均收益=-832.40, 无效下注率=0.000
+2026-04-19 18:27:34,640 - SeedRLTrainer - INFO - [SEED RL] 评估@74574: 胜率=0.000, 平均收益=-828.70, 无效下注率=0.000
+2026-04-19 18:27:34,761 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @74632
+2026-04-19 18:27:35,148 - SeedRLTrainer - INFO - [SEED RL] 评估@74790: 胜率=0.020, 平均收益=-815.15, 无效下注率=0.000
+2026-04-19 18:27:35,548 - SeedRLTrainer - INFO - [SEED RL] 评估@75018: 胜率=0.000, 平均收益=-899.35, 无效下注率=0.000
+2026-04-19 18:27:35,994 - SeedRLTrainer - INFO - [SEED RL] 评估@75237: 胜率=0.000, 平均收益=-832.35, 无效下注率=0.000
+2026-04-19 18:27:36,437 - SeedRLTrainer - INFO - [SEED RL] 评估@75467: 胜率=0.000, 平均收益=-815.70, 无效下注率=0.000
+2026-04-19 18:27:36,668 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @75650
+2026-04-19 18:27:36,922 - SeedRLTrainer - INFO - [SEED RL] 评估@75686: 胜率=0.000, 平均收益=-870.50, 无效下注率=0.000
+2026-04-19 18:27:37,342 - SeedRLTrainer - INFO - [SEED RL] 评估@75908: 胜率=0.000, 平均收益=-854.40, 无效下注率=0.000
+2026-04-19 18:27:37,742 - SeedRLTrainer - INFO - [SEED RL] 评估@76128: 胜率=0.000, 平均收益=-870.40, 无效下注率=0.000
+2026-04-19 18:27:38,171 - SeedRLTrainer - INFO - [SEED RL] 评估@76340: 胜率=0.000, 平均收益=-882.00, 无效下注率=0.000
+2026-04-19 18:27:38,585 - SeedRLTrainer - INFO - [SEED RL] 评估@76551: 胜率=0.000, 平均收益=-871.10, 无效下注率=0.000
+2026-04-19 18:27:38,738 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @76674
+2026-04-19 18:27:39,055 - SeedRLTrainer - INFO - [SEED RL] 评估@76791: 胜率=0.000, 平均收益=-830.80, 无效下注率=0.000
+2026-04-19 18:27:39,457 - SeedRLTrainer - INFO - [SEED RL] 评估@77003: 胜率=0.010, 平均收益=-820.70, 无效下注率=0.000
+2026-04-19 18:27:39,896 - SeedRLTrainer - INFO - [SEED RL] 评估@77226: 胜率=0.000, 平均收益=-824.85, 无效下注率=0.000
+2026-04-19 18:27:40,285 - SeedRLTrainer - INFO - [SEED RL] 评估@77436: 胜率=0.000, 平均收益=-805.10, 无效下注率=0.000
+2026-04-19 18:27:40,386 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16387, batch=4096, epochs=15
+2026-04-19 18:27:40,461 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.566682, returns_mean=-0.3970
+2026-04-19 18:27:40,529 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.021356 > target=5.0
+2026-04-19 18:27:40,530 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.144s, batches=5, actor_loss=0.000625, critic_loss=0.831927, KL=20.021356
+2026-04-19 18:27:40,530 - SeedRLTrainer - INFO - [SEED RL] hands=77499/200000, PPO更新#11, loss=0.416276, 速度=138.1 hands/s
+2026-04-19 18:27:40,904 - SeedRLTrainer - INFO - [SEED RL] 评估@77651: 胜率=0.000, 平均收益=-875.40, 无效下注率=0.000
+2026-04-19 18:27:40,999 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @77685
+2026-04-19 18:27:41,373 - SeedRLTrainer - INFO - [SEED RL] 评估@77862: 胜率=0.000, 平均收益=-806.65, 无效下注率=0.000
+2026-04-19 18:27:41,796 - SeedRLTrainer - INFO - [SEED RL] 评估@78086: 胜率=0.000, 平均收益=-833.10, 无效下注率=0.000
+2026-04-19 18:27:42,211 - SeedRLTrainer - INFO - [SEED RL] 评估@78308: 胜率=0.010, 平均收益=-786.90, 无效下注率=0.000
+2026-04-19 18:27:42,611 - SeedRLTrainer - INFO - [SEED RL] 评估@78526: 胜率=0.010, 平均收益=-855.40, 无效下注率=0.000
+2026-04-19 18:27:42,836 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @78710
+2026-04-19 18:27:43,110 - SeedRLTrainer - INFO - [SEED RL] 评估@78735: 胜率=0.010, 平均收益=-795.50, 无效下注率=0.000
+2026-04-19 18:27:43,491 - SeedRLTrainer - INFO - [SEED RL] 评估@78954: 胜率=0.000, 平均收益=-826.00, 无效下注率=0.000
+2026-04-19 18:27:43,911 - SeedRLTrainer - INFO - [SEED RL] 评估@79155: 胜率=0.000, 平均收益=-862.00, 无效下注率=0.000
+2026-04-19 18:27:44,333 - SeedRLTrainer - INFO - [SEED RL] 评估@79367: 胜率=0.000, 平均收益=-828.95, 无效下注率=0.000
+2026-04-19 18:27:44,727 - SeedRLTrainer - INFO - [SEED RL] 评估@79574: 胜率=0.000, 平均收益=-811.65, 无效下注率=0.000
+2026-04-19 18:27:44,922 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @79711
+2026-04-19 18:27:45,236 - SeedRLTrainer - INFO - [SEED RL] 评估@79799: 胜率=0.000, 平均收益=-833.10, 无效下注率=0.000
+2026-04-19 18:27:45,655 - SeedRLTrainer - INFO - [SEED RL] 评估@80003: 胜率=0.000, 平均收益=-853.40, 无效下注率=0.000
+2026-04-19 18:27:45,789 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_80043
+2026-04-19 18:27:46,169 - SeedRLTrainer - INFO - [SEED RL] 评估@80208: 胜率=0.000, 平均收益=-855.20, 无效下注率=0.000
+2026-04-19 18:27:46,562 - SeedRLTrainer - INFO - [SEED RL] 评估@80438: 胜率=0.000, 平均收益=-841.60, 无效下注率=0.000
+2026-04-19 18:27:47,018 - SeedRLTrainer - INFO - [SEED RL] 评估@80655: 胜率=0.000, 平均收益=-777.45, 无效下注率=0.000
+2026-04-19 18:27:47,133 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @80730
+2026-04-19 18:27:47,478 - SeedRLTrainer - INFO - [SEED RL] 评估@80875: 胜率=0.000, 平均收益=-847.90, 无效下注率=0.000
+2026-04-19 18:27:47,902 - SeedRLTrainer - INFO - [SEED RL] 评估@81103: 胜率=0.000, 平均收益=-837.20, 无效下注率=0.000
+2026-04-19 18:27:48,319 - SeedRLTrainer - INFO - [SEED RL] 评估@81314: 胜率=0.010, 平均收益=-843.10, 无效下注率=0.000
+2026-04-19 18:27:48,738 - SeedRLTrainer - INFO - [SEED RL] 评估@81514: 胜率=0.000, 平均收益=-845.30, 无效下注率=0.000
+2026-04-19 18:27:49,145 - SeedRLTrainer - INFO - [SEED RL] 评估@81742: 胜率=0.000, 平均收益=-814.65, 无效下注率=0.000
+2026-04-19 18:27:49,214 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @81742
+2026-04-19 18:27:49,587 - SeedRLTrainer - INFO - [SEED RL] 评估@81951: 胜率=0.010, 平均收益=-843.05, 无效下注率=0.000
+2026-04-19 18:27:50,018 - SeedRLTrainer - INFO - [SEED RL] 评估@82182: 胜率=0.000, 平均收益=-809.80, 无效下注率=0.000
+2026-04-19 18:27:50,429 - SeedRLTrainer - INFO - [SEED RL] 评估@82402: 胜率=0.000, 平均收益=-805.35, 无效下注率=0.000
+2026-04-19 18:27:50,836 - SeedRLTrainer - INFO - [SEED RL] 评估@82604: 胜率=0.000, 平均收益=-832.90, 无效下注率=0.000
+2026-04-19 18:27:51,036 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @82774
+2026-04-19 18:27:51,346 - SeedRLTrainer - INFO - [SEED RL] 评估@82836: 胜率=0.010, 平均收益=-837.40, 无效下注率=0.000
+2026-04-19 18:27:51,745 - SeedRLTrainer - INFO - [SEED RL] 评估@83043: 胜率=0.000, 平均收益=-838.70, 无效下注率=0.000
+2026-04-19 18:27:52,154 - SeedRLTrainer - INFO - [SEED RL] 评估@83248: 胜率=0.000, 平均收益=-836.80, 无效下注率=0.000
+2026-04-19 18:27:52,581 - SeedRLTrainer - INFO - [SEED RL] 评估@83475: 胜率=0.000, 平均收益=-844.60, 无效下注率=0.000
+2026-04-19 18:27:52,628 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:27:52,691 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.492442, returns_mean=-0.4149
+2026-04-19 18:27:53,482 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.854s, batches=60, actor_loss=-0.039785, critic_loss=0.967808, KL=0.019222
+2026-04-19 18:27:53,483 - SeedRLTrainer - INFO - [SEED RL] hands=83514/200000, PPO更新#12, loss=0.464011, 速度=145.5 hands/s
+2026-04-19 18:27:53,890 - SeedRLTrainer - INFO - [SEED RL] 评估@83710: 胜率=0.000, 平均收益=-796.00, 无效下注率=0.000
+2026-04-19 18:27:54,039 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @83797
+2026-04-19 18:27:54,394 - SeedRLTrainer - INFO - [SEED RL] 评估@83941: 胜率=0.000, 平均收益=-876.10, 无效下注率=0.000
+2026-04-19 18:27:54,757 - SeedRLTrainer - INFO - [SEED RL] 评估@84141: 胜率=0.010, 平均收益=-804.20, 无效下注率=0.000
+2026-04-19 18:27:55,181 - SeedRLTrainer - INFO - [SEED RL] 评估@84371: 胜率=0.000, 平均收益=-865.60, 无效下注率=0.000
+2026-04-19 18:27:55,573 - SeedRLTrainer - INFO - [SEED RL] 评估@84576: 胜率=0.000, 平均收益=-823.75, 无效下注率=0.000
+2026-04-19 18:27:56,011 - SeedRLTrainer - INFO - [SEED RL] 评估@84796: 胜率=0.000, 平均收益=-831.60, 无效下注率=0.000
+2026-04-19 18:27:56,106 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @84831
+2026-04-19 18:27:56,491 - SeedRLTrainer - INFO - [SEED RL] 评估@85031: 胜率=0.010, 平均收益=-800.40, 无效下注率=0.000
+2026-04-19 18:27:56,894 - SeedRLTrainer - INFO - [SEED RL] 评估@85254: 胜率=0.000, 平均收益=-878.80, 无效下注率=0.000
+2026-04-19 18:27:57,317 - SeedRLTrainer - INFO - [SEED RL] 评估@85480: 胜率=0.000, 平均收益=-904.70, 无效下注率=0.000
+2026-04-19 18:27:57,763 - SeedRLTrainer - INFO - [SEED RL] 评估@85697: 胜率=0.000, 平均收益=-873.30, 无效下注率=0.000
+2026-04-19 18:27:57,940 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @85839
+2026-04-19 18:27:58,244 - SeedRLTrainer - INFO - [SEED RL] 评估@85899: 胜率=0.010, 平均收益=-823.90, 无效下注率=0.000
+2026-04-19 18:27:58,674 - SeedRLTrainer - INFO - [SEED RL] 评估@86105: 胜率=0.000, 平均收益=-784.15, 无效下注率=0.000
+2026-04-19 18:27:59,107 - SeedRLTrainer - INFO - [SEED RL] 评估@86307: 胜率=0.010, 平均收益=-842.20, 无效下注率=0.000
+2026-04-19 18:27:59,553 - SeedRLTrainer - INFO - [SEED RL] 评估@86536: 胜率=0.000, 平均收益=-846.40, 无效下注率=0.000
+2026-04-19 18:27:59,976 - SeedRLTrainer - INFO - [SEED RL] 评估@86765: 胜率=0.000, 平均收益=-841.65, 无效下注率=0.000
+2026-04-19 18:28:00,125 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @86862
+2026-04-19 18:28:00,493 - SeedRLTrainer - INFO - [SEED RL] 评估@86988: 胜率=0.020, 平均收益=-779.70, 无效下注率=0.000
+2026-04-19 18:28:00,894 - SeedRLTrainer - INFO - [SEED RL] 评估@87226: 胜率=0.000, 平均收益=-842.55, 无效下注率=0.000
+2026-04-19 18:28:01,319 - SeedRLTrainer - INFO - [SEED RL] 评估@87461: 胜率=0.000, 平均收益=-833.00, 无效下注率=0.000
+2026-04-19 18:28:01,741 - SeedRLTrainer - INFO - [SEED RL] 评估@87663: 胜率=0.000, 平均收益=-826.70, 无效下注率=0.000
+2026-04-19 18:28:02,184 - SeedRLTrainer - INFO - [SEED RL] 评估@87877: 胜率=0.000, 平均收益=-894.00, 无效下注率=0.000
+2026-04-19 18:28:02,252 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @87877
+2026-04-19 18:28:02,684 - SeedRLTrainer - INFO - [SEED RL] 评估@88107: 胜率=0.000, 平均收益=-905.70, 无效下注率=0.000
+2026-04-19 18:28:03,114 - SeedRLTrainer - INFO - [SEED RL] 评估@88335: 胜率=0.000, 平均收益=-837.20, 无效下注率=0.000
+2026-04-19 18:28:03,555 - SeedRLTrainer - INFO - [SEED RL] 评估@88565: 胜率=0.000, 平均收益=-854.95, 无效下注率=0.000
+2026-04-19 18:28:03,943 - SeedRLTrainer - INFO - [SEED RL] 评估@88791: 胜率=0.000, 平均收益=-869.40, 无效下注率=0.000
+2026-04-19 18:28:04,090 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @88895
+2026-04-19 18:28:04,409 - SeedRLTrainer - INFO - [SEED RL] 评估@89005: 胜率=0.000, 平均收益=-858.75, 无效下注率=0.000
+2026-04-19 18:28:04,797 - SeedRLTrainer - INFO - [SEED RL] 评估@89215: 胜率=0.000, 平均收益=-850.70, 无效下注率=0.000
+2026-04-19 18:28:05,203 - SeedRLTrainer - INFO - [SEED RL] 评估@89435: 胜率=0.000, 平均收益=-860.75, 无效下注率=0.000
+2026-04-19 18:28:05,303 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:28:05,367 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.544096, returns_mean=-0.4037
+2026-04-19 18:28:06,177 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.873s, batches=60, actor_loss=-0.040526, critic_loss=0.966914, KL=0.019078
+2026-04-19 18:28:06,177 - SeedRLTrainer - INFO - [SEED RL] hands=89527/200000, PPO更新#13, loss=0.463194, 速度=152.6 hands/s
+2026-04-19 18:28:06,503 - SeedRLTrainer - INFO - [SEED RL] 评估@89648: 胜率=0.000, 平均收益=-833.60, 无效下注率=0.000
+2026-04-19 18:28:06,944 - SeedRLTrainer - INFO - [SEED RL] 评估@89848: 胜率=0.010, 平均收益=-871.75, 无效下注率=0.000
+2026-04-19 18:28:07,064 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @89941
+2026-04-19 18:28:07,418 - SeedRLTrainer - INFO - [SEED RL] 评估@90078: 胜率=0.000, 平均收益=-821.60, 无效下注率=0.000
+2026-04-19 18:28:13,238 - SeedRLTrainer - INFO - [SEED RL] 评估@90307: 胜率=0.000, 平均收益=-879.60, 无效下注率=0.000
+2026-04-19 18:28:13,649 - SeedRLTrainer - INFO - [SEED RL] 评估@90522: 胜率=0.000, 平均收益=-833.65, 无效下注率=0.000
+2026-04-19 18:28:14,040 - SeedRLTrainer - INFO - [SEED RL] 评估@90723: 胜率=0.000, 平均收益=-850.50, 无效下注率=0.000
+2026-04-19 18:28:14,473 - SeedRLTrainer - INFO - [SEED RL] 评估@90952: 胜率=0.000, 平均收益=-845.50, 无效下注率=0.000
+2026-04-19 18:28:14,539 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @90952
+2026-04-19 18:28:14,941 - SeedRLTrainer - INFO - [SEED RL] 评估@91163: 胜率=0.010, 平均收益=-821.30, 无效下注率=0.000
+2026-04-19 18:28:15,352 - SeedRLTrainer - INFO - [SEED RL] 评估@91379: 胜率=0.000, 平均收益=-812.50, 无效下注率=0.000
+2026-04-19 18:28:15,777 - SeedRLTrainer - INFO - [SEED RL] 评估@91601: 胜率=0.000, 平均收益=-830.80, 无效下注率=0.000
+2026-04-19 18:28:16,184 - SeedRLTrainer - INFO - [SEED RL] 评估@91828: 胜率=0.000, 平均收益=-884.20, 无效下注率=0.000
+2026-04-19 18:28:16,385 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @91970
+2026-04-19 18:28:16,691 - SeedRLTrainer - INFO - [SEED RL] 评估@92033: 胜率=0.000, 平均收益=-824.30, 无效下注率=0.000
+2026-04-19 18:28:17,093 - SeedRLTrainer - INFO - [SEED RL] 评估@92243: 胜率=0.000, 平均收益=-869.55, 无效下注率=0.000
+2026-04-19 18:28:17,501 - SeedRLTrainer - INFO - [SEED RL] 评估@92455: 胜率=0.000, 平均收益=-829.20, 无效下注率=0.000
+2026-04-19 18:28:17,927 - SeedRLTrainer - INFO - [SEED RL] 评估@92660: 胜率=0.000, 平均收益=-886.25, 无效下注率=0.000
+2026-04-19 18:28:18,343 - SeedRLTrainer - INFO - [SEED RL] 评估@92892: 胜率=0.000, 平均收益=-843.95, 无效下注率=0.000
+2026-04-19 18:28:18,489 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @93005
+2026-04-19 18:28:18,830 - SeedRLTrainer - INFO - [SEED RL] 评估@93112: 胜率=0.000, 平均收益=-889.70, 无效下注率=0.000
+2026-04-19 18:28:19,258 - SeedRLTrainer - INFO - [SEED RL] 评估@93343: 胜率=0.010, 平均收益=-795.00, 无效下注率=0.000
+2026-04-19 18:28:19,730 - SeedRLTrainer - INFO - [SEED RL] 评估@93561: 胜率=0.010, 平均收益=-808.20, 无效下注率=0.000
+2026-04-19 18:28:20,173 - SeedRLTrainer - INFO - [SEED RL] 评估@93775: 胜率=0.000, 平均收益=-866.30, 无效下注率=0.000
+2026-04-19 18:28:20,621 - SeedRLTrainer - INFO - [SEED RL] 评估@93986: 胜率=0.010, 平均收益=-838.90, 无效下注率=0.000
+2026-04-19 18:28:20,718 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @94007
+2026-04-19 18:28:21,109 - SeedRLTrainer - INFO - [SEED RL] 评估@94215: 胜率=0.000, 平均收益=-879.55, 无效下注率=0.000
+2026-04-19 18:28:21,520 - SeedRLTrainer - INFO - [SEED RL] 评估@94423: 胜率=0.010, 平均收益=-782.80, 无效下注率=0.000
+2026-04-19 18:28:21,996 - SeedRLTrainer - INFO - [SEED RL] 评估@94660: 胜率=0.000, 平均收益=-831.00, 无效下注率=0.000
+2026-04-19 18:28:22,433 - SeedRLTrainer - INFO - [SEED RL] 评估@94875: 胜率=0.000, 平均收益=-870.75, 无效下注率=0.000
+2026-04-19 18:28:22,653 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @95029
+2026-04-19 18:28:22,964 - SeedRLTrainer - INFO - [SEED RL] 评估@95099: 胜率=0.000, 平均收益=-868.50, 无效下注率=0.000
+2026-04-19 18:28:23,377 - SeedRLTrainer - INFO - [SEED RL] 评估@95325: 胜率=0.000, 平均收益=-796.70, 无效下注率=0.000
+2026-04-19 18:28:23,478 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16387, batch=4096, epochs=15
+2026-04-19 18:28:23,553 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.237766, returns_mean=-0.4299
+2026-04-19 18:28:23,623 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.009646 > target=5.0
+2026-04-19 18:28:23,623 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.145s, batches=5, actor_loss=-0.248320, critic_loss=1.480961, KL=20.009646
+2026-04-19 18:28:23,623 - SeedRLTrainer - INFO - [SEED RL] hands=95416/200000, PPO更新#14, loss=0.616321, 速度=157.9 hands/s
+2026-04-19 18:28:23,970 - SeedRLTrainer - INFO - [SEED RL] 评估@95558: 胜率=0.000, 平均收益=-807.60, 无效下注率=0.000
+2026-04-19 18:28:24,396 - SeedRLTrainer - INFO - [SEED RL] 评估@95767: 胜率=0.000, 平均收益=-810.20, 无效下注率=0.000
+2026-04-19 18:28:24,815 - SeedRLTrainer - INFO - [SEED RL] 评估@95970: 胜率=0.000, 平均收益=-876.05, 无效下注率=0.000
+2026-04-19 18:28:24,937 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @96042
+2026-04-19 18:28:25,283 - SeedRLTrainer - INFO - [SEED RL] 评估@96170: 胜率=0.000, 平均收益=-821.85, 无效下注率=0.000
+2026-04-19 18:28:25,717 - SeedRLTrainer - INFO - [SEED RL] 评估@96387: 胜率=0.000, 平均收益=-890.90, 无效下注率=0.000
+2026-04-19 18:28:26,126 - SeedRLTrainer - INFO - [SEED RL] 评估@96594: 胜率=0.000, 平均收益=-884.60, 无效下注率=0.000
+2026-04-19 18:28:26,542 - SeedRLTrainer - INFO - [SEED RL] 评估@96817: 胜率=0.000, 平均收益=-783.30, 无效下注率=0.000
+2026-04-19 18:28:26,956 - SeedRLTrainer - INFO - [SEED RL] 评估@97020: 胜率=0.000, 平均收益=-797.00, 无效下注率=0.000
+2026-04-19 18:28:27,048 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @97054
+2026-04-19 18:28:27,455 - SeedRLTrainer - INFO - [SEED RL] 评估@97225: 胜率=0.000, 平均收益=-831.80, 无效下注率=0.000
+2026-04-19 18:28:27,857 - SeedRLTrainer - INFO - [SEED RL] 评估@97468: 胜率=0.000, 平均收益=-861.20, 无效下注率=0.000
+2026-04-19 18:28:28,246 - SeedRLTrainer - INFO - [SEED RL] 评估@97672: 胜率=0.000, 平均收益=-892.75, 无效下注率=0.000
+2026-04-19 18:28:28,679 - SeedRLTrainer - INFO - [SEED RL] 评估@97902: 胜率=0.000, 平均收益=-853.55, 无效下注率=0.000
+2026-04-19 18:28:28,876 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @98066
+2026-04-19 18:28:29,175 - SeedRLTrainer - INFO - [SEED RL] 评估@98152: 胜率=0.000, 平均收益=-830.70, 无效下注率=0.000
+2026-04-19 18:28:29,573 - SeedRLTrainer - INFO - [SEED RL] 评估@98397: 胜率=0.000, 平均收益=-819.10, 无效下注率=0.000
+2026-04-19 18:28:29,994 - SeedRLTrainer - INFO - [SEED RL] 评估@98620: 胜率=0.010, 平均收益=-837.95, 无效下注率=0.000
+2026-04-19 18:28:30,399 - SeedRLTrainer - INFO - [SEED RL] 评估@98823: 胜率=0.000, 平均收益=-830.05, 无效下注率=0.000
+2026-04-19 18:28:30,826 - SeedRLTrainer - INFO - [SEED RL] 评估@99032: 胜率=0.000, 平均收益=-846.65, 无效下注率=0.000
+2026-04-19 18:28:31,860 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @99081
+2026-04-19 18:28:32,246 - SeedRLTrainer - INFO - [SEED RL] 评估@99232: 胜率=0.000, 平均收益=-793.15, 无效下注率=0.000
+2026-04-19 18:28:32,655 - SeedRLTrainer - INFO - [SEED RL] 评估@99434: 胜率=0.000, 平均收益=-840.80, 无效下注率=0.000
+2026-04-19 18:28:33,061 - SeedRLTrainer - INFO - [SEED RL] 评估@99635: 胜率=0.000, 平均收益=-865.90, 无效下注率=0.000
+2026-04-19 18:28:33,493 - SeedRLTrainer - INFO - [SEED RL] 评估@99850: 胜率=0.010, 平均收益=-766.50, 无效下注率=0.000
+2026-04-19 18:28:33,731 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_100048
+2026-04-19 18:28:34,000 - SeedRLTrainer - INFO - [SEED RL] 评估@100078: 胜率=0.000, 平均收益=-806.95, 无效下注率=0.000
+2026-04-19 18:28:34,089 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @100113
+2026-04-19 18:28:34,498 - SeedRLTrainer - INFO - [SEED RL] 评估@100294: 胜率=0.000, 平均收益=-839.70, 无效下注率=0.000
+2026-04-19 18:28:34,929 - SeedRLTrainer - INFO - [SEED RL] 评估@100502: 胜率=0.000, 平均收益=-879.90, 无效下注率=0.000
+2026-04-19 18:28:35,374 - SeedRLTrainer - INFO - [SEED RL] 评估@100728: 胜率=0.000, 平均收益=-875.40, 无效下注率=0.000
+2026-04-19 18:28:35,823 - SeedRLTrainer - INFO - [SEED RL] 评估@100952: 胜率=0.000, 平均收益=-786.65, 无效下注率=0.000
+2026-04-19 18:28:36,018 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @101123
+2026-04-19 18:28:36,300 - SeedRLTrainer - INFO - [SEED RL] 评估@101174: 胜率=0.000, 平均收益=-876.40, 无效下注率=0.000
+2026-04-19 18:28:36,471 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:28:36,532 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.267758, returns_mean=-0.4089
+2026-04-19 18:28:37,319 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.848s, batches=60, actor_loss=-0.045272, critic_loss=0.964612, KL=0.015311
+2026-04-19 18:28:37,319 - SeedRLTrainer - INFO - [SEED RL] hands=101372/200000, PPO更新#15, loss=0.459670, 速度=164.1 hands/s
+2026-04-19 18:28:37,586 - SeedRLTrainer - INFO - [SEED RL] 评估@101420: 胜率=0.000, 平均收益=-828.15, 无效下注率=0.000
+2026-04-19 18:28:38,023 - SeedRLTrainer - INFO - [SEED RL] 评估@101641: 胜率=0.000, 平均收益=-850.10, 无效下注率=0.000
+2026-04-19 18:28:38,437 - SeedRLTrainer - INFO - [SEED RL] 评估@101854: 胜率=0.000, 平均收益=-885.30, 无效下注率=0.000
+2026-04-19 18:28:38,861 - SeedRLTrainer - INFO - [SEED RL] 评估@102064: 胜率=0.010, 平均收益=-854.90, 无效下注率=0.000
+2026-04-19 18:28:39,010 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @102152
+2026-04-19 18:28:39,352 - SeedRLTrainer - INFO - [SEED RL] 评估@102285: 胜率=0.000, 平均收益=-809.70, 无效下注率=0.000
+2026-04-19 18:28:39,754 - SeedRLTrainer - INFO - [SEED RL] 评估@102515: 胜率=0.000, 平均收益=-863.65, 无效下注率=0.000
+2026-04-19 18:28:40,175 - SeedRLTrainer - INFO - [SEED RL] 评估@102731: 胜率=0.000, 平均收益=-862.45, 无效下注率=0.000
+2026-04-19 18:28:40,610 - SeedRLTrainer - INFO - [SEED RL] 评估@102940: 胜率=0.000, 平均收益=-777.50, 无效下注率=0.000
+2026-04-19 18:28:41,039 - SeedRLTrainer - INFO - [SEED RL] 评估@103165: 胜率=0.000, 平均收益=-832.20, 无效下注率=0.000
+2026-04-19 18:28:41,109 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @103165
+2026-04-19 18:28:47,683 - SeedRLTrainer - INFO - [SEED RL] 评估@103371: 胜率=0.010, 平均收益=-858.80, 无效下注率=0.000
+2026-04-19 18:28:48,110 - SeedRLTrainer - INFO - [SEED RL] 评估@103586: 胜率=0.010, 平均收益=-812.55, 无效下注率=0.000
+2026-04-19 18:28:48,516 - SeedRLTrainer - INFO - [SEED RL] 评估@103791: 胜率=0.000, 平均收益=-801.60, 无效下注率=0.000
+2026-04-19 18:28:48,946 - SeedRLTrainer - INFO - [SEED RL] 评估@104028: 胜率=0.000, 平均收益=-823.80, 无效下注率=0.000
+2026-04-19 18:28:49,148 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @104202
+2026-04-19 18:28:49,420 - SeedRLTrainer - INFO - [SEED RL] 评估@104235: 胜率=0.010, 平均收益=-860.50, 无效下注率=0.000
+2026-04-19 18:28:49,854 - SeedRLTrainer - INFO - [SEED RL] 评估@104473: 胜率=0.010, 平均收益=-848.60, 无效下注率=0.000
+2026-04-19 18:28:50,258 - SeedRLTrainer - INFO - [SEED RL] 评估@104691: 胜率=0.000, 平均收益=-860.05, 无效下注率=0.000
+2026-04-19 18:28:50,674 - SeedRLTrainer - INFO - [SEED RL] 评估@104892: 胜率=0.000, 平均收益=-859.55, 无效下注率=0.000
+2026-04-19 18:28:51,094 - SeedRLTrainer - INFO - [SEED RL] 评估@105112: 胜率=0.000, 平均收益=-826.75, 无效下注率=0.000
+2026-04-19 18:28:51,241 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @105209
+2026-04-19 18:28:51,573 - SeedRLTrainer - INFO - [SEED RL] 评估@105314: 胜率=0.000, 平均收益=-839.10, 无效下注率=0.000
+2026-04-19 18:28:52,007 - SeedRLTrainer - INFO - [SEED RL] 评估@105529: 胜率=0.000, 平均收益=-853.80, 无效下注率=0.000
+2026-04-19 18:28:52,427 - SeedRLTrainer - INFO - [SEED RL] 评估@105744: 胜率=0.000, 平均收益=-876.80, 无效下注率=0.000
+2026-04-19 18:28:52,836 - SeedRLTrainer - INFO - [SEED RL] 评估@105957: 胜率=0.000, 平均收益=-885.20, 无效下注率=0.000
+2026-04-19 18:28:53,279 - SeedRLTrainer - INFO - [SEED RL] 评估@106176: 胜率=0.000, 平均收益=-872.60, 无效下注率=0.000
+2026-04-19 18:28:53,398 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @106231
+2026-04-19 18:28:53,790 - SeedRLTrainer - INFO - [SEED RL] 评估@106390: 胜率=0.000, 平均收益=-841.10, 无效下注率=0.000
+2026-04-19 18:28:54,206 - SeedRLTrainer - INFO - [SEED RL] 评估@106604: 胜率=0.000, 平均收益=-854.30, 无效下注率=0.000
+2026-04-19 18:28:54,608 - SeedRLTrainer - INFO - [SEED RL] 评估@106813: 胜率=0.000, 平均收益=-801.45, 无效下注率=0.000
+2026-04-19 18:28:55,017 - SeedRLTrainer - INFO - [SEED RL] 评估@107040: 胜率=0.010, 平均收益=-801.40, 无效下注率=0.000
+2026-04-19 18:28:55,453 - SeedRLTrainer - INFO - [SEED RL] 评估@107258: 胜率=0.000, 平均收益=-800.35, 无效下注率=0.000
+2026-04-19 18:28:55,522 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @107258
+2026-04-19 18:28:55,623 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:28:55,685 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.306006, returns_mean=-0.3998
+2026-04-19 18:28:56,493 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.870s, batches=60, actor_loss=-0.041591, critic_loss=0.961008, KL=0.015752
+2026-04-19 18:28:56,493 - SeedRLTrainer - INFO - [SEED RL] hands=107348/200000, PPO更新#16, loss=0.459708, 速度=168.5 hands/s
+2026-04-19 18:28:56,850 - SeedRLTrainer - INFO - [SEED RL] 评估@107466: 胜率=0.000, 平均收益=-907.20, 无效下注率=0.000
+2026-04-19 18:28:57,288 - SeedRLTrainer - INFO - [SEED RL] 评估@107667: 胜率=0.000, 平均收益=-787.65, 无效下注率=0.000
+2026-04-19 18:28:57,734 - SeedRLTrainer - INFO - [SEED RL] 评估@107901: 胜率=0.000, 平均收益=-854.05, 无效下注率=0.000
+2026-04-19 18:28:58,164 - SeedRLTrainer - INFO - [SEED RL] 评估@108120: 胜率=0.000, 平均收益=-873.05, 无效下注率=0.000
+2026-04-19 18:28:58,366 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @108293
+2026-04-19 18:28:58,633 - SeedRLTrainer - INFO - [SEED RL] 评估@108331: 胜率=0.000, 平均收益=-864.80, 无效下注率=0.000
+2026-04-19 18:28:59,046 - SeedRLTrainer - INFO - [SEED RL] 评估@108545: 胜率=0.000, 平均收益=-815.40, 无效下注率=0.000
+2026-04-19 18:28:59,472 - SeedRLTrainer - INFO - [SEED RL] 评估@108754: 胜率=0.000, 平均收益=-907.10, 无效下注率=0.000
+2026-04-19 18:28:59,910 - SeedRLTrainer - INFO - [SEED RL] 评估@109001: 胜率=0.000, 平均收益=-833.60, 无效下注率=0.000
+2026-04-19 18:29:00,341 - SeedRLTrainer - INFO - [SEED RL] 评估@109215: 胜率=0.000, 平均收益=-862.00, 无效下注率=0.000
+2026-04-19 18:29:00,489 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @109331
+2026-04-19 18:29:00,825 - SeedRLTrainer - INFO - [SEED RL] 评估@109448: 胜率=0.010, 平均收益=-807.15, 无效下注率=0.000
+2026-04-19 18:29:01,228 - SeedRLTrainer - INFO - [SEED RL] 评估@109659: 胜率=0.000, 平均收益=-885.00, 无效下注率=0.000
+2026-04-19 18:29:01,659 - SeedRLTrainer - INFO - [SEED RL] 评估@109883: 胜率=0.000, 平均收益=-857.90, 无效下注率=0.000
+2026-04-19 18:29:02,069 - SeedRLTrainer - INFO - [SEED RL] 评估@110110: 胜率=0.010, 平均收益=-829.75, 无效下注率=0.000
+2026-04-19 18:29:02,509 - SeedRLTrainer - INFO - [SEED RL] 评估@110323: 胜率=0.000, 平均收益=-894.60, 无效下注率=0.000
+2026-04-19 18:29:02,606 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @110357
+2026-04-19 18:29:02,985 - SeedRLTrainer - INFO - [SEED RL] 评估@110530: 胜率=0.000, 平均收益=-798.15, 无效下注率=0.000
+2026-04-19 18:29:03,419 - SeedRLTrainer - INFO - [SEED RL] 评估@110738: 胜率=0.000, 平均收益=-818.80, 无效下注率=0.000
+2026-04-19 18:29:03,817 - SeedRLTrainer - INFO - [SEED RL] 评估@110946: 胜率=0.000, 平均收益=-880.70, 无效下注率=0.000
+2026-04-19 18:29:04,215 - SeedRLTrainer - INFO - [SEED RL] 评估@111155: 胜率=0.000, 平均收益=-858.00, 无效下注率=0.000
+2026-04-19 18:29:04,625 - SeedRLTrainer - INFO - [SEED RL] 评估@111359: 胜率=0.000, 平均收益=-910.60, 无效下注率=0.000
+2026-04-19 18:29:04,692 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @111359
+2026-04-19 18:29:05,078 - SeedRLTrainer - INFO - [SEED RL] 评估@111568: 胜率=0.000, 平均收益=-838.90, 无效下注率=0.000
+2026-04-19 18:29:05,527 - SeedRLTrainer - INFO - [SEED RL] 评估@111776: 胜率=0.000, 平均收益=-857.50, 无效下注率=0.000
+2026-04-19 18:29:05,961 - SeedRLTrainer - INFO - [SEED RL] 评估@112013: 胜率=0.000, 平均收益=-877.10, 无效下注率=0.000
+2026-04-19 18:29:06,374 - SeedRLTrainer - INFO - [SEED RL] 评估@112215: 胜率=0.000, 平均收益=-797.40, 无效下注率=0.000
+2026-04-19 18:29:06,545 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @112369
+2026-04-19 18:29:06,859 - SeedRLTrainer - INFO - [SEED RL] 评估@112436: 胜率=0.000, 平均收益=-858.60, 无效下注率=0.000
+2026-04-19 18:29:07,284 - SeedRLTrainer - INFO - [SEED RL] 评估@112653: 胜率=0.000, 平均收益=-886.80, 无效下注率=0.000
+2026-04-19 18:29:07,697 - SeedRLTrainer - INFO - [SEED RL] 评估@112863: 胜率=0.000, 平均收益=-860.50, 无效下注率=0.000
+2026-04-19 18:29:08,108 - SeedRLTrainer - INFO - [SEED RL] 评估@113085: 胜率=0.000, 平均收益=-905.90, 无效下注率=0.000
+2026-04-19 18:29:08,513 - SeedRLTrainer - INFO - [SEED RL] 评估@113310: 胜率=0.000, 平均收益=-911.30, 无效下注率=0.000
+2026-04-19 18:29:08,563 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:29:08,625 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.588744, returns_mean=-0.3854
+2026-04-19 18:29:09,437 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.875s, batches=60, actor_loss=-0.044193, critic_loss=0.960951, KL=0.017956
+2026-04-19 18:29:09,438 - SeedRLTrainer - INFO - [SEED RL] hands=113348/200000, PPO更新#17, loss=0.458379, 速度=174.4 hands/s
+2026-04-19 18:29:09,534 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @113397
+2026-04-19 18:29:09,901 - SeedRLTrainer - INFO - [SEED RL] 评估@113539: 胜率=0.000, 平均收益=-840.75, 无效下注率=0.000
+2026-04-19 18:29:10,309 - SeedRLTrainer - INFO - [SEED RL] 评估@113765: 胜率=0.000, 平均收益=-859.80, 无效下注率=0.000
+2026-04-19 18:29:10,718 - SeedRLTrainer - INFO - [SEED RL] 评估@113973: 胜率=0.010, 平均收益=-841.85, 无效下注率=0.000
+2026-04-19 18:29:11,121 - SeedRLTrainer - INFO - [SEED RL] 评估@114179: 胜率=0.000, 平均收益=-852.00, 无效下注率=0.000
+2026-04-19 18:29:11,557 - SeedRLTrainer - INFO - [SEED RL] 评估@114410: 胜率=0.020, 平均收益=-851.70, 无效下注率=0.000
+2026-04-19 18:29:11,623 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @114410
+2026-04-19 18:29:12,059 - SeedRLTrainer - INFO - [SEED RL] 评估@114625: 胜率=0.010, 平均收益=-863.70, 无效下注率=0.000
+2026-04-19 18:29:12,509 - SeedRLTrainer - INFO - [SEED RL] 评估@114839: 胜率=0.000, 平均收益=-850.90, 无效下注率=0.000
+2026-04-19 18:29:19,045 - SeedRLTrainer - INFO - [SEED RL] 评估@115068: 胜率=0.000, 平均收益=-841.85, 无效下注率=0.000
+2026-04-19 18:29:19,488 - SeedRLTrainer - INFO - [SEED RL] 评估@115305: 胜率=0.000, 平均收益=-793.20, 无效下注率=0.000
+2026-04-19 18:29:19,635 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @115410
+2026-04-19 18:29:19,950 - SeedRLTrainer - INFO - [SEED RL] 评估@115521: 胜率=0.000, 平均收益=-853.20, 无效下注率=0.000
+2026-04-19 18:29:20,381 - SeedRLTrainer - INFO - [SEED RL] 评估@115742: 胜率=0.000, 平均收益=-868.10, 无效下注率=0.000
+2026-04-19 18:29:20,789 - SeedRLTrainer - INFO - [SEED RL] 评估@115967: 胜率=0.000, 平均收益=-810.90, 无效下注率=0.000
+2026-04-19 18:29:21,218 - SeedRLTrainer - INFO - [SEED RL] 评估@116194: 胜率=0.010, 平均收益=-849.90, 无效下注率=0.000
+2026-04-19 18:29:28,008 - SeedRLTrainer - INFO - [SEED RL] 评估@116423: 胜率=0.000, 平均收益=-876.55, 无效下注率=0.000
+2026-04-19 18:29:28,076 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @116423
+2026-04-19 18:29:28,471 - SeedRLTrainer - INFO - [SEED RL] 评估@116646: 胜率=0.000, 平均收益=-807.30, 无效下注率=0.000
+2026-04-19 18:29:28,919 - SeedRLTrainer - INFO - [SEED RL] 评估@116857: 胜率=0.000, 平均收益=-858.10, 无效下注率=0.000
+2026-04-19 18:29:29,341 - SeedRLTrainer - INFO - [SEED RL] 评估@117078: 胜率=0.000, 平均收益=-858.30, 无效下注率=0.000
+2026-04-19 18:29:29,771 - SeedRLTrainer - INFO - [SEED RL] 评估@117284: 胜率=0.000, 平均收益=-812.90, 无效下注率=0.000
+2026-04-19 18:29:29,947 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @117434
+2026-04-19 18:29:30,242 - SeedRLTrainer - INFO - [SEED RL] 评估@117511: 胜率=0.000, 平均收益=-809.20, 无效下注率=0.000
+2026-04-19 18:29:30,664 - SeedRLTrainer - INFO - [SEED RL] 评估@117717: 胜率=0.000, 平均收益=-852.15, 无效下注率=0.000
+2026-04-19 18:29:31,068 - SeedRLTrainer - INFO - [SEED RL] 评估@117920: 胜率=0.000, 平均收益=-871.70, 无效下注率=0.000
+2026-04-19 18:29:31,501 - SeedRLTrainer - INFO - [SEED RL] 评估@118159: 胜率=0.010, 平均收益=-819.95, 无效下注率=0.000
+2026-04-19 18:29:31,908 - SeedRLTrainer - INFO - [SEED RL] 评估@118362: 胜率=0.000, 平均收益=-853.00, 无效下注率=0.000
+2026-04-19 18:29:32,033 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @118438
+2026-04-19 18:29:32,384 - SeedRLTrainer - INFO - [SEED RL] 评估@118583: 胜率=0.000, 平均收益=-877.20, 无效下注率=0.000
+2026-04-19 18:29:32,793 - SeedRLTrainer - INFO - [SEED RL] 评估@118785: 胜率=0.000, 平均收益=-814.40, 无效下注率=0.000
+2026-04-19 18:29:33,232 - SeedRLTrainer - INFO - [SEED RL] 评估@118996: 胜率=0.000, 平均收益=-811.40, 无效下注率=0.000
+2026-04-19 18:29:33,649 - SeedRLTrainer - INFO - [SEED RL] 评估@119214: 胜率=0.000, 平均收益=-861.20, 无效下注率=0.000
+2026-04-19 18:29:34,060 - SeedRLTrainer - INFO - [SEED RL] 评估@119414: 胜率=0.000, 平均收益=-800.40, 无效下注率=0.000
+2026-04-19 18:29:34,108 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 18:29:34,184 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.356990, returns_mean=-0.4076
+2026-04-19 18:29:34,253 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.015236 > target=5.0
+2026-04-19 18:29:34,253 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.144s, batches=5, actor_loss=0.069468, critic_loss=0.856198, KL=20.015236
+2026-04-19 18:29:34,253 - SeedRLTrainer - INFO - [SEED RL] hands=119449/200000, PPO更新#18, loss=0.462833, 速度=177.0 hands/s
+2026-04-19 18:29:34,320 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @119449
+2026-04-19 18:29:34,699 - SeedRLTrainer - INFO - [SEED RL] 评估@119615: 胜率=0.000, 平均收益=-864.10, 无效下注率=0.000
+2026-04-19 18:29:35,134 - SeedRLTrainer - INFO - [SEED RL] 评估@119850: 胜率=0.010, 平均收益=-839.80, 无效下注率=0.000
+2026-04-19 18:29:35,539 - SeedRLTrainer - INFO - [SEED RL] 评估@120067: 胜率=0.000, 平均收益=-892.70, 无效下注率=0.000
+2026-04-19 18:29:35,649 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_120067
+2026-04-19 18:29:36,050 - SeedRLTrainer - INFO - [SEED RL] 评估@120298: 胜率=0.000, 平均收益=-848.10, 无效下注率=0.000
+2026-04-19 18:29:36,242 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @120483
+2026-04-19 18:29:36,490 - SeedRLTrainer - INFO - [SEED RL] 评估@120516: 胜率=0.000, 平均收益=-808.90, 无效下注率=0.000
+2026-04-19 18:29:36,895 - SeedRLTrainer - INFO - [SEED RL] 评估@120740: 胜率=0.000, 平均收益=-863.70, 无效下注率=0.000
+2026-04-19 18:29:37,280 - SeedRLTrainer - INFO - [SEED RL] 评估@120947: 胜率=0.000, 平均收益=-856.25, 无效下注率=0.000
+2026-04-19 18:29:37,663 - SeedRLTrainer - INFO - [SEED RL] 评估@121150: 胜率=0.000, 平均收益=-836.60, 无效下注率=0.000
+2026-04-19 18:29:38,063 - SeedRLTrainer - INFO - [SEED RL] 评估@121383: 胜率=0.000, 平均收益=-882.20, 无效下注率=0.000
+2026-04-19 18:29:38,238 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @121513
+2026-04-19 18:29:38,539 - SeedRLTrainer - INFO - [SEED RL] 评估@121586: 胜率=0.020, 平均收益=-847.75, 无效下注率=0.000
+2026-04-19 18:29:38,946 - SeedRLTrainer - INFO - [SEED RL] 评估@121793: 胜率=0.000, 平均收益=-867.80, 无效下注率=0.000
+2026-04-19 18:29:39,348 - SeedRLTrainer - INFO - [SEED RL] 评估@122025: 胜率=0.010, 平均收益=-900.60, 无效下注率=0.000
+2026-04-19 18:29:39,730 - SeedRLTrainer - INFO - [SEED RL] 评估@122234: 胜率=0.010, 平均收益=-833.85, 无效下注率=0.000
+2026-04-19 18:29:40,097 - SeedRLTrainer - INFO - [SEED RL] 评估@122441: 胜率=0.000, 平均收益=-870.40, 无效下注率=0.000
+2026-04-19 18:29:40,219 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @122518
+2026-04-19 18:29:40,562 - SeedRLTrainer - INFO - [SEED RL] 评估@122674: 胜率=0.000, 平均收益=-793.00, 无效下注率=0.000
+2026-04-19 18:29:40,989 - SeedRLTrainer - INFO - [SEED RL] 评估@122919: 胜率=0.010, 平均收益=-839.35, 无效下注率=0.000
+2026-04-19 18:29:41,388 - SeedRLTrainer - INFO - [SEED RL] 评估@123130: 胜率=0.000, 平均收益=-838.60, 无效下注率=0.000
+2026-04-19 18:29:41,814 - SeedRLTrainer - INFO - [SEED RL] 评估@123347: 胜率=0.000, 平均收益=-881.10, 无效下注率=0.000
+2026-04-19 18:29:42,038 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @123544
+2026-04-19 18:29:42,315 - SeedRLTrainer - INFO - [SEED RL] 评估@123572: 胜率=0.000, 平均收益=-830.70, 无效下注率=0.000
+2026-04-19 18:29:42,729 - SeedRLTrainer - INFO - [SEED RL] 评估@123783: 胜率=0.000, 平均收益=-844.20, 无效下注率=0.000
+2026-04-19 18:29:43,142 - SeedRLTrainer - INFO - [SEED RL] 评估@124022: 胜率=0.010, 平均收益=-888.90, 无效下注率=0.000
+2026-04-19 18:29:43,516 - SeedRLTrainer - INFO - [SEED RL] 评估@124235: 胜率=0.000, 平均收益=-825.40, 无效下注率=0.000
+2026-04-19 18:29:43,900 - SeedRLTrainer - INFO - [SEED RL] 评估@124442: 胜率=0.000, 平均收益=-835.15, 无效下注率=0.000
+2026-04-19 18:29:44,046 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @124563
+2026-04-19 18:29:44,371 - SeedRLTrainer - INFO - [SEED RL] 评估@124675: 胜率=0.000, 平均收益=-831.30, 无效下注率=0.000
+2026-04-19 18:29:44,784 - SeedRLTrainer - INFO - [SEED RL] 评估@124896: 胜率=0.000, 平均收益=-843.20, 无效下注率=0.000
+2026-04-19 18:29:45,192 - SeedRLTrainer - INFO - [SEED RL] 评估@125123: 胜率=0.000, 平均收益=-784.05, 无效下注率=0.000
+2026-04-19 18:29:45,601 - SeedRLTrainer - INFO - [SEED RL] 评估@125343: 胜率=0.000, 平均收益=-837.10, 无效下注率=0.000
+2026-04-19 18:29:45,981 - SeedRLTrainer - INFO - [SEED RL] 评估@125551: 胜率=0.010, 平均收益=-766.85, 无效下注率=0.000
+2026-04-19 18:29:46,076 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @125593
+2026-04-19 18:29:46,434 - SeedRLTrainer - INFO - [SEED RL] 评估@125753: 胜率=0.000, 平均收益=-863.50, 无效下注率=0.000
+2026-04-19 18:29:46,828 - SeedRLTrainer - INFO - [SEED RL] 评估@125967: 胜率=0.010, 平均收益=-835.60, 无效下注率=0.000
+2026-04-19 18:29:47,238 - SeedRLTrainer - INFO - [SEED RL] 评估@126188: 胜率=0.000, 平均收益=-879.50, 无效下注率=0.000
+2026-04-19 18:29:47,310 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:29:47,372 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.404845, returns_mean=-0.4218
+2026-04-19 18:29:48,178 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.868s, batches=60, actor_loss=-0.041982, critic_loss=0.965888, KL=0.021977
+2026-04-19 18:29:48,178 - SeedRLTrainer - INFO - [SEED RL] hands=126247/200000, PPO更新#19, loss=0.461953, 速度=183.3 hands/s
+2026-04-19 18:29:48,528 - SeedRLTrainer - INFO - [SEED RL] 评估@126420: 胜率=0.000, 平均收益=-853.70, 无效下注率=0.000
+2026-04-19 18:29:48,760 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @126615
+2026-04-19 18:29:49,036 - SeedRLTrainer - INFO - [SEED RL] 评估@126654: 胜率=0.000, 平均收益=-811.70, 无效下注率=0.000
+2026-04-19 18:29:49,438 - SeedRLTrainer - INFO - [SEED RL] 评估@126877: 胜率=0.000, 平均收益=-862.00, 无效下注率=0.000
+2026-04-19 18:29:55,678 - SeedRLTrainer - INFO - [SEED RL] 评估@127093: 胜率=0.000, 平均收益=-840.30, 无效下注率=0.000
+2026-04-19 18:29:56,084 - SeedRLTrainer - INFO - [SEED RL] 评估@127299: 胜率=0.000, 平均收益=-861.35, 无效下注率=0.000
+2026-04-19 18:29:56,476 - SeedRLTrainer - INFO - [SEED RL] 评估@127499: 胜率=0.000, 平均收益=-861.60, 无效下注率=0.000
+2026-04-19 18:29:56,624 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @127624
+2026-04-19 18:29:56,921 - SeedRLTrainer - INFO - [SEED RL] 评估@127711: 胜率=0.000, 平均收益=-887.80, 无效下注率=0.000
+2026-04-19 18:29:57,335 - SeedRLTrainer - INFO - [SEED RL] 评估@127929: 胜率=0.000, 平均收益=-843.15, 无效下注率=0.000
+2026-04-19 18:29:57,739 - SeedRLTrainer - INFO - [SEED RL] 评估@128162: 胜率=0.000, 平均收益=-875.00, 无效下注率=0.000
+2026-04-19 18:29:58,151 - SeedRLTrainer - INFO - [SEED RL] 评估@128384: 胜率=0.000, 平均收益=-825.90, 无效下注率=0.000
+2026-04-19 18:29:58,566 - SeedRLTrainer - INFO - [SEED RL] 评估@128599: 胜率=0.000, 平均收益=-817.30, 无效下注率=0.000
+2026-04-19 18:29:58,659 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @128635
+2026-04-19 18:29:59,069 - SeedRLTrainer - INFO - [SEED RL] 评估@128835: 胜率=0.000, 平均收益=-857.00, 无效下注率=0.000
+2026-04-19 18:29:59,476 - SeedRLTrainer - INFO - [SEED RL] 评估@129039: 胜率=0.000, 平均收益=-817.90, 无效下注率=0.000
+2026-04-19 18:29:59,871 - SeedRLTrainer - INFO - [SEED RL] 评估@129257: 胜率=0.000, 平均收益=-838.60, 无效下注率=0.000
+2026-04-19 18:30:00,277 - SeedRLTrainer - INFO - [SEED RL] 评估@129460: 胜率=0.000, 平均收益=-852.80, 无效下注率=0.000
+2026-04-19 18:30:00,646 - SeedRLTrainer - INFO - [SEED RL] 评估@129664: 胜率=0.000, 平均收益=-847.10, 无效下注率=0.000
+2026-04-19 18:30:00,712 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @129664
+2026-04-19 18:30:01,129 - SeedRLTrainer - INFO - [SEED RL] 评估@129893: 胜率=0.000, 平均收益=-893.40, 无效下注率=0.000
+2026-04-19 18:30:01,531 - SeedRLTrainer - INFO - [SEED RL] 评估@130093: 胜率=0.000, 平均收益=-813.10, 无效下注率=0.000
+2026-04-19 18:30:01,921 - SeedRLTrainer - INFO - [SEED RL] 评估@130325: 胜率=0.000, 平均收益=-874.40, 无效下注率=0.000
+2026-04-19 18:30:02,281 - SeedRLTrainer - INFO - [SEED RL] 评估@130533: 胜率=0.000, 平均收益=-896.70, 无效下注率=0.000
+2026-04-19 18:30:02,455 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @130687
+2026-04-19 18:30:02,753 - SeedRLTrainer - INFO - [SEED RL] 评估@130750: 胜率=0.000, 平均收益=-832.80, 无效下注率=0.000
+2026-04-19 18:30:03,161 - SeedRLTrainer - INFO - [SEED RL] 评估@130971: 胜率=0.000, 平均收益=-848.70, 无效下注率=0.000
+2026-04-19 18:30:03,565 - SeedRLTrainer - INFO - [SEED RL] 评估@131189: 胜率=0.000, 平均收益=-875.70, 无效下注率=0.000
+2026-04-19 18:30:03,950 - SeedRLTrainer - INFO - [SEED RL] 评估@131410: 胜率=0.000, 平均收益=-859.40, 无效下注率=0.000
+2026-04-19 18:30:04,356 - SeedRLTrainer - INFO - [SEED RL] 评估@131635: 胜率=0.000, 平均收益=-822.10, 无效下注率=0.000
+2026-04-19 18:30:04,475 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @131705
+2026-04-19 18:30:04,816 - SeedRLTrainer - INFO - [SEED RL] 评估@131840: 胜率=0.000, 平均收益=-848.70, 无效下注率=0.000
+2026-04-19 18:30:05,223 - SeedRLTrainer - INFO - [SEED RL] 评估@132057: 胜率=0.010, 平均收益=-874.25, 无效下注率=0.000
+2026-04-19 18:30:05,621 - SeedRLTrainer - INFO - [SEED RL] 评估@132287: 胜率=0.000, 平均收益=-863.00, 无效下注率=0.000
+2026-04-19 18:30:06,017 - SeedRLTrainer - INFO - [SEED RL] 评估@132488: 胜率=0.000, 平均收益=-906.10, 无效下注率=0.000
+2026-04-19 18:30:07,511 - SeedRLTrainer - INFO - [SEED RL] 评估@132709: 胜率=0.010, 平均收益=-864.95, 无效下注率=0.000
+2026-04-19 18:30:07,581 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @132709
+2026-04-19 18:30:08,031 - SeedRLTrainer - INFO - [SEED RL] 评估@132919: 胜率=0.010, 平均收益=-831.45, 无效下注率=0.000
+2026-04-19 18:30:08,081 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 18:30:08,157 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.368392, returns_mean=-0.4305
+2026-04-19 18:30:08,224 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.022764 > target=5.0
+2026-04-19 18:30:08,224 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=-0.357481, critic_loss=1.577047, KL=20.022764
+2026-04-19 18:30:08,224 - SeedRLTrainer - INFO - [SEED RL] hands=132922/200000, PPO更新#20, loss=0.609783, 速度=187.6 hands/s
+2026-04-19 18:30:08,617 - SeedRLTrainer - INFO - [SEED RL] 评估@133137: 胜率=0.000, 平均收益=-854.40, 无效下注率=0.000
+2026-04-19 18:30:09,031 - SeedRLTrainer - INFO - [SEED RL] 评估@133359: 胜率=0.000, 平均收益=-827.10, 无效下注率=0.000
+2026-04-19 18:30:09,406 - SeedRLTrainer - INFO - [SEED RL] 评估@133560: 胜率=0.000, 平均收益=-858.10, 无效下注率=0.000
+2026-04-19 18:30:09,582 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @133710
+2026-04-19 18:30:09,882 - SeedRLTrainer - INFO - [SEED RL] 评估@133793: 胜率=0.000, 平均收益=-842.90, 无效下注率=0.000
+2026-04-19 18:30:10,292 - SeedRLTrainer - INFO - [SEED RL] 评估@133994: 胜率=0.000, 平均收益=-833.80, 无效下注率=0.000
+2026-04-19 18:30:10,718 - SeedRLTrainer - INFO - [SEED RL] 评估@134219: 胜率=0.000, 平均收益=-854.30, 无效下注率=0.000
+2026-04-19 18:30:11,138 - SeedRLTrainer - INFO - [SEED RL] 评估@134437: 胜率=0.000, 平均收益=-867.90, 无效下注率=0.000
+2026-04-19 18:30:11,514 - SeedRLTrainer - INFO - [SEED RL] 评估@134649: 胜率=0.000, 平均收益=-831.90, 无效下注率=0.000
+2026-04-19 18:30:11,637 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @134727
+2026-04-19 18:30:11,995 - SeedRLTrainer - INFO - [SEED RL] 评估@134875: 胜率=0.000, 平均收益=-870.50, 无效下注率=0.000
+2026-04-19 18:30:12,410 - SeedRLTrainer - INFO - [SEED RL] 评估@135079: 胜率=0.000, 平均收益=-898.30, 无效下注率=0.000
+2026-04-19 18:30:12,816 - SeedRLTrainer - INFO - [SEED RL] 评估@135285: 胜率=0.010, 平均收益=-784.40, 无效下注率=0.000
+2026-04-19 18:30:13,221 - SeedRLTrainer - INFO - [SEED RL] 评估@135505: 胜率=0.000, 平均收益=-925.00, 无效下注率=0.000
+2026-04-19 18:30:13,621 - SeedRLTrainer - INFO - [SEED RL] 评估@135742: 胜率=0.000, 平均收益=-851.35, 无效下注率=0.000
+2026-04-19 18:30:13,689 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @135742
+2026-04-19 18:30:14,076 - SeedRLTrainer - INFO - [SEED RL] 评估@135943: 胜率=0.000, 平均收益=-911.40, 无效下注率=0.000
+2026-04-19 18:30:14,494 - SeedRLTrainer - INFO - [SEED RL] 评估@136149: 胜率=0.000, 平均收益=-839.20, 无效下注率=0.000
+2026-04-19 18:30:14,893 - SeedRLTrainer - INFO - [SEED RL] 评估@136354: 胜率=0.000, 平均收益=-885.85, 无效下注率=0.000
+2026-04-19 18:30:15,301 - SeedRLTrainer - INFO - [SEED RL] 评估@136559: 胜率=0.000, 平均收益=-888.20, 无效下注率=0.000
+2026-04-19 18:30:15,504 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @136742
+2026-04-19 18:30:15,775 - SeedRLTrainer - INFO - [SEED RL] 评估@136781: 胜率=0.010, 平均收益=-888.10, 无效下注率=0.000
+2026-04-19 18:30:16,168 - SeedRLTrainer - INFO - [SEED RL] 评估@136981: 胜率=0.000, 平均收益=-836.30, 无效下注率=0.000
+2026-04-19 18:30:16,553 - SeedRLTrainer - INFO - [SEED RL] 评估@137181: 胜率=0.000, 平均收益=-872.70, 无效下注率=0.000
+2026-04-19 18:30:16,963 - SeedRLTrainer - INFO - [SEED RL] 评估@137390: 胜率=0.000, 平均收益=-874.70, 无效下注率=0.000
+2026-04-19 18:30:17,365 - SeedRLTrainer - INFO - [SEED RL] 评估@137607: 胜率=0.000, 平均收益=-867.90, 无效下注率=0.000
+2026-04-19 18:30:17,562 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @137768
+2026-04-19 18:30:17,842 - SeedRLTrainer - INFO - [SEED RL] 评估@137813: 胜率=0.000, 平均收益=-810.60, 无效下注率=0.000
+2026-04-19 18:30:18,247 - SeedRLTrainer - INFO - [SEED RL] 评估@138025: 胜率=0.010, 平均收益=-882.70, 无效下注率=0.000
+2026-04-19 18:30:18,654 - SeedRLTrainer - INFO - [SEED RL] 评估@138232: 胜率=0.000, 平均收益=-883.60, 无效下注率=0.000
+2026-04-19 18:30:19,073 - SeedRLTrainer - INFO - [SEED RL] 评估@138446: 胜率=0.000, 平均收益=-897.20, 无效下注率=0.000
+2026-04-19 18:30:19,459 - SeedRLTrainer - INFO - [SEED RL] 评估@138651: 胜率=0.000, 平均收益=-898.00, 无效下注率=0.000
+2026-04-19 18:30:19,604 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @138770
+2026-04-19 18:30:19,907 - SeedRLTrainer - INFO - [SEED RL] 评估@138869: 胜率=0.000, 平均收益=-898.50, 无效下注率=0.000
+2026-04-19 18:30:20,314 - SeedRLTrainer - INFO - [SEED RL] 评估@139098: 胜率=0.000, 平均收益=-852.00, 无效下注率=0.000
+2026-04-19 18:30:20,716 - SeedRLTrainer - INFO - [SEED RL] 评估@139318: 胜率=0.000, 平均收益=-895.25, 无效下注率=0.000
+2026-04-19 18:30:20,820 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:30:20,883 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.213006, returns_mean=-0.4098
+2026-04-19 18:30:21,685 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.865s, batches=60, actor_loss=-0.041926, critic_loss=0.964102, KL=0.019157
+2026-04-19 18:30:21,685 - SeedRLTrainer - INFO - [SEED RL] hands=139421/200000, PPO更新#21, loss=0.461088, 速度=193.1 hands/s
+2026-04-19 18:30:21,994 - SeedRLTrainer - INFO - [SEED RL] 评估@139556: 胜率=0.000, 平均收益=-834.50, 无效下注率=0.000
+2026-04-19 18:30:22,397 - SeedRLTrainer - INFO - [SEED RL] 评估@139774: 胜率=0.000, 平均收益=-902.30, 无效下注率=0.000
+2026-04-19 18:30:22,466 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @139774
+2026-04-19 18:30:22,864 - SeedRLTrainer - INFO - [SEED RL] 评估@139975: 胜率=0.000, 平均收益=-868.20, 无效下注率=0.000
+2026-04-19 18:30:23,054 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_140086
+2026-04-19 18:30:23,386 - SeedRLTrainer - INFO - [SEED RL] 评估@140175: 胜率=0.000, 平均收益=-903.60, 无效下注率=0.000
+2026-04-19 18:30:23,812 - SeedRLTrainer - INFO - [SEED RL] 评估@140401: 胜率=0.000, 平均收益=-830.40, 无效下注率=0.000
+2026-04-19 18:30:24,242 - SeedRLTrainer - INFO - [SEED RL] 评估@140618: 胜率=0.000, 平均收益=-868.60, 无效下注率=0.000
+2026-04-19 18:30:24,436 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @140780
+2026-04-19 18:30:24,741 - SeedRLTrainer - INFO - [SEED RL] 评估@140839: 胜率=0.000, 平均收益=-869.55, 无效下注率=0.000
+2026-04-19 18:30:25,165 - SeedRLTrainer - INFO - [SEED RL] 评估@141067: 胜率=0.000, 平均收益=-869.50, 无效下注率=0.000
+2026-04-19 18:30:25,574 - SeedRLTrainer - INFO - [SEED RL] 评估@141288: 胜率=0.000, 平均收益=-853.35, 无效下注率=0.000
+2026-04-19 18:30:25,985 - SeedRLTrainer - INFO - [SEED RL] 评估@141498: 胜率=0.000, 平均收益=-830.80, 无效下注率=0.000
+2026-04-19 18:30:26,398 - SeedRLTrainer - INFO - [SEED RL] 评估@141714: 胜率=0.010, 平均收益=-826.70, 无效下注率=0.000
+2026-04-19 18:30:26,520 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @141780
+2026-04-19 18:30:26,862 - SeedRLTrainer - INFO - [SEED RL] 评估@141929: 胜率=0.010, 平均收益=-788.20, 无效下注率=0.000
+2026-04-19 18:30:27,268 - SeedRLTrainer - INFO - [SEED RL] 评估@142162: 胜率=0.000, 平均收益=-906.90, 无效下注率=0.000
+2026-04-19 18:30:27,661 - SeedRLTrainer - INFO - [SEED RL] 评估@142362: 胜率=0.010, 平均收益=-842.55, 无效下注率=0.000
+2026-04-19 18:30:28,083 - SeedRLTrainer - INFO - [SEED RL] 评估@142590: 胜率=0.000, 平均收益=-819.15, 无效下注率=0.000
+2026-04-19 18:30:28,479 - SeedRLTrainer - INFO - [SEED RL] 评估@142791: 胜率=0.000, 平均收益=-853.65, 无效下注率=0.000
+2026-04-19 18:30:28,547 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @142791
+2026-04-19 18:30:28,960 - SeedRLTrainer - INFO - [SEED RL] 评估@143011: 胜率=0.010, 平均收益=-847.80, 无效下注率=0.000
+2026-04-19 18:30:29,365 - SeedRLTrainer - INFO - [SEED RL] 评估@143241: 胜率=0.000, 平均收益=-790.95, 无效下注率=0.000
+2026-04-19 18:30:29,801 - SeedRLTrainer - INFO - [SEED RL] 评估@143467: 胜率=0.000, 平均收益=-791.10, 无效下注率=0.000
+2026-04-19 18:30:30,228 - SeedRLTrainer - INFO - [SEED RL] 评估@143694: 胜率=0.000, 平均收益=-892.10, 无效下注率=0.000
+2026-04-19 18:30:30,374 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @143803
+2026-04-19 18:30:30,692 - SeedRLTrainer - INFO - [SEED RL] 评估@143923: 胜率=0.010, 平均收益=-809.55, 无效下注率=0.000
+2026-04-19 18:30:31,080 - SeedRLTrainer - INFO - [SEED RL] 评估@144149: 胜率=0.000, 平均收益=-911.50, 无效下注率=0.000
+2026-04-19 18:30:31,503 - SeedRLTrainer - INFO - [SEED RL] 评估@144372: 胜率=0.010, 平均收益=-903.90, 无效下注率=0.000
+2026-04-19 18:30:31,886 - SeedRLTrainer - INFO - [SEED RL] 评估@144575: 胜率=0.010, 平均收益=-830.65, 无效下注率=0.000
+2026-04-19 18:30:32,280 - SeedRLTrainer - INFO - [SEED RL] 评估@144793: 胜率=0.010, 平均收益=-812.20, 无效下注率=0.000
+2026-04-19 18:30:32,375 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @144820
+2026-04-19 18:30:32,767 - SeedRLTrainer - INFO - [SEED RL] 评估@144995: 胜率=0.000, 平均收益=-824.10, 无效下注率=0.000
+2026-04-19 18:30:33,159 - SeedRLTrainer - INFO - [SEED RL] 评估@145209: 胜率=0.000, 平均收益=-874.40, 无效下注率=0.000
+2026-04-19 18:30:33,552 - SeedRLTrainer - INFO - [SEED RL] 评估@145424: 胜率=0.000, 平均收益=-863.80, 无效下注率=0.000
+2026-04-19 18:30:33,960 - SeedRLTrainer - INFO - [SEED RL] 评估@145648: 胜率=0.000, 平均收益=-843.30, 无效下注率=0.000
+2026-04-19 18:30:34,161 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @145821
+2026-04-19 18:30:34,208 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:30:34,272 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.493838, returns_mean=-0.4332
+2026-04-19 18:30:35,074 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.865s, batches=60, actor_loss=-0.042224, critic_loss=0.962993, KL=0.021796
+2026-04-19 18:30:35,074 - SeedRLTrainer - INFO - [SEED RL] hands=145842/200000, PPO更新#22, loss=0.460384, 速度=198.3 hands/s
+2026-04-19 18:30:35,354 - SeedRLTrainer - INFO - [SEED RL] 评估@145887: 胜率=0.000, 平均收益=-854.50, 无效下注率=0.000
+2026-04-19 18:30:35,754 - SeedRLTrainer - INFO - [SEED RL] 评估@146119: 胜率=0.000, 平均收益=-837.10, 无效下注率=0.000
+2026-04-19 18:30:42,348 - SeedRLTrainer - INFO - [SEED RL] 评估@146320: 胜率=0.000, 平均收益=-861.95, 无效下注率=0.000
+2026-04-19 18:30:42,780 - SeedRLTrainer - INFO - [SEED RL] 评估@146521: 胜率=0.000, 平均收益=-822.70, 无效下注率=0.000
+2026-04-19 18:30:43,186 - SeedRLTrainer - INFO - [SEED RL] 评估@146740: 胜率=0.010, 平均收益=-837.80, 无效下注率=0.000
+2026-04-19 18:30:43,336 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @146842
+2026-04-19 18:30:43,663 - SeedRLTrainer - INFO - [SEED RL] 评估@146952: 胜率=0.000, 平均收益=-881.90, 无效下注率=0.000
+2026-04-19 18:30:44,084 - SeedRLTrainer - INFO - [SEED RL] 评估@147162: 胜率=0.000, 平均收益=-857.10, 无效下注率=0.000
+2026-04-19 18:30:44,507 - SeedRLTrainer - INFO - [SEED RL] 评估@147380: 胜率=0.000, 平均收益=-855.85, 无效下注率=0.000
+2026-04-19 18:30:44,952 - SeedRLTrainer - INFO - [SEED RL] 评估@147610: 胜率=0.000, 平均收益=-893.30, 无效下注率=0.000
+2026-04-19 18:30:45,358 - SeedRLTrainer - INFO - [SEED RL] 评估@147829: 胜率=0.000, 平均收益=-789.75, 无效下注率=0.000
+2026-04-19 18:30:45,454 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @147878
+2026-04-19 18:30:45,846 - SeedRLTrainer - INFO - [SEED RL] 评估@148055: 胜率=0.000, 平均收益=-860.90, 无效下注率=0.000
+2026-04-19 18:30:46,259 - SeedRLTrainer - INFO - [SEED RL] 评估@148257: 胜率=0.010, 平均收益=-865.45, 无效下注率=0.000
+2026-04-19 18:30:46,695 - SeedRLTrainer - INFO - [SEED RL] 评估@148486: 胜率=0.010, 平均收益=-837.70, 无效下注率=0.000
+2026-04-19 18:30:47,106 - SeedRLTrainer - INFO - [SEED RL] 评估@148700: 胜率=0.000, 平均收益=-837.90, 无效下注率=0.000
+2026-04-19 18:30:47,307 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @148880
+2026-04-19 18:30:47,574 - SeedRLTrainer - INFO - [SEED RL] 评估@148904: 胜率=0.000, 平均收益=-808.60, 无效下注率=0.000
+2026-04-19 18:30:47,977 - SeedRLTrainer - INFO - [SEED RL] 评估@149133: 胜率=0.000, 平均收益=-840.10, 无效下注率=0.000
+2026-04-19 18:30:48,378 - SeedRLTrainer - INFO - [SEED RL] 评估@149347: 胜率=0.000, 平均收益=-829.20, 无效下注率=0.000
+2026-04-19 18:30:48,792 - SeedRLTrainer - INFO - [SEED RL] 评估@149567: 胜率=0.000, 平均收益=-901.80, 无效下注率=0.000
+2026-04-19 18:30:49,185 - SeedRLTrainer - INFO - [SEED RL] 评估@149776: 胜率=0.000, 平均收益=-906.90, 无效下注率=0.000
+2026-04-19 18:30:49,334 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @149899
+2026-04-19 18:30:49,646 - SeedRLTrainer - INFO - [SEED RL] 评估@149983: 胜率=0.000, 平均收益=-822.10, 无效下注率=0.000
+2026-04-19 18:30:50,052 - SeedRLTrainer - INFO - [SEED RL] 评估@150216: 胜率=0.000, 平均收益=-811.80, 无效下注率=0.000
+2026-04-19 18:30:50,445 - SeedRLTrainer - INFO - [SEED RL] 评估@150422: 胜率=0.000, 平均收益=-836.75, 无效下注率=0.000
+2026-04-19 18:30:50,863 - SeedRLTrainer - INFO - [SEED RL] 评估@150648: 胜率=0.000, 平均收益=-875.30, 无效下注率=0.000
+2026-04-19 18:30:51,263 - SeedRLTrainer - INFO - [SEED RL] 评估@150871: 胜率=0.000, 平均收益=-852.80, 无效下注率=0.000
+2026-04-19 18:30:51,358 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @150920
+2026-04-19 18:30:51,728 - SeedRLTrainer - INFO - [SEED RL] 评估@151100: 胜率=0.000, 平均收益=-801.10, 无效下注率=0.000
+2026-04-19 18:30:52,153 - SeedRLTrainer - INFO - [SEED RL] 评估@151318: 胜率=0.000, 平均收益=-891.70, 无效下注率=0.000
+2026-04-19 18:30:52,571 - SeedRLTrainer - INFO - [SEED RL] 评估@151533: 胜率=0.000, 平均收益=-831.40, 无效下注率=0.000
+2026-04-19 18:30:52,970 - SeedRLTrainer - INFO - [SEED RL] 评估@151762: 胜率=0.000, 平均收益=-891.20, 无效下注率=0.000
+2026-04-19 18:30:53,170 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @151941
+2026-04-19 18:30:53,434 - SeedRLTrainer - INFO - [SEED RL] 评估@151994: 胜率=0.000, 平均收益=-844.10, 无效下注率=0.000
+2026-04-19 18:30:53,829 - SeedRLTrainer - INFO - [SEED RL] 评估@152210: 胜率=0.000, 平均收益=-814.40, 无效下注率=0.000
+2026-04-19 18:30:53,978 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:30:54,041 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.406360, returns_mean=-0.4528
+2026-04-19 18:30:54,835 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.856s, batches=60, actor_loss=-0.047639, critic_loss=0.959133, KL=0.014840
+2026-04-19 18:30:54,835 - SeedRLTrainer - INFO - [SEED RL] hands=152398/200000, PPO更新#23, loss=0.455747, 速度=201.8 hands/s
+2026-04-19 18:30:55,098 - SeedRLTrainer - INFO - [SEED RL] 评估@152451: 胜率=0.000, 平均收益=-879.40, 无效下注率=0.000
+2026-04-19 18:30:55,501 - SeedRLTrainer - INFO - [SEED RL] 评估@152667: 胜率=0.000, 平均收益=-858.95, 无效下注率=0.000
+2026-04-19 18:30:55,911 - SeedRLTrainer - INFO - [SEED RL] 评估@152900: 胜率=0.000, 平均收益=-866.20, 无效下注率=0.000
+2026-04-19 18:30:56,010 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @152948
+2026-04-19 18:30:56,412 - SeedRLTrainer - INFO - [SEED RL] 评估@153136: 胜率=0.000, 平均收益=-794.90, 无效下注率=0.000
+2026-04-19 18:30:56,808 - SeedRLTrainer - INFO - [SEED RL] 评估@153347: 胜率=0.000, 平均收益=-830.65, 无效下注率=0.000
+2026-04-19 18:30:57,226 - SeedRLTrainer - INFO - [SEED RL] 评估@153560: 胜率=0.000, 平均收益=-818.25, 无效下注率=0.000
+2026-04-19 18:30:57,651 - SeedRLTrainer - INFO - [SEED RL] 评估@153803: 胜率=0.000, 平均收益=-817.50, 无效下注率=0.000
+2026-04-19 18:30:57,824 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @153950
+2026-04-19 18:30:58,115 - SeedRLTrainer - INFO - [SEED RL] 评估@154015: 胜率=0.010, 平均收益=-867.35, 无效下注率=0.000
+2026-04-19 18:30:58,520 - SeedRLTrainer - INFO - [SEED RL] 评估@154250: 胜率=0.000, 平均收益=-847.20, 无效下注率=0.000
+2026-04-19 18:30:58,945 - SeedRLTrainer - INFO - [SEED RL] 评估@154482: 胜率=0.010, 平均收益=-809.10, 无效下注率=0.000
+2026-04-19 18:30:59,348 - SeedRLTrainer - INFO - [SEED RL] 评估@154691: 胜率=0.000, 平均收益=-861.85, 无效下注率=0.000
+2026-04-19 18:30:59,768 - SeedRLTrainer - INFO - [SEED RL] 评估@154918: 胜率=0.010, 平均收益=-789.75, 无效下注率=0.000
+2026-04-19 18:30:59,864 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @154967
+2026-04-19 18:31:00,242 - SeedRLTrainer - INFO - [SEED RL] 评估@155125: 胜率=0.000, 平均收益=-861.60, 无效下注率=0.000
+2026-04-19 18:31:00,640 - SeedRLTrainer - INFO - [SEED RL] 评估@155357: 胜率=0.000, 平均收益=-811.60, 无效下注率=0.000
+2026-04-19 18:31:01,038 - SeedRLTrainer - INFO - [SEED RL] 评估@155570: 胜率=0.000, 平均收益=-910.30, 无效下注率=0.000
+2026-04-19 18:31:01,458 - SeedRLTrainer - INFO - [SEED RL] 评估@155799: 胜率=0.000, 平均收益=-871.55, 无效下注率=0.000
+2026-04-19 18:31:01,656 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @155993
+2026-04-19 18:31:01,931 - SeedRLTrainer - INFO - [SEED RL] 评估@156029: 胜率=0.000, 平均收益=-842.30, 无效下注率=0.000
+2026-04-19 18:31:02,335 - SeedRLTrainer - INFO - [SEED RL] 评估@156248: 胜率=0.000, 平均收益=-849.30, 无效下注率=0.000
+2026-04-19 18:31:02,736 - SeedRLTrainer - INFO - [SEED RL] 评估@156471: 胜率=0.000, 平均收益=-907.40, 无效下注率=0.000
+2026-04-19 18:31:03,141 - SeedRLTrainer - INFO - [SEED RL] 评估@156721: 胜率=0.010, 平均收益=-831.45, 无效下注率=0.000
+2026-04-19 18:31:03,544 - SeedRLTrainer - INFO - [SEED RL] 评估@156941: 胜率=0.000, 平均收益=-834.00, 无效下注率=0.000
+2026-04-19 18:31:03,660 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @157019
+2026-04-19 18:31:04,014 - SeedRLTrainer - INFO - [SEED RL] 评估@157164: 胜率=0.000, 平均收益=-810.60, 无效下注率=0.000
+2026-04-19 18:31:04,398 - SeedRLTrainer - INFO - [SEED RL] 评估@157365: 胜率=0.000, 平均收益=-852.50, 无效下注率=0.000
+2026-04-19 18:31:04,791 - SeedRLTrainer - INFO - [SEED RL] 评估@157566: 胜率=0.010, 平均收益=-841.55, 无效下注率=0.000
+2026-04-19 18:31:05,182 - SeedRLTrainer - INFO - [SEED RL] 评估@157785: 胜率=0.000, 平均收益=-896.30, 无效下注率=0.000
+2026-04-19 18:31:05,577 - SeedRLTrainer - INFO - [SEED RL] 评估@157988: 胜率=0.010, 平均收益=-786.95, 无效下注率=0.000
+2026-04-19 18:31:05,673 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @158025
+2026-04-19 18:31:06,052 - SeedRLTrainer - INFO - [SEED RL] 评估@158197: 胜率=0.000, 平均收益=-812.40, 无效下注率=0.000
+2026-04-19 18:31:06,459 - SeedRLTrainer - INFO - [SEED RL] 评估@158401: 胜率=0.000, 平均收益=-878.60, 无效下注率=0.000
+2026-04-19 18:31:06,894 - SeedRLTrainer - INFO - [SEED RL] 评估@158630: 胜率=0.010, 平均收益=-867.05, 无效下注率=0.000
+2026-04-19 18:31:07,327 - SeedRLTrainer - INFO - [SEED RL] 评估@158841: 胜率=0.000, 平均收益=-830.30, 无效下注率=0.000
+2026-04-19 18:31:07,530 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @159039
+2026-04-19 18:31:07,802 - SeedRLTrainer - INFO - [SEED RL] 评估@159087: 胜率=0.000, 平均收益=-807.45, 无效下注率=0.000
+2026-04-19 18:31:07,875 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:31:07,938 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.450546, returns_mean=-0.4233
+2026-04-19 18:31:08,732 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.856s, batches=60, actor_loss=-0.043960, critic_loss=0.958099, KL=0.021457
+2026-04-19 18:31:08,732 - SeedRLTrainer - INFO - [SEED RL] hands=159137/200000, PPO更新#24, loss=0.457070, 速度=206.9 hands/s
+2026-04-19 18:31:09,086 - SeedRLTrainer - INFO - [SEED RL] 评估@159318: 胜率=0.010, 平均收益=-796.90, 无效下注率=0.000
+2026-04-19 18:31:09,507 - SeedRLTrainer - INFO - [SEED RL] 评估@159527: 胜率=0.000, 平均收益=-836.60, 无效下注率=0.000
+2026-04-19 18:31:09,905 - SeedRLTrainer - INFO - [SEED RL] 评估@159734: 胜率=0.000, 平均收益=-811.20, 无效下注率=0.000
+2026-04-19 18:31:10,290 - SeedRLTrainer - INFO - [SEED RL] 评估@159960: 胜率=0.000, 平均收益=-844.90, 无效下注率=0.000
+2026-04-19 18:31:10,440 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @160067
+2026-04-19 18:31:10,585 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_160105
+2026-04-19 18:31:10,874 - SeedRLTrainer - INFO - [SEED RL] 评估@160181: 胜率=0.010, 平均收益=-822.30, 无效下注率=0.000
+2026-04-19 18:31:11,265 - SeedRLTrainer - INFO - [SEED RL] 评估@160383: 胜率=0.000, 平均收益=-849.60, 无效下注率=0.000
+2026-04-19 18:31:11,688 - SeedRLTrainer - INFO - [SEED RL] 评估@160597: 胜率=0.000, 平均收益=-867.55, 无效下注率=0.000
+2026-04-19 18:31:12,082 - SeedRLTrainer - INFO - [SEED RL] 评估@160810: 胜率=0.000, 平均收益=-889.90, 无效下注率=0.000
+2026-04-19 18:31:12,466 - SeedRLTrainer - INFO - [SEED RL] 评估@161013: 胜率=0.000, 平均收益=-858.00, 无效下注率=0.000
+2026-04-19 18:31:12,580 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @161079
+2026-04-19 18:31:12,934 - SeedRLTrainer - INFO - [SEED RL] 评估@161222: 胜率=0.000, 平均收益=-836.10, 无效下注率=0.000
+2026-04-19 18:31:13,336 - SeedRLTrainer - INFO - [SEED RL] 评估@161423: 胜率=0.000, 平均收益=-900.30, 无效下注率=0.000
+2026-04-19 18:31:13,739 - SeedRLTrainer - INFO - [SEED RL] 评估@161623: 胜率=0.000, 平均收益=-852.90, 无效下注率=0.000
+2026-04-19 18:31:14,171 - SeedRLTrainer - INFO - [SEED RL] 评估@161860: 胜率=0.000, 平均收益=-830.30, 无效下注率=0.000
+2026-04-19 18:31:14,585 - SeedRLTrainer - INFO - [SEED RL] 评估@162065: 胜率=0.000, 平均收益=-811.50, 无效下注率=0.000
+2026-04-19 18:31:14,679 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @162092
+2026-04-19 18:31:15,050 - SeedRLTrainer - INFO - [SEED RL] 评估@162266: 胜率=0.000, 平均收益=-816.65, 无效下注率=0.000
+2026-04-19 18:31:15,463 - SeedRLTrainer - INFO - [SEED RL] 评估@162467: 胜率=0.000, 平均收益=-814.25, 无效下注率=0.000
+2026-04-19 18:31:15,885 - SeedRLTrainer - INFO - [SEED RL] 评估@162672: 胜率=0.000, 平均收益=-840.25, 无效下注率=0.000
+2026-04-19 18:31:16,304 - SeedRLTrainer - INFO - [SEED RL] 评估@162876: 胜率=0.000, 平均收益=-883.15, 无效下注率=0.000
+2026-04-19 18:31:16,702 - SeedRLTrainer - INFO - [SEED RL] 评估@163086: 胜率=0.000, 平均收益=-851.60, 无效下注率=0.000
+2026-04-19 18:31:16,798 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @163130
+2026-04-19 18:31:17,187 - SeedRLTrainer - INFO - [SEED RL] 评估@163289: 胜率=0.000, 平均收益=-783.95, 无效下注率=0.000
+2026-04-19 18:31:17,588 - SeedRLTrainer - INFO - [SEED RL] 评估@163510: 胜率=0.000, 平均收益=-840.20, 无效下注率=0.000
+2026-04-19 18:31:17,991 - SeedRLTrainer - INFO - [SEED RL] 评估@163717: 胜率=0.000, 平均收益=-858.70, 无效下注率=0.000
+2026-04-19 18:31:18,426 - SeedRLTrainer - INFO - [SEED RL] 评估@163949: 胜率=0.000, 平均收益=-847.75, 无效下注率=0.000
+2026-04-19 18:31:18,831 - SeedRLTrainer - INFO - [SEED RL] 评估@164153: 胜率=0.000, 平均收益=-830.00, 无效下注率=0.000
+2026-04-19 18:31:18,899 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @164153
+2026-04-19 18:31:19,298 - SeedRLTrainer - INFO - [SEED RL] 评估@164378: 胜率=0.000, 平均收益=-864.90, 无效下注率=0.000
+2026-04-19 18:31:19,710 - SeedRLTrainer - INFO - [SEED RL] 评估@164588: 胜率=0.000, 平均收益=-797.85, 无效下注率=0.000
+2026-04-19 18:31:20,110 - SeedRLTrainer - INFO - [SEED RL] 评估@164795: 胜率=0.000, 平均收益=-918.15, 无效下注率=0.000
+2026-04-19 18:31:20,566 - SeedRLTrainer - INFO - [SEED RL] 评估@165015: 胜率=0.000, 平均收益=-887.10, 无效下注率=0.000
+2026-04-19 18:31:20,742 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @165160
+2026-04-19 18:31:21,029 - SeedRLTrainer - INFO - [SEED RL] 评估@165235: 胜率=0.000, 平均收益=-819.60, 无效下注率=0.000
+2026-04-19 18:31:21,445 - SeedRLTrainer - INFO - [SEED RL] 评估@165441: 胜率=0.010, 平均收益=-801.65, 无效下注率=0.000
+2026-04-19 18:31:21,493 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:31:21,556 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.447076, returns_mean=-0.4196
+2026-04-19 18:31:22,351 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.858s, batches=60, actor_loss=-0.054041, critic_loss=0.955369, KL=0.013576
+2026-04-19 18:31:22,351 - SeedRLTrainer - INFO - [SEED RL] hands=165445/200000, PPO更新#25, loss=0.450664, 速度=211.3 hands/s
+2026-04-19 18:31:22,727 - SeedRLTrainer - INFO - [SEED RL] 评估@165649: 胜率=0.010, 平均收益=-862.40, 无效下注率=0.000
+2026-04-19 18:31:23,103 - SeedRLTrainer - INFO - [SEED RL] 评估@165856: 胜率=0.000, 平均收益=-844.85, 无效下注率=0.000
+2026-04-19 18:31:23,532 - SeedRLTrainer - INFO - [SEED RL] 评估@166105: 胜率=0.000, 平均收益=-832.00, 无效下注率=0.000
+2026-04-19 18:31:23,653 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @166171
+2026-04-19 18:31:24,035 - SeedRLTrainer - INFO - [SEED RL] 评估@166334: 胜率=0.000, 平均收益=-823.90, 无效下注率=0.000
+2026-04-19 18:31:24,430 - SeedRLTrainer - INFO - [SEED RL] 评估@166546: 胜率=0.000, 平均收益=-820.70, 无效下注率=0.000
+2026-04-19 18:31:24,832 - SeedRLTrainer - INFO - [SEED RL] 评估@166754: 胜率=0.000, 平均收益=-788.45, 无效下注率=0.000
+2026-04-19 18:31:25,233 - SeedRLTrainer - INFO - [SEED RL] 评估@166961: 胜率=0.000, 平均收益=-834.60, 无效下注率=0.000
+2026-04-19 18:31:25,637 - SeedRLTrainer - INFO - [SEED RL] 评估@167187: 胜率=0.010, 平均收益=-866.75, 无效下注率=0.000
+2026-04-19 18:31:25,706 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @167187
+2026-04-19 18:31:26,126 - SeedRLTrainer - INFO - [SEED RL] 评估@167422: 胜率=0.000, 平均收益=-883.20, 无效下注率=0.000
+2026-04-19 18:31:26,515 - SeedRLTrainer - INFO - [SEED RL] 评估@167625: 胜率=0.000, 平均收益=-855.30, 无效下注率=0.000
+2026-04-19 18:31:26,916 - SeedRLTrainer - INFO - [SEED RL] 评估@167842: 胜率=0.000, 平均收益=-901.70, 无效下注率=0.000
+2026-04-19 18:31:27,309 - SeedRLTrainer - INFO - [SEED RL] 评估@168070: 胜率=0.000, 平均收益=-868.00, 无效下注率=0.000
+2026-04-19 18:31:27,457 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @168192
+2026-04-19 18:31:27,780 - SeedRLTrainer - INFO - [SEED RL] 评估@168281: 胜率=0.000, 平均收益=-821.25, 无效下注率=0.000
+2026-04-19 18:31:28,146 - SeedRLTrainer - INFO - [SEED RL] 评估@168485: 胜率=0.000, 平均收益=-840.30, 无效下注率=0.000
+2026-04-19 18:31:28,542 - SeedRLTrainer - INFO - [SEED RL] 评估@168704: 胜率=0.000, 平均收益=-807.65, 无效下注率=0.000
+2026-04-19 18:31:28,939 - SeedRLTrainer - INFO - [SEED RL] 评估@168922: 胜率=0.000, 平均收益=-875.20, 无效下注率=0.000
+2026-04-19 18:31:29,361 - SeedRLTrainer - INFO - [SEED RL] 评估@169140: 胜率=0.000, 平均收益=-850.40, 无效下注率=0.000
+2026-04-19 18:31:29,482 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @169222
+2026-04-19 18:31:29,842 - SeedRLTrainer - INFO - [SEED RL] 评估@169360: 胜率=0.000, 平均收益=-854.00, 无效下注率=0.000
+2026-04-19 18:31:30,225 - SeedRLTrainer - INFO - [SEED RL] 评估@169575: 胜率=0.000, 平均收益=-856.60, 无效下注率=0.000
+2026-04-19 18:31:30,630 - SeedRLTrainer - INFO - [SEED RL] 评估@169802: 胜率=0.000, 平均收益=-793.70, 无效下注率=0.000
+2026-04-19 18:31:31,017 - SeedRLTrainer - INFO - [SEED RL] 评估@170014: 胜率=0.000, 平均收益=-893.80, 无效下注率=0.000
+2026-04-19 18:31:31,418 - SeedRLTrainer - INFO - [SEED RL] 评估@170244: 胜率=0.010, 平均收益=-834.95, 无效下注率=0.000
+2026-04-19 18:31:31,484 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @170244
+2026-04-19 18:31:31,894 - SeedRLTrainer - INFO - [SEED RL] 评估@170466: 胜率=0.000, 平均收益=-868.00, 无效下注率=0.000
+2026-04-19 18:31:32,310 - SeedRLTrainer - INFO - [SEED RL] 评估@170666: 胜率=0.000, 平均收益=-848.90, 无效下注率=0.000
+2026-04-19 18:31:32,703 - SeedRLTrainer - INFO - [SEED RL] 评估@170883: 胜率=0.000, 平均收益=-823.20, 无效下注率=0.000
+2026-04-19 18:31:33,096 - SeedRLTrainer - INFO - [SEED RL] 评估@171121: 胜率=0.010, 平均收益=-847.30, 无效下注率=0.000
+2026-04-19 18:31:33,271 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @171282
+2026-04-19 18:31:33,544 - SeedRLTrainer - INFO - [SEED RL] 评估@171324: 胜率=0.010, 平均收益=-826.00, 无效下注率=0.000
+2026-04-19 18:31:33,965 - SeedRLTrainer - INFO - [SEED RL] 评估@171533: 胜率=0.000, 平均收益=-851.50, 无效下注率=0.000
+2026-04-19 18:31:34,366 - SeedRLTrainer - INFO - [SEED RL] 评估@171752: 胜率=0.010, 平均收益=-896.45, 无效下注率=0.000
+2026-04-19 18:31:34,764 - SeedRLTrainer - INFO - [SEED RL] 评估@171982: 胜率=0.000, 平均收益=-865.70, 无效下注率=0.000
+2026-04-19 18:31:34,913 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=4096, epochs=15
+2026-04-19 18:31:34,976 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.496942, returns_mean=-0.4758
+2026-04-19 18:31:35,765 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.852s, batches=60, actor_loss=-0.051562, critic_loss=0.957068, KL=0.014834
+2026-04-19 18:31:35,765 - SeedRLTrainer - INFO - [SEED RL] hands=172143/200000, PPO更新#26, loss=0.452753, 速度=216.2 hands/s
+2026-04-19 18:31:36,053 - SeedRLTrainer - INFO - [SEED RL] 评估@172210: 胜率=0.000, 平均收益=-837.65, 无效下注率=0.000
+2026-04-19 18:31:36,203 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @172303
+2026-04-19 18:31:36,521 - SeedRLTrainer - INFO - [SEED RL] 评估@172413: 胜率=0.000, 平均收益=-881.55, 无效下注率=0.000
+2026-04-19 18:31:36,915 - SeedRLTrainer - INFO - [SEED RL] 评估@172629: 胜率=0.000, 平均收益=-802.05, 无效下注率=0.000
+2026-04-19 18:31:37,322 - SeedRLTrainer - INFO - [SEED RL] 评估@172835: 胜率=0.000, 平均收益=-823.90, 无效下注率=0.000
+2026-04-19 18:31:37,741 - SeedRLTrainer - INFO - [SEED RL] 评估@173054: 胜率=0.000, 平均收益=-838.60, 无效下注率=0.000
+2026-04-19 18:31:38,144 - SeedRLTrainer - INFO - [SEED RL] 评估@173261: 胜率=0.010, 平均收益=-838.20, 无效下注率=0.000
+2026-04-19 18:31:38,264 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @173320
+2026-04-19 18:31:38,626 - SeedRLTrainer - INFO - [SEED RL] 评估@173475: 胜率=0.000, 平均收益=-810.80, 无效下注率=0.000
+2026-04-19 18:31:39,038 - SeedRLTrainer - INFO - [SEED RL] 评估@173686: 胜率=0.000, 平均收益=-855.25, 无效下注率=0.000
+2026-04-19 18:31:39,429 - SeedRLTrainer - INFO - [SEED RL] 评估@173922: 胜率=0.000, 平均收益=-876.30, 无效下注率=0.000
+2026-04-19 18:31:39,819 - SeedRLTrainer - INFO - [SEED RL] 评估@174154: 胜率=0.000, 平均收益=-850.10, 无效下注率=0.000
+2026-04-19 18:31:41,387 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @174328
+2026-04-19 18:31:41,632 - SeedRLTrainer - INFO - [SEED RL] 评估@174364: 胜率=0.000, 平均收益=-848.60, 无效下注率=0.000
+2026-04-19 18:31:42,043 - SeedRLTrainer - INFO - [SEED RL] 评估@174573: 胜率=0.000, 平均收益=-814.30, 无效下注率=0.000
+2026-04-19 18:31:42,469 - SeedRLTrainer - INFO - [SEED RL] 评估@174789: 胜率=0.000, 平均收益=-781.70, 无效下注率=0.000
+2026-04-19 18:31:42,882 - SeedRLTrainer - INFO - [SEED RL] 评估@174989: 胜率=0.000, 平均收益=-869.90, 无效下注率=0.000
+2026-04-19 18:31:43,248 - SeedRLTrainer - INFO - [SEED RL] 评估@175189: 胜率=0.000, 平均收益=-792.00, 无效下注率=0.000
+2026-04-19 18:31:43,423 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @175330
+2026-04-19 18:31:43,706 - SeedRLTrainer - INFO - [SEED RL] 评估@175407: 胜率=0.000, 平均收益=-857.90, 无效下注率=0.000
+2026-04-19 18:31:44,086 - SeedRLTrainer - INFO - [SEED RL] 评估@175607: 胜率=0.000, 平均收益=-822.10, 无效下注率=0.000
+2026-04-19 18:31:44,438 - SeedRLTrainer - INFO - [SEED RL] 评估@175813: 胜率=0.000, 平均收益=-841.50, 无效下注率=0.000
+2026-04-19 18:31:44,837 - SeedRLTrainer - INFO - [SEED RL] 评估@176023: 胜率=0.000, 平均收益=-859.90, 无效下注率=0.000
+2026-04-19 18:31:45,231 - SeedRLTrainer - INFO - [SEED RL] 评估@176252: 胜率=0.000, 平均收益=-914.55, 无效下注率=0.000
+2026-04-19 18:31:45,380 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @176362
+2026-04-19 18:31:45,699 - SeedRLTrainer - INFO - [SEED RL] 评估@176474: 胜率=0.000, 平均收益=-872.30, 无效下注率=0.000
+2026-04-19 18:31:46,118 - SeedRLTrainer - INFO - [SEED RL] 评估@176707: 胜率=0.010, 平均收益=-847.15, 无效下注率=0.000
+2026-04-19 18:31:46,503 - SeedRLTrainer - INFO - [SEED RL] 评估@176940: 胜率=0.000, 平均收益=-865.90, 无效下注率=0.000
+2026-04-19 18:31:46,895 - SeedRLTrainer - INFO - [SEED RL] 评估@177155: 胜率=0.000, 平均收益=-826.40, 无效下注率=0.000
+2026-04-19 18:31:47,298 - SeedRLTrainer - INFO - [SEED RL] 评估@177381: 胜率=0.000, 平均收益=-825.90, 无效下注率=0.000
+2026-04-19 18:31:47,366 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @177381
+2026-04-19 18:31:47,805 - SeedRLTrainer - INFO - [SEED RL] 评估@177590: 胜率=0.000, 平均收益=-832.05, 无效下注率=0.000
+2026-04-19 18:31:48,230 - SeedRLTrainer - INFO - [SEED RL] 评估@177808: 胜率=0.000, 平均收益=-862.60, 无效下注率=0.000
+2026-04-19 18:31:48,629 - SeedRLTrainer - INFO - [SEED RL] 评估@178029: 胜率=0.000, 平均收益=-810.80, 无效下注率=0.000
+2026-04-19 18:31:49,005 - SeedRLTrainer - INFO - [SEED RL] 评估@178232: 胜率=0.000, 平均收益=-876.10, 无效下注率=0.000
+2026-04-19 18:31:49,206 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @178389
+2026-04-19 18:31:49,470 - SeedRLTrainer - INFO - [SEED RL] 评估@178436: 胜率=0.000, 平均收益=-786.50, 无效下注率=0.000
+2026-04-19 18:31:49,912 - SeedRLTrainer - INFO - [SEED RL] 评估@178654: 胜率=0.020, 平均收益=-847.35, 无效下注率=0.000
+2026-04-19 18:31:50,034 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 18:31:50,110 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=3.490986, returns_mean=-0.4926
+2026-04-19 18:31:50,180 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.019517 > target=5.0
+2026-04-19 18:31:50,180 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.146s, batches=5, actor_loss=0.092191, critic_loss=0.878592, KL=20.019517
+2026-04-19 18:31:50,180 - SeedRLTrainer - INFO - [SEED RL] hands=178777/200000, PPO更新#27, loss=0.485392, 速度=220.5 hands/s
+2026-04-19 18:31:50,493 - SeedRLTrainer - INFO - [SEED RL] 评估@178861: 胜率=0.000, 平均收益=-854.60, 无效下注率=0.000
+2026-04-19 18:31:50,904 - SeedRLTrainer - INFO - [SEED RL] 评估@179087: 胜率=0.000, 平均收益=-835.25, 无效下注率=0.000
+2026-04-19 18:31:51,308 - SeedRLTrainer - INFO - [SEED RL] 评估@179298: 胜率=0.010, 平均收益=-816.25, 无效下注率=0.000
+2026-04-19 18:31:51,452 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @179418
+2026-04-19 18:31:51,763 - SeedRLTrainer - INFO - [SEED RL] 评估@179525: 胜率=0.000, 平均收益=-868.20, 无效下注率=0.000
+2026-04-19 18:31:52,168 - SeedRLTrainer - INFO - [SEED RL] 评估@179757: 胜率=0.000, 平均收益=-902.60, 无效下注率=0.000
+2026-04-19 18:31:52,562 - SeedRLTrainer - INFO - [SEED RL] 评估@179985: 胜率=0.010, 平均收益=-891.40, 无效下注率=0.000
+2026-04-19 18:31:52,779 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_180135
+2026-04-19 18:31:53,080 - SeedRLTrainer - INFO - [SEED RL] 评估@180218: 胜率=0.010, 平均收益=-820.05, 无效下注率=0.000
+2026-04-19 18:31:53,467 - SeedRLTrainer - INFO - [SEED RL] 评估@180440: 胜率=0.000, 平均收益=-827.70, 无效下注率=0.000
+2026-04-19 18:31:53,528 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @180440
+2026-04-19 18:31:53,917 - SeedRLTrainer - INFO - [SEED RL] 评估@180657: 胜率=0.000, 平均收益=-879.05, 无效下注率=0.000
+2026-04-19 18:31:54,372 - SeedRLTrainer - INFO - [SEED RL] 评估@180888: 胜率=0.000, 平均收益=-857.75, 无效下注率=0.000
+2026-04-19 18:31:54,770 - SeedRLTrainer - INFO - [SEED RL] 评估@181090: 胜率=0.000, 平均收益=-818.30, 无效下注率=0.000
+2026-04-19 18:31:55,162 - SeedRLTrainer - INFO - [SEED RL] 评估@181303: 胜率=0.010, 平均收益=-849.00, 无效下注率=0.000
+2026-04-19 18:31:55,336 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @181468
+2026-04-19 18:31:55,607 - SeedRLTrainer - INFO - [SEED RL] 评估@181504: 胜率=0.000, 平均收益=-860.80, 无效下注率=0.000
+2026-04-19 18:31:56,016 - SeedRLTrainer - INFO - [SEED RL] 评估@181737: 胜率=0.010, 平均收益=-855.20, 无效下注率=0.000
+2026-04-19 18:31:56,419 - SeedRLTrainer - INFO - [SEED RL] 评估@181962: 胜率=0.000, 平均收益=-863.10, 无效下注率=0.000
+2026-04-19 18:31:56,824 - SeedRLTrainer - INFO - [SEED RL] 评估@182172: 胜率=0.000, 平均收益=-814.50, 无效下注率=0.000
+2026-04-19 18:31:57,221 - SeedRLTrainer - INFO - [SEED RL] 评估@182382: 胜率=0.000, 平均收益=-817.65, 无效下注率=0.000
+2026-04-19 18:31:57,369 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @182477
+2026-04-19 18:31:57,677 - SeedRLTrainer - INFO - [SEED RL] 评估@182606: 胜率=0.000, 平均收益=-865.70, 无效下注率=0.000
+2026-04-19 18:31:58,075 - SeedRLTrainer - INFO - [SEED RL] 评估@182829: 胜率=0.000, 平均收益=-868.65, 无效下注率=0.000
+2026-04-19 18:31:58,469 - SeedRLTrainer - INFO - [SEED RL] 评估@183046: 胜率=0.000, 平均收益=-873.60, 无效下注率=0.000
+2026-04-19 18:31:58,858 - SeedRLTrainer - INFO - [SEED RL] 评估@183276: 胜率=0.000, 平均收益=-810.75, 无效下注率=0.000
+2026-04-19 18:31:59,268 - SeedRLTrainer - INFO - [SEED RL] 评估@183494: 胜率=0.000, 平均收益=-826.90, 无效下注率=0.000
+2026-04-19 18:31:59,337 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @183494
+2026-04-19 18:31:59,729 - SeedRLTrainer - INFO - [SEED RL] 评估@183728: 胜率=0.000, 平均收益=-858.40, 无效下注率=0.000
+2026-04-19 18:32:00,108 - SeedRLTrainer - INFO - [SEED RL] 评估@183964: 胜率=0.000, 平均收益=-808.55, 无效下注率=0.000
+2026-04-19 18:32:00,484 - SeedRLTrainer - INFO - [SEED RL] 评估@184166: 胜率=0.010, 平均收益=-816.10, 无效下注率=0.000
+2026-04-19 18:32:00,867 - SeedRLTrainer - INFO - [SEED RL] 评估@184373: 胜率=0.010, 平均收益=-828.50, 无效下注率=0.000
+2026-04-19 18:32:01,038 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @184521
+2026-04-19 18:32:01,326 - SeedRLTrainer - INFO - [SEED RL] 评估@184603: 胜率=0.000, 平均收益=-848.90, 无效下注率=0.000
+2026-04-19 18:32:01,744 - SeedRLTrainer - INFO - [SEED RL] 评估@184814: 胜率=0.000, 平均收益=-831.60, 无效下注率=0.000
+2026-04-19 18:32:02,153 - SeedRLTrainer - INFO - [SEED RL] 评估@185034: 胜率=0.000, 平均收益=-842.35, 无效下注率=0.000
+2026-04-19 18:32:02,575 - SeedRLTrainer - INFO - [SEED RL] 评估@185239: 胜率=0.000, 平均收益=-852.85, 无效下注率=0.000
+2026-04-19 18:32:02,973 - SeedRLTrainer - INFO - [SEED RL] 评估@185453: 胜率=0.000, 平均收益=-874.20, 无效下注率=0.000
+2026-04-19 18:32:03,093 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @185527
+2026-04-19 18:32:03,193 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=4096, epochs=15
+2026-04-19 18:32:03,268 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.293286, returns_mean=-0.5339
+2026-04-19 18:32:03,336 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.024692 > target=5.0
+2026-04-19 18:32:03,336 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=0.021498, critic_loss=0.812252, KL=20.024692
+2026-04-19 18:32:03,337 - SeedRLTrainer - INFO - [SEED RL] hands=185635/200000, PPO更新#28, loss=0.416875, 速度=225.3 hands/s
+2026-04-19 18:32:03,598 - SeedRLTrainer - INFO - [SEED RL] 评估@185662: 胜率=0.000, 平均收益=-885.90, 无效下注率=0.000
+2026-04-19 18:32:03,953 - SeedRLTrainer - INFO - [SEED RL] 评估@185865: 胜率=0.000, 平均收益=-794.00, 无效下注率=0.000
+2026-04-19 18:32:04,321 - SeedRLTrainer - INFO - [SEED RL] 评估@186067: 胜率=0.000, 平均收益=-849.90, 无效下注率=0.000
+2026-04-19 18:32:04,719 - SeedRLTrainer - INFO - [SEED RL] 评估@186291: 胜率=0.000, 平均收益=-919.55, 无效下注率=0.000
+2026-04-19 18:32:05,110 - SeedRLTrainer - INFO - [SEED RL] 评估@186507: 胜率=0.010, 平均收益=-833.80, 无效下注率=0.000
+2026-04-19 18:32:05,202 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @186546
+2026-04-19 18:32:05,540 - SeedRLTrainer - INFO - [SEED RL] 评估@186708: 胜率=0.010, 平均收益=-870.75, 无效下注率=0.000
+2026-04-19 18:32:05,906 - SeedRLTrainer - INFO - [SEED RL] 评估@186916: 胜率=0.000, 平均收益=-875.90, 无效下注率=0.000
+2026-04-19 18:32:06,297 - SeedRLTrainer - INFO - [SEED RL] 评估@187150: 胜率=0.000, 平均收益=-904.50, 无效下注率=0.000
+2026-04-19 18:32:06,696 - SeedRLTrainer - INFO - [SEED RL] 评估@187360: 胜率=0.010, 平均收益=-846.10, 无效下注率=0.000
+2026-04-19 18:32:06,896 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @187551
+2026-04-19 18:32:07,159 - SeedRLTrainer - INFO - [SEED RL] 评估@187602: 胜率=0.000, 平均收益=-834.80, 无效下注率=0.000
+2026-04-19 18:32:07,578 - SeedRLTrainer - INFO - [SEED RL] 评估@187834: 胜率=0.010, 平均收益=-871.90, 无效下注率=0.000
+2026-04-19 18:32:07,979 - SeedRLTrainer - INFO - [SEED RL] 评估@188066: 胜率=0.000, 平均收益=-912.50, 无效下注率=0.000
+2026-04-19 18:32:08,412 - SeedRLTrainer - INFO - [SEED RL] 评估@188302: 胜率=0.000, 平均收益=-859.85, 无效下注率=0.000
+2026-04-19 18:32:08,778 - SeedRLTrainer - INFO - [SEED RL] 评估@188508: 胜率=0.010, 平均收益=-840.30, 无效下注率=0.000
+2026-04-19 18:32:08,896 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @188594
+2026-04-19 18:32:09,231 - SeedRLTrainer - INFO - [SEED RL] 评估@188717: 胜率=0.000, 平均收益=-819.30, 无效下注率=0.000
+2026-04-19 18:32:09,637 - SeedRLTrainer - INFO - [SEED RL] 评估@188947: 胜率=0.010, 平均收益=-842.90, 无效下注率=0.000
+2026-04-19 18:32:10,045 - SeedRLTrainer - INFO - [SEED RL] 评估@189164: 胜率=0.000, 平均收益=-856.60, 无效下注率=0.000
+2026-04-19 18:32:10,421 - SeedRLTrainer - INFO - [SEED RL] 评估@189368: 胜率=0.000, 平均收益=-887.70, 无效下注率=0.000
+2026-04-19 18:32:10,821 - SeedRLTrainer - INFO - [SEED RL] 评估@189605: 胜率=0.000, 平均收益=-759.15, 无效下注率=0.000
+2026-04-19 18:32:10,889 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @189605
+2026-04-19 18:32:11,272 - SeedRLTrainer - INFO - [SEED RL] 评估@189818: 胜率=0.000, 平均收益=-815.80, 无效下注率=0.000
+2026-04-19 18:32:11,685 - SeedRLTrainer - INFO - [SEED RL] 评估@190053: 胜率=0.000, 平均收益=-847.60, 无效下注率=0.000
+2026-04-19 18:32:12,064 - SeedRLTrainer - INFO - [SEED RL] 评估@190266: 胜率=0.000, 平均收益=-825.40, 无效下注率=0.000
+2026-04-19 18:32:12,483 - SeedRLTrainer - INFO - [SEED RL] 评估@190485: 胜率=0.000, 平均收益=-872.50, 无效下注率=0.000
+2026-04-19 18:32:12,659 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @190629
+2026-04-19 18:32:12,956 - SeedRLTrainer - INFO - [SEED RL] 评估@190695: 胜率=0.000, 平均收益=-881.40, 无效下注率=0.000
+2026-04-19 18:32:13,334 - SeedRLTrainer - INFO - [SEED RL] 评估@190899: 胜率=0.000, 平均收益=-831.20, 无效下注率=0.000
+2026-04-19 18:32:13,748 - SeedRLTrainer - INFO - [SEED RL] 评估@191124: 胜率=0.000, 平均收益=-859.40, 无效下注率=0.000
+2026-04-19 18:32:14,153 - SeedRLTrainer - INFO - [SEED RL] 评估@191358: 胜率=0.000, 平均收益=-874.10, 无效下注率=0.000
+2026-04-19 18:32:14,576 - SeedRLTrainer - INFO - [SEED RL] 评估@191579: 胜率=0.000, 平均收益=-821.60, 无效下注率=0.000
+2026-04-19 18:32:14,699 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @191659
+2026-04-19 18:32:15,050 - SeedRLTrainer - INFO - [SEED RL] 评估@191809: 胜率=0.000, 平均收益=-882.80, 无效下注率=0.000
+2026-04-19 18:32:15,449 - SeedRLTrainer - INFO - [SEED RL] 评估@192040: 胜率=0.000, 平均收益=-865.90, 无效下注率=0.000
+2026-04-19 18:32:15,850 - SeedRLTrainer - INFO - [SEED RL] 评估@192278: 胜率=0.010, 平均收益=-868.85, 无效下注率=0.000
+2026-04-19 18:32:16,243 - SeedRLTrainer - INFO - [SEED RL] 评估@192499: 胜率=0.000, 平均收益=-874.20, 无效下注率=0.000
+2026-04-19 18:32:16,418 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @192663
+2026-04-19 18:32:16,692 - SeedRLTrainer - INFO - [SEED RL] 评估@192703: 胜率=0.020, 平均收益=-833.10, 无效下注率=0.000
+2026-04-19 18:32:16,818 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16387, batch=4096, epochs=15
+2026-04-19 18:32:16,894 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.527590, returns_mean=-0.5231
+2026-04-19 18:32:16,962 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=5, avg_kl=20.016037 > target=5.0
+2026-04-19 18:32:16,962 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.143s, batches=5, actor_loss=-0.287143, critic_loss=1.452515, KL=20.016037
+2026-04-19 18:32:16,962 - SeedRLTrainer - INFO - [SEED RL] hands=192874/200000, PPO更新#29, loss=0.582686, 速度=230.3 hands/s
+2026-04-19 18:32:17,232 - SeedRLTrainer - INFO - [SEED RL] 评估@192904: 胜率=0.000, 平均收益=-865.00, 无效下注率=0.000
+2026-04-19 18:32:17,609 - SeedRLTrainer - INFO - [SEED RL] 评估@193119: 胜率=0.000, 平均收益=-807.40, 无效下注率=0.000
+2026-04-19 18:32:17,964 - SeedRLTrainer - INFO - [SEED RL] 评估@193336: 胜率=0.000, 平均收益=-864.60, 无效下注率=0.000
+2026-04-19 18:32:18,343 - SeedRLTrainer - INFO - [SEED RL] 评估@193544: 胜率=0.000, 平均收益=-839.80, 无效下注率=0.000
+2026-04-19 18:32:18,515 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @193699
+2026-04-19 18:32:18,809 - SeedRLTrainer - INFO - [SEED RL] 评估@193772: 胜率=0.000, 平均收益=-871.90, 无效下注率=0.000
+2026-04-19 18:32:19,193 - SeedRLTrainer - INFO - [SEED RL] 评估@193984: 胜率=0.000, 平均收益=-861.85, 无效下注率=0.000
+2026-04-19 18:32:19,567 - SeedRLTrainer - INFO - [SEED RL] 评估@194190: 胜率=0.000, 平均收益=-840.95, 无效下注率=0.000
+2026-04-19 18:32:19,969 - SeedRLTrainer - INFO - [SEED RL] 评估@194415: 胜率=0.010, 平均收益=-839.50, 无效下注率=0.000
+2026-04-19 18:32:20,344 - SeedRLTrainer - INFO - [SEED RL] 评估@194631: 胜率=0.000, 平均收益=-865.50, 无效下注率=0.000
+2026-04-19 18:32:20,467 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @194710
+2026-04-19 18:32:20,830 - SeedRLTrainer - INFO - [SEED RL] 评估@194858: 胜率=0.000, 平均收益=-855.70, 无效下注率=0.000
+2026-04-19 18:32:21,248 - SeedRLTrainer - INFO - [SEED RL] 评估@195093: 胜率=0.000, 平均收益=-832.65, 无效下注率=0.000
+2026-04-19 18:32:21,645 - SeedRLTrainer - INFO - [SEED RL] 评估@195326: 胜率=0.000, 平均收益=-837.70, 无效下注率=0.000
+2026-04-19 18:32:21,999 - SeedRLTrainer - INFO - [SEED RL] 评估@195526: 胜率=0.000, 平均收益=-885.00, 无效下注率=0.000
+2026-04-19 18:32:22,201 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @195716
+2026-04-19 18:32:22,465 - SeedRLTrainer - INFO - [SEED RL] 评估@195765: 胜率=0.010, 平均收益=-842.15, 无效下注率=0.000
+2026-04-19 18:32:22,874 - SeedRLTrainer - INFO - [SEED RL] 评估@195994: 胜率=0.010, 平均收益=-874.05, 无效下注率=0.000
+2026-04-19 18:32:23,251 - SeedRLTrainer - INFO - [SEED RL] 评估@196211: 胜率=0.000, 平均收益=-846.25, 无效下注率=0.000
+2026-04-19 18:32:23,649 - SeedRLTrainer - INFO - [SEED RL] 评估@196441: 胜率=0.000, 平均收益=-801.10, 无效下注率=0.000
+2026-04-19 18:32:24,041 - SeedRLTrainer - INFO - [SEED RL] 评估@196668: 胜率=0.000, 平均收益=-909.10, 无效下注率=0.000
+2026-04-19 18:32:24,162 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @196751
+2026-04-19 18:32:24,483 - SeedRLTrainer - INFO - [SEED RL] 评估@196868: 胜率=0.000, 平均收益=-829.90, 无效下注率=0.000
+2026-04-19 18:32:24,854 - SeedRLTrainer - INFO - [SEED RL] 评估@197078: 胜率=0.000, 平均收益=-888.90, 无效下注率=0.000
+2026-04-19 18:32:25,254 - SeedRLTrainer - INFO - [SEED RL] 评估@197300: 胜率=0.020, 平均收益=-850.40, 无效下注率=0.000
+2026-04-19 18:32:25,641 - SeedRLTrainer - INFO - [SEED RL] 评估@197523: 胜率=0.010, 平均收益=-872.60, 无效下注率=0.000
+2026-04-19 18:32:26,059 - SeedRLTrainer - INFO - [SEED RL] 评估@197758: 胜率=0.010, 平均收益=-811.70, 无效下注率=0.000
+2026-04-19 18:32:26,135 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @197758
+2026-04-19 18:32:26,521 - SeedRLTrainer - INFO - [SEED RL] 评估@197975: 胜率=0.000, 平均收益=-871.90, 无效下注率=0.000
+2026-04-19 18:32:26,909 - SeedRLTrainer - INFO - [SEED RL] 评估@198176: 胜率=0.000, 平均收益=-900.80, 无效下注率=0.000
+2026-04-19 18:32:27,277 - SeedRLTrainer - INFO - [SEED RL] 评估@198385: 胜率=0.000, 平均收益=-860.05, 无效下注率=0.000
+2026-04-19 18:32:27,697 - SeedRLTrainer - INFO - [SEED RL] 评估@198612: 胜率=0.000, 平均收益=-860.65, 无效下注率=0.000
+2026-04-19 18:32:27,880 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @198772
+2026-04-19 18:32:28,187 - SeedRLTrainer - INFO - [SEED RL] 评估@198826: 胜率=0.010, 平均收益=-876.20, 无效下注率=0.000
+2026-04-19 18:32:28,578 - SeedRLTrainer - INFO - [SEED RL] 评估@199046: 胜率=0.000, 平均收益=-853.50, 无效下注率=0.000
+2026-04-19 18:32:34,287 - SeedRLTrainer - INFO - [SEED RL] 评估@199279: 胜率=0.000, 平均收益=-835.75, 无效下注率=0.000
+2026-04-19 18:32:45,336 - SeedRLTrainer - INFO - [SEED RL] 评估@199493: 胜率=0.000, 平均收益=-898.35, 无效下注率=0.000
+2026-04-19 18:33:11,535 - SeedRLTrainer - INFO - [SEED RL] 评估@199703: 胜率=0.000, 平均收益=-884.25, 无效下注率=0.000
+2026-04-19 18:33:25,708 - SeedRLTrainer - INFO - [SEED RL] 对手权重已更新 @199781
+2026-04-19 18:33:47,948 - SeedRLTrainer - INFO - [SEED RL] 评估@199906: 胜率=0.000, 平均收益=-817.50, 无效下注率=0.000
+2026-04-19 18:34:31,409 - SeedRLTrainer - INFO - [SEED RL] 处理剩余 buffer: 15768 steps
+2026-04-19 18:34:31,427 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=15768, batch=4096, epochs=15
+2026-04-19 18:34:31,491 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=3.718163, returns_mean=-0.4780
+2026-04-19 18:34:31,549 - LargePPOModel - INFO - [LargePPO] KL早停: epoch=0, batch=4, avg_kl=25.014683 > target=5.0
+2026-04-19 18:34:31,550 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.122s, batches=4, actor_loss=-0.021507, critic_loss=1.002096, KL=25.014683
+2026-04-19 18:34:31,550 - SeedRLTrainer - INFO - [SEED RL] 训练完成: 总手牌=200021, 总PPO更新=30, 耗时=972.0s, 速度=205.8 hands/s
+2026-04-19 18:34:31,660 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_200021
+2026-04-19 18:34:31,660 - SeedRLTrainer - INFO - [SEED RL] 最终评估...
+2026-04-19 18:34:31,906 - SeedRLTrainer - INFO - [SEED RL] 最终评估结果: 胜率=0.000, 平均收益=-887.45, 无效下注率=0.000
+2026-04-19 18:34:33,010 - PokerAITrainer - INFO - [SEED RL] 训练完成！总耗时: 976.88s
+2026-04-19 18:34:33,011 - PokerAITrainer - INFO - 训练总结已保存到: ./checkpoints/training_summary_20260419_183433.json
+2026-04-19 18:34:33,049 - PokerAITrainer - INFO - 任务执行成功！

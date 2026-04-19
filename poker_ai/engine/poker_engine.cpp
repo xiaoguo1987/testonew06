@@ -220,6 +220,8 @@ public:
     }
 
     // ---- game control ----
+    // NOTE: start_new_hand / handle_action / next_player 等纯 C++ 函数
+    // 通过 pybind11 call_guard<py::gil_scoped_release> 释放 GIL
     void start_new_hand(int dealer_pos) {
         dpos_ = dealer_pos % np_;
         deck_.shuffle();
@@ -353,7 +355,7 @@ public:
         return out;
     }
 
-    // ---- hand strength ----
+    // ---- hand strength (pure C++, GIL released via call_guard) ----
     float get_hand_strength(int pi) const {
         if (hcnt_[pi]<2) return 0.f;
         if (bcnt_==0) {
@@ -460,16 +462,27 @@ PYBIND11_MODULE(poker_engine_cc, m) {
         .def(py::init<int,int,int,int>(),
              py::arg("small_blind"), py::arg("big_blind"),
              py::arg("initial_stack"), py::arg("num_players")=6)
-        .def("start_new_hand",      &GameEngine::start_new_hand)
-        .def("handle_action",       &GameEngine::handle_action)
-        .def("next_player",         &GameEngine::next_player)
-        .def("is_round_over",       &GameEngine::is_round_over)
-        .def("is_hand_over",        &GameEngine::is_hand_over)
-        .def("proceed_to_next_round",&GameEngine::proceed_to_next_round)
-        .def("award_pot_to",        &GameEngine::award_pot_to)
+        // 纯 C++ 计算函数：释放 GIL，让其他 Worker 可以并行执行
+        .def("start_new_hand",      &GameEngine::start_new_hand,
+             py::call_guard<py::gil_scoped_release>())
+        .def("handle_action",       &GameEngine::handle_action,
+             py::call_guard<py::gil_scoped_release>())
+        .def("next_player",         &GameEngine::next_player,
+             py::call_guard<py::gil_scoped_release>())
+        .def("is_round_over",       &GameEngine::is_round_over,
+             py::call_guard<py::gil_scoped_release>())
+        .def("is_hand_over",        &GameEngine::is_hand_over,
+             py::call_guard<py::gil_scoped_release>())
+        .def("proceed_to_next_round",&GameEngine::proceed_to_next_round,
+             py::call_guard<py::gil_scoped_release>())
+        .def("award_pot_to",        &GameEngine::award_pot_to,
+             py::call_guard<py::gil_scoped_release>())
+        // 以下函数返回 numpy/Python 对象，需要持有 GIL —— 不加 call_guard
         .def("get_state_vector",    &GameEngine::get_state_vector)
         .def("get_legal_mask",      &GameEngine::get_legal_mask)
-        .def("get_hand_strength",   &GameEngine::get_hand_strength)
+        // hand_strength 返回标量 float，可安全释放 GIL
+        .def("get_hand_strength",   &GameEngine::get_hand_strength,
+             py::call_guard<py::gil_scoped_release>())
         .def_property_readonly("pot",          &GameEngine::get_pot)
         .def_property_readonly("current_bet",  &GameEngine::get_cbet)
         .def_property_readonly("round",        &GameEngine::get_round)

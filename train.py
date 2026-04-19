@@ -67,8 +67,17 @@ def _apply_hardware_profile(args) -> None:
 
         if arch == 'seed-rl':
             # SEED RL GPU-Centric 架构：大模型 + 集中式 GPU 推理
+            # 检测 C++ 引擎，决定 Worker/Table 配置策略
+            try:
+                from poker_ai.engine import USE_CC_ENGINE as _cc
+            except ImportError:
+                _cc = False
             if int(getattr(args, 'train_workers', 0)) <= 0:
-                args.train_workers = min(64, max(16, cpu_total // 4))
+                if _cc:
+                    # C++ 引擎：减少 Pipe 数，降低 IPC 开销
+                    args.train_workers = 16
+                else:
+                    args.train_workers = min(64, max(16, cpu_total // 4))
             if int(getattr(args, 'eval_workers', 0)) <= 0:
                 args.eval_workers = min(48, max(8, cpu_total // 6))
             if int(getattr(args, 'cpu_threads', 0)) <= 0:
@@ -87,9 +96,9 @@ def _apply_hardware_profile(args) -> None:
             # Anti-Fold-Bot: SEED RL 大模型需要更强的探索
             if float(getattr(args, 'ppo_entropy_coef', 0.02)) <= 0.02:
                 args.ppo_entropy_coef = 0.05
-            # 向量化环境：每个 worker 管理 8 张牌桌，64×8=512 并发牌桌
+            # 向量化环境：根据引擎类型决定 tables_per_worker
             if int(getattr(args, 'tables_per_worker', 0)) <= 0:
-                args.tables_per_worker = 8
+                args.tables_per_worker = 32 if _cc else 8
             # RL 训练禁用混合精度：PPO 的 log-prob 计算在 FP16 下不稳定
             args.mixed_precision = False
             # 14M 大模型需要极低学习率：防止 KL 飙到 33+ 导致每次只训练 3 batch
@@ -209,7 +218,7 @@ def parse_arguments():
                         help='PPO累计多少步再做一次更新（<=0 自动，能提升GPU吞吐）')
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamax', 'rmsprop', 'sgd'], help='优化器类型')
-    parser.add_argument('--eval-interval', type=int, default=200, help='评估间隔（局数）')
+    parser.add_argument('--eval-interval', type=int, default=5000, help='评估间隔（局数）')
     parser.add_argument('--checkpoint-interval', type=int, default=1000, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
     parser.add_argument('--eval-workers', type=int, default=0, help='评估并行worker数量（<=0 自动按CPU核数推断）')
@@ -352,6 +361,12 @@ def setup_environment(args):
         )
         logger.info(f"并行配置: TF intra_op={intra_threads}, inter_op={inter_threads}")
         logger.info(f"并行配置: train_workers={args.train_workers}, eval_workers={args.eval_workers}")
+        try:
+            from poker_ai.engine import USE_CC_ENGINE as _cc_flag
+        except ImportError:
+            _cc_flag = False
+        logger.info(f"引擎状态: {'C++ Engine' if _cc_flag else 'Python Engine'}, "
+                    f"tables_per_worker={getattr(args, 'tables_per_worker', 8)}")
         logger.info(
             f"并行配置: train_rollouts_per_worker={getattr(args, 'train_rollouts_per_worker', 0)}, "
             f"train_sync_every_batches={getattr(args, 'train_sync_every_batches', 0)}"
