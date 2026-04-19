@@ -63,36 +63,52 @@ def _apply_hardware_profile(args) -> None:
 
     if profile == 'rtx4090d':
         cpu_total = os.cpu_count() or 32
+        arch = getattr(args, 'arch', 'legacy')
 
-        # RTX 4090D: 24GB显存 - GPU流水线优化版 v3
-        # 维度1: 512-512-256-128 网络 + batch_size=256
-        # 维度2: GPU批量推理桥 - 所有Main_AI决策统一在GPU上执行
-        # 维度3: 异步训练线程 + 多牌桌并行采样
-        if int(getattr(args, 'train_workers', 0)) <= 0:
-            args.train_workers = min(64, max(16, cpu_total // 4))
-        if int(getattr(args, 'eval_workers', 0)) <= 0:
-            args.eval_workers = min(48, max(8, cpu_total // 6))
+        if arch == 'seed-rl':
+            # SEED RL GPU-Centric 架构：大模型 + 集中式 GPU 推理
+            if int(getattr(args, 'train_workers', 0)) <= 0:
+                args.train_workers = min(64, max(16, cpu_total // 4))
+            if int(getattr(args, 'eval_workers', 0)) <= 0:
+                args.eval_workers = min(48, max(8, cpu_total // 6))
+            if int(getattr(args, 'cpu_threads', 0)) <= 0:
+                args.cpu_threads = min(32, max(8, cpu_total // 4))
+            if int(getattr(args, 'tf_inter_op_threads', 0)) <= 0:
+                args.tf_inter_op_threads = 4
+            # 大模型专用参数
+            args.hidden_dims = [2048, 2048, 1024, 512]
+            if int(getattr(args, 'batch_size', 64)) <= 256:
+                args.batch_size = 2048
+            if int(getattr(args, 'ppo_epochs', 10)) <= 10:
+                args.ppo_epochs = 10
+            args.ppo_buffer_size = 4096
+            args.inference_min_batch = 32
+            args.inference_max_batch = 512
+        else:
+            # Legacy 架构：CPU 多进程采样 + 小模型
+            if int(getattr(args, 'train_workers', 0)) <= 0:
+                args.train_workers = min(64, max(16, cpu_total // 4))
+            if int(getattr(args, 'eval_workers', 0)) <= 0:
+                args.eval_workers = min(48, max(8, cpu_total // 6))
+            if int(getattr(args, 'cpu_threads', 0)) <= 0:
+                args.cpu_threads = min(32, max(8, cpu_total // 4))
+            if int(getattr(args, 'tf_inter_op_threads', 0)) <= 0:
+                args.tf_inter_op_threads = 4
 
-        # TensorFlow CPU 并行参数
-        if int(getattr(args, 'cpu_threads', 0)) <= 0:
-            args.cpu_threads = min(32, max(8, cpu_total // 4))
-        if int(getattr(args, 'tf_inter_op_threads', 0)) <= 0:
-            args.tf_inter_op_threads = 4
-
-        # PPO 训练并行批次策略
+        # PPO 训练并行批次策略（legacy 模式使用）
         if int(getattr(args, 'train_rollouts_per_worker', 0)) <= 0:
-            args.train_rollouts_per_worker = 8  # 每个worker单次推进8手牌，减少线程切换开销
+            args.train_rollouts_per_worker = 8
         if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
             args.train_sync_every_batches = 8
 
-        # PPO 批次大小（根据扑克游戏实际样本生成率优化：每手约1.2个样本）
-        if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
-            args.ppo_update_min_steps = 0  # 自动推算（ai_agent.py: batch*2）
-        if int(getattr(args, 'batch_size', 64)) <= 256:
-            args.batch_size = 256
-        # PPO 更新轮次（GPU每次更新做更多计算，KL早停保护策略稳定性）
-        if int(getattr(args, 'ppo_epochs', 10)) <= 10:
-            args.ppo_epochs = 15
+        # PPO 批次大小（仅 legacy 模式回退默认值）
+        if arch != 'seed-rl':
+            if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
+                args.ppo_update_min_steps = 0
+            if int(getattr(args, 'batch_size', 64)) <= 256:
+                args.batch_size = 256
+            if int(getattr(args, 'ppo_epochs', 10)) <= 10:
+                args.ppo_epochs = 15
 
         # 默认走 GPU + XLA + 混合精度
         if getattr(args, 'device', 'auto') == 'auto':
@@ -151,6 +167,9 @@ def parse_arguments():
     parser.add_argument('--hardware-profile', type=str, default='auto',
                         choices=['auto', 'rtx3090_112cpu', 'rtx4090d'],
                         help='硬件优化档位: auto, rtx3090_112cpu 或 rtx4090d')
+    parser.add_argument('--arch', type=str, default='legacy',
+                        choices=['legacy', 'seed-rl'],
+                        help='训练架构: legacy(原有CPU采样) 或 seed-rl(GPU集中式推理+大模型)')
     parser.add_argument('--auto-tune', action='store_true',
                         help='训练前短跑多组参数，自动选择吞吐最高配置（推荐PPO）')
     parser.add_argument('--auto-tune-hands', type=int, default=4000,
@@ -357,10 +376,81 @@ def setup_environment(args):
     logger.info(f"当前运行模式: {args.mode}")
     logger.info(f"使用模型类型: {args.model_type}")
 
+def _train_seed_rl(args):
+    """SEED RL GPU-Centric 训练入口。"""
+    logger.info("[SEED RL] 启动 GPU-Centric 训练架构")
+    logger.info(f"训练参数: {vars(args)}")
+    start_time = time.time()
+
+    try:
+        from poker_ai.model.large_ppo_model import LargePPOModel
+        from poker_ai.training.gpu_trainer import SeedRLTrainer
+        from poker_ai.config.ppo_config import PPOConfig
+
+        # 构建大模型配置
+        hidden_dims = getattr(args, 'hidden_dims', [2048, 2048, 1024, 512])
+        cfg = PPOConfig(
+            lr=args.learning_rate,
+            batch_size=args.batch_size,
+            update_epochs=getattr(args, 'ppo_epochs', 10),
+            clip_epsilon=getattr(args, 'ppo_clip', 0.2),
+            entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
+            hidden_dims=hidden_dims,
+        )
+
+        model = LargePPOModel(
+            hidden_dims=hidden_dims,
+            batch_size=args.batch_size,
+            update_epochs=getattr(args, 'ppo_epochs', 10),
+            config=cfg,
+        )
+
+        trainer = SeedRLTrainer(
+            model=model,
+            checkpoint_dir=args.checkpoint_dir,
+            small_blind=args.small_blind,
+            big_blind=args.big_blind,
+            initial_stack=args.initial_stack,
+            num_workers=args.train_workers,
+            eval_interval=args.eval_interval,
+            checkpoint_interval=args.checkpoint_interval,
+            num_eval_games=args.num_eval_games,
+            opponent_update_interval=args.opponent_update_interval,
+            inference_min_batch=getattr(args, 'inference_min_batch', 32),
+            inference_max_batch=getattr(args, 'inference_max_batch', 512),
+            ppo_buffer_size=getattr(args, 'ppo_buffer_size', 4096),
+            skip_final_eval=getattr(args, 'skip_final_eval', False),
+            allin_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
+            allin_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
+        )
+
+        # 加载 checkpoint
+        if args.model_path:
+            trainer.load_checkpoint(args.model_path)
+        elif args.resume:
+            trainer.load_checkpoint()
+
+        logger.info(f"[SEED RL] 开始训练 {args.num_hands} 手牌...")
+        trainer.train(args.num_hands)
+
+        elapsed = time.time() - start_time
+        logger.info(f"[SEED RL] 训练完成！总耗时: {elapsed:.2f}s")
+        save_training_summary(args, elapsed)
+        return True
+
+    except Exception as e:
+        logger.error(f"[SEED RL] 训练出错: {e}")
+        raise
+
+
 def train_model(args):
     """
-    训练模型
+    训练模型（Legacy 架构）
     """
+    # 如果选择了 seed-rl 架构，走专用入口
+    if getattr(args, 'arch', 'legacy') == 'seed-rl':
+        return _train_seed_rl(args)
+
     logger.info("开始训练德州扑克AI模型")
     logger.info(f"训练参数: {vars(args)}")
     

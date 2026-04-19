@@ -11,10 +11,15 @@ RTX 4090D GPU流水线优化版 v2：
 - 新增KL散度早停配置
 - 增大total_training_steps（300000）
 - GPU批量推理桥 + 异步流水线训练
+
+SEED RL GPU-Centric 架构（--arch seed-rl）：
+- 大模型 hidden_dims=[2048,2048,1024,512]（约14M参数）
+- 集中式 GPU 推理 + PPO 训练
+- CPU worker 仅跑游戏逻辑
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, List
 
 
 @dataclass
@@ -75,6 +80,13 @@ class PPOConfig:
     # 梯度裁剪（防止爆炸）
     max_grad_norm: float = 0.5
 
+    # SEED RL 大模型配置
+    hidden_dims: List[int] = field(default_factory=lambda: [512, 512, 256, 128])
+    residual_layer_idx: int = 1  # 残差连接层索引
+    inference_batch_size: int = 256  # GPU 推理批量大小
+    inference_timeout_ms: float = 1.0  # 推理收集超时（毫秒）
+    ppo_buffer_size: int = 4096  # SEED RL 触发 PPO 训练的最小样本数
+
     def to_dict(self):
         return {
             "input_dim": self.input_dim,
@@ -93,6 +105,10 @@ class PPOConfig:
             "value_clip": self.value_clip,
             "kl_target": self.kl_target,
             "kl_early_stop": self.kl_early_stop,
+            "hidden_dims": self.hidden_dims,
+            "residual_layer_idx": self.residual_layer_idx,
+            "inference_batch_size": self.inference_batch_size,
+            "ppo_buffer_size": self.ppo_buffer_size,
         }
 
 
