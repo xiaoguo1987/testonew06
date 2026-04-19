@@ -66,8 +66,8 @@ class PPOConfig:
     # 价值损失裁剪
     value_clip: float = 0.2
 
-    # KL散度早停（14M大模型 + entropy_coef=0.05 自然KL约0.15-0.20，阈值需匹配）
-    kl_target: float = 0.15
+    # KL散度早停（14M大模型从scratch训练，自然KL远高于微调场景，需要更宽松的阈值）
+    kl_target: float = 5.0
     kl_early_stop: bool = True
 
     # 每批轨迹更新轮次与批次（根据扑克游戏样本生成率优化）
@@ -85,7 +85,7 @@ class PPOConfig:
     residual_layer_idx: int = 1  # 残差连接层索引
     inference_batch_size: int = 256  # GPU 推理批量大小
     inference_timeout_ms: float = 1.0  # 推理收集超时（毫秒）
-    ppo_buffer_size: int = 4096  # SEED RL 触发 PPO 训练的最小样本数
+    ppo_buffer_size: int = 16384  # SEED RL 触发 PPO 训练的最小样本数（16K 步让大模型看清全局）
 
     def to_dict(self):
         return {

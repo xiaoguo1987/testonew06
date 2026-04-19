@@ -206,9 +206,17 @@ class SeedRLTrainer:
         self, traj_queue: Queue, traj_buffer: Dict, results_buffer: List,
         alive_workers: set,
     ) -> int:
-        """从 traj_queue 非阻塞读取完成的手牌。返回新收集的手牌数。"""
+        """从 traj_queue 非阻塞读取完成的手牌。返回新收集的手牌数。
+        
+        关键：在吸取过程中实时检查 buffer 大小，一旦达到阈值立刻刹车，
+        防止在高并发下一口气吸入几万条轨迹撑爆内存。
+        """
         new_hands = 0
         while not traj_queue.empty():
+            # 【背压拦截】buffer 已满，立刻停止吸取，留给训练消化
+            if len(traj_buffer.get('states', [])) >= self.ppo_buffer_size:
+                break
+
             try:
                 msg = traj_queue.get_nowait()
             except Exception:

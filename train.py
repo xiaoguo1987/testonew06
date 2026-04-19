@@ -77,11 +77,11 @@ def _apply_hardware_profile(args) -> None:
                 args.tf_inter_op_threads = 4
             # 大模型专用参数
             args.hidden_dims = [2048, 2048, 1024, 512]
-            if int(getattr(args, 'batch_size', 64)) <= 256:
-                args.batch_size = 2048
+            if int(getattr(args, 'batch_size', 64)) <= 4096:
+                args.batch_size = 4096
             if int(getattr(args, 'ppo_epochs', 10)) <= 10:
                 args.ppo_epochs = 10
-            args.ppo_buffer_size = 4096
+            args.ppo_buffer_size = 16384
             args.inference_min_batch = 32
             args.inference_max_batch = 512
             # Anti-Fold-Bot: SEED RL 大模型需要更强的探索
@@ -92,9 +92,9 @@ def _apply_hardware_profile(args) -> None:
                 args.tables_per_worker = 8
             # RL 训练禁用混合精度：PPO 的 log-prob 计算在 FP16 下不稳定
             args.mixed_precision = False
-            # 14M 大模型降低学习率，防止步子迈太大
-            if float(getattr(args, 'learning_rate', 3e-4)) >= 3e-4:
-                args.learning_rate = 1e-4
+            # 14M 大模型需要极低学习率：防止 KL 飙到 33+ 导致每次只训练 3 batch
+            if float(getattr(args, 'learning_rate', 3e-4)) >= 3e-5:
+                args.learning_rate = 3e-5
         else:
             # Legacy 架构：CPU 多进程采样 + 小模型
             if int(getattr(args, 'train_workers', 0)) <= 0:
