@@ -88,8 +88,8 @@ class LargePPOModel:
         # 价值损失裁剪
         self.value_clip = getattr(cfg, 'value_clip', 0.2)
 
-        # KL 早停（14M大模型从 scratch 训练，自然 KL 远高于微调，需要较高阈值避免频繁截断）
-        self.kl_target = getattr(cfg, 'kl_target', 15.0)
+        # KL 早停（限制策略偏移，正常训练 KL~0.02-0.08/batch，超过 0.5 即停止防止策略崩溃）
+        self.kl_target = getattr(cfg, 'kl_target', 0.5)
         self.kl_early_stop = getattr(cfg, 'kl_early_stop', True)
         self.last_kl = 0.0
 

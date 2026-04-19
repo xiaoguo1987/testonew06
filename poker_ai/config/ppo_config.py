@@ -67,12 +67,12 @@ class PPOConfig:
     # 价值损失裁剪
     value_clip: float = 0.2
 
-    # KL散度早停（14M大模型从scratch训练，自然KL远高于微调场景，需要更宽松的阈值）
-    kl_target: float = 15.0
+    # KL散度早停（限制每次更新的策略偏移幅度，正常训练KL~0.02-0.08/batch）
+    kl_target: float = 0.5
     kl_early_stop: bool = True
 
-    # 每批轨迹更新轮次与批次（根据扑克游戏样本生成率优化）
-    update_epochs: int = 15
+    # 每批轨迹更新轮次（减少同一 buffer 的重复使用，避免策略偏移过大）
+    update_epochs: int = 4
     batch_size: int = 256
     
     # 梯度累积

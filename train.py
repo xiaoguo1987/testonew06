@@ -89,7 +89,7 @@ def _apply_hardware_profile(args) -> None:
             if int(getattr(args, 'batch_size', 64)) <= 4096:
                 args.batch_size = 4096
             if int(getattr(args, 'ppo_epochs', 10)) <= 10:
-                args.ppo_epochs = 10
+                args.ppo_epochs = 4
             args.ppo_buffer_size = 16384
             args.inference_min_batch = 32
             args.inference_max_batch = 512
