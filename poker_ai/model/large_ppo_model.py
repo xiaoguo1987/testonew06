@@ -93,13 +93,17 @@ class LargePPOModel:
         self.kl_early_stop = getattr(cfg, 'kl_early_stop', True)
         self.last_kl = 0.0
 
+        # Critic 学习率倍率：Critic 需要更快收敛以提供准确价值估计
+        self.critic_lr_multiplier = getattr(cfg, 'critic_lr_multiplier', 3.0)
+
         # 构建网络
         self.actor = self._build_network(softmax_output=True)
         self.critic = self._build_network(softmax_output=False)
 
-        # 优化器
+        # 优化器：Critic 使用更高学习率，加速价值函数收敛
+        critic_lr = lr_val * self.critic_lr_multiplier
         base_actor_opt = Adam(learning_rate=lr_val)
-        base_critic_opt = Adam(learning_rate=lr_val)
+        base_critic_opt = Adam(learning_rate=critic_lr)
         self._use_mixed_precision = tf.keras.mixed_precision.global_policy().name != 'float32'
         if self._use_mixed_precision:
             self.actor_optimizer = LossScaleOptimizer(base_actor_opt)
@@ -112,7 +116,8 @@ class LargePPOModel:
         logger.info(
             f"LargePPOModel 初始化: hidden_dims={self.hidden_dims}, "
             f"residual@layer{self.residual_layer_idx}, "
-            f"总参数量={param_count:,} ({param_count/1e6:.1f}M)"
+            f"总参数量={param_count:,} ({param_count/1e6:.1f}M), "
+            f"actor_lr={lr_val:.1e}, critic_lr={critic_lr:.1e} ({self.critic_lr_multiplier}x)"
         )
 
     # ------------------------------------------------------------------
@@ -428,9 +433,12 @@ class LargePPOModel:
     def update_lr(self, step: int) -> None:
         new_lr = max(self.lr_min, self._get_lr(step))
         self.current_lr = new_lr
-        for opt in (self.actor_optimizer, self.critic_optimizer):
-            inner = getattr(opt, 'inner_optimizer', opt)
-            inner.learning_rate.assign(new_lr)
+        # Actor 和 Critic 使用不同学习率：Critic = Actor × multiplier
+        critic_lr = min(new_lr * self.critic_lr_multiplier, self.initial_lr * self.critic_lr_multiplier)
+        actor_inner = getattr(self.actor_optimizer, 'inner_optimizer', self.actor_optimizer)
+        critic_inner = getattr(self.critic_optimizer, 'inner_optimizer', self.critic_optimizer)
+        actor_inner.learning_rate.assign(new_lr)
+        critic_inner.learning_rate.assign(critic_lr)
 
     # ------------------------------------------------------------------
     #  预热

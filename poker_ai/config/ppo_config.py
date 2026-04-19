@@ -46,6 +46,7 @@ class PPOConfig:
     lr: float = 3e-4
     lr_min: float = 1e-6
     lr_decay_rate: float = 0.9999
+    critic_lr_multiplier: float = 3.0  # Critic 学习率倍率（相对 Actor），Critic 需要更快收敛以提供准确的价值估计
     
     # 学习率调度优化
     use_lr_warmup: bool = True
@@ -105,6 +106,7 @@ class PPOConfig:
             "value_clip": self.value_clip,
             "kl_target": self.kl_target,
             "kl_early_stop": self.kl_early_stop,
+            "critic_lr_multiplier": self.critic_lr_multiplier,
             "hidden_dims": self.hidden_dims,
             "residual_layer_idx": self.residual_layer_idx,
             "inference_batch_size": self.inference_batch_size,

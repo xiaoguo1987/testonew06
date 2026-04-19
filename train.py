@@ -274,7 +274,7 @@ def parse_arguments():
     
     # 自我对弈参数
     parser.add_argument('--use-self-play', action='store_true', default=True, help='启用自我对弈训练')
-    parser.add_argument('--opponent-update-interval', type=int, default=1000, help='对手更新间隔（局数）')
+    parser.add_argument('--opponent-update-interval', type=int, default=10000, help='对手更新间隔（局数），过小会导致军备竞赛')
     
     # 探索参数
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
@@ -374,6 +374,10 @@ def setup_environment(args):
         logger.info(
             f"PPO配置: batch_size={getattr(args, 'batch_size', 64)}, "
             f"ppo_update_min_steps={getattr(args, 'ppo_update_min_steps', 0)}"
+        )
+        logger.info(
+            f"训练策略: opponent_update_interval={getattr(args, 'opponent_update_interval', 10000)}, "
+            f"critic_lr_multiplier=3.0, Curriculum=Phase1(全鱼)→Phase2(混合)→Phase3(自对弈)"
         )
         logger.info(f"可用GPU数量: {len(gpus)}")
         for i, gpu in enumerate(gpus):

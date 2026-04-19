@@ -83,9 +83,24 @@ class SeedRLTrainer:
         self.total_hands = 0
         self.total_ppo_updates = 0
         self.best_score = -float('inf')
+        self.num_hands_target = 0  # 训练目标手牌数，在 train() 中设置
 
-        # 对手类型：前 4 个是 PPO，第 5 个是 Fish
-        self.opp_type_list = ['ppo', 'ppo', 'ppo', 'ppo', 'fish']
+        # Curriculum Learning 阶段定义
+        # Phase 1 (0-20%): 全鱼对手 → 学习基本策略（别乱弃牌、基本下注）
+        # Phase 2 (20-50%): 混合对手（3鱼+2旧版） → 过渡阶段
+        # Phase 3 (50%+): 正常自对弈（4PPO+1鱼） → 充分博弈
+        self._curriculum_phase = 0  # 当前阶段
+        self._curriculum_thresholds = (0.20, 0.50)  # 阶段切换阈值
+        self._curriculum_opp_configs = [
+            ['fish', 'fish', 'fish', 'fish', 'fish'],      # Phase 1: 全鱼
+            ['ppo', 'ppo', 'fish', 'fish', 'fish'],        # Phase 2: 混合
+            ['ppo', 'ppo', 'ppo', 'ppo', 'fish'],          # Phase 3: 正常自对弈
+        ]
+        # 初始为 Phase 1
+        self.opp_type_list = self._curriculum_opp_configs[0]
+        # Worker 侧对手类型固定为 PPO+Fish（始终发送推理请求）
+        # Curriculum 通过主进程推理调度器实现：对鱼对手返回随机动作
+        self._worker_opp_type_list = ['ppo', 'ppo', 'ppo', 'ppo', 'fish']
 
         # ====== 初始化专属的对手模型，彻底消除权重切换开销 ======
         from ..model.large_ppo_model import LargePPOModel
@@ -100,6 +115,42 @@ class SeedRLTrainer:
         self._opp_weights = None  # 废弃旧的权重快照变量
 
         os.makedirs(checkpoint_dir, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    #  Curriculum Learning
+    # ------------------------------------------------------------------
+
+    def _update_curriculum_phase(self):
+        """根据训练进度自动切换对手难度阶段。
+
+        Phase 0 (0-20%): 全鱼对手 → 学习基本策略
+        Phase 1 (20-50%): 混合对手 → 过渡
+        Phase 2 (50%+): 正常自对弈 → 充分博弈
+        """
+        if self.num_hands_target <= 0:
+            return
+        progress = self.total_hands / self.num_hands_target
+
+        new_phase = 0
+        if progress >= self._curriculum_thresholds[1]:
+            new_phase = 2
+        elif progress >= self._curriculum_thresholds[0]:
+            new_phase = 1
+
+        if new_phase != self._curriculum_phase:
+            old_phase = self._curriculum_phase
+            self._curriculum_phase = new_phase
+            self.opp_type_list = self._curriculum_opp_configs[new_phase]
+            phase_names = ['Phase1(全鱼)', 'Phase2(混合)', 'Phase3(自对弈)']
+            logger.info(
+                f"[SEED RL] Curriculum 阶段切换: {phase_names[old_phase]} → {phase_names[new_phase]}, "
+                f"hands={self.total_hands}, progress={progress:.1%}, "
+                f"opp_types={self.opp_type_list}"
+            )
+            # 阶段切换时立刻同步一次对手权重（如果新阶段包含 PPO 对手）
+            if new_phase >= 1:
+                self.opp_model.set_weights(self.model.get_weights())
+                logger.info(f"[SEED RL] 阶段切换时同步对手权重")
 
     # ------------------------------------------------------------------
     #  推理调度
@@ -159,14 +210,22 @@ class SeedRLTrainer:
             return 0
 
         # ---- GPU 批量推理 ----
-        # 区分主 agent 和 PPO 对手
+        # 区分主 agent / PPO 对手 / Fish 对手（Curriculum 感知）
         main_items = []  # (original_index, wid, pname, sv)
-        opp_items = []
+        opp_ppo_items = []  # PPO 对手 → GPU 推理
+        opp_fish_items = []  # Fish 对手 → 随机动作
+
         for i, (wid, pname, sv) in enumerate(batch_items):
             if pname == "Main_AI":
                 main_items.append((i, wid, pname, sv))
             else:
-                opp_items.append((i, wid, pname, sv))
+                # 根据 Curriculum 阶段判断该对手是 PPO 还是 Fish
+                oi = int(pname.split('_')[-1]) - 1 if '_' in pname else 0
+                oi = max(0, min(oi, len(self.opp_type_list) - 1))
+                if self.opp_type_list[oi] == 'fish':
+                    opp_fish_items.append((i, wid, pname, sv))
+                else:
+                    opp_ppo_items.append((i, wid, pname, sv))
 
         # 预分配结果数组
         n = len(batch_items)
@@ -182,12 +241,19 @@ class SeedRLTrainer:
                 values[oi] = m_vals[j]
 
         # PPO 对手用独立模型推理 — 零权重切换开销
-        if opp_items:
-            opp_states = np.array([it[3] for it in opp_items], dtype=np.float32)
+        if opp_ppo_items:
+            opp_states = np.array([it[3] for it in opp_ppo_items], dtype=np.float32)
             o_probs, o_vals = self.opp_model.predict_batch(opp_states)
-            for j, (oi, _, _, _) in enumerate(opp_items):
+            for j, (oi, _, _, _) in enumerate(opp_ppo_items):
                 action_probs[oi] = o_probs[j]
                 values[oi] = o_vals[j]
+
+        # Fish 对手直接返回均匀随机概率（不走 GPU，零开销）
+        if opp_fish_items:
+            uniform_prob = 1.0 / self.model.output_dim
+            for (oi, _, _, _) in opp_fish_items:
+                action_probs[oi] = uniform_prob  # 均匀分布
+                values[oi] = 0.0
 
         # 分发结果
         for i, (wid, pname, sv) in enumerate(batch_items):
@@ -412,12 +478,19 @@ class SeedRLTrainer:
         """
         from .env_worker import env_worker_loop
 
+        self.num_hands_target = num_hands
+
         logger.info(
             f"[SEED RL] 训练开始: num_hands={num_hands}, "
             f"workers={self.num_workers}, tables_per_worker={self.tables_per_worker}, "
             f"并发牌桌={self.num_workers * self.tables_per_worker}, "
             f"ppo_buffer={self.ppo_buffer_size}, "
             f"inference_batch=[{self.inference_min_batch}, {self.inference_max_batch}]"
+        )
+        logger.info(
+            f"[SEED RL] Curriculum Learning 已启用: "
+            f"Phase1(0-20%全鱼) → Phase2(20-50%混合) → Phase3(50%+自对弈), "
+            f"opponent_update_interval={self.opponent_update_interval}"
         )
 
         # 初始化对手模型权重并预热
@@ -458,7 +531,7 @@ class SeedRLTrainer:
             p = Process(
                 target=env_worker_loop,
                 args=(wid, worker_pipes[wid], traj_queue, game_cfg,
-                      self.opp_type_list, h),
+                      self._worker_opp_type_list, h),
                 daemon=True,
             )
             p.start()
@@ -541,11 +614,15 @@ class SeedRLTrainer:
                     last_ckpt_hand = self.total_hands
                     self.save_checkpoint(is_best=False)
 
-                # 6. 定期更新对手模型权重（仅此一次 set_weights，而非每次推理）
+                # 6. Curriculum Learning 阶段检查 + 对手权重更新
+                self._update_curriculum_phase()
+
                 if (self.total_hands - last_opp_update_hand) >= self.opponent_update_interval and self.total_hands > 0:
                     last_opp_update_hand = self.total_hands
-                    self.opp_model.set_weights(self.model.get_weights())
-                    logger.info(f"[SEED RL] 对手权重已更新 @{self.total_hands}")
+                    # Phase 1 全鱼模式不需要同步权重（鱼用随机策略）
+                    if self._curriculum_phase >= 1:
+                        self.opp_model.set_weights(self.model.get_weights())
+                        logger.info(f"[SEED RL] 对手权重已更新 @{self.total_hands}")
 
                 # 短暂 sleep 避免 CPU 空转
                 if inferred == 0 and new_hands == 0:
