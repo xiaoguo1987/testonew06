@@ -209,18 +209,18 @@ def env_worker_loop(
         )
         ma = arecs.get("Main_AI", [])
 
-        # ---- Anti-Fold-Bot 奖励塑形 ----
+        # ---- Anti-Fold-Bot 奖励塑形（降低强度避免淹没真实胜负信号） ----
         total_actions = len(ma)
         fold_count = sum(1 for a, _ in ma if a == 'fold')
         vpip_count = sum(1 for a, _ in ma if a in ('call', 'raise'))
 
         if total_actions >= 1:
             if fold_count == total_actions and fp <= 0:
-                fr -= 0.5
+                fr -= 0.2  # 降: 0.5→0.2
             if vpip_count > 0:
-                fr += 0.15 * min(vpip_count, 3)
+                fr += 0.05 * min(vpip_count, 3)  # 降: 0.15→0.05
             if total_actions == 1 and ma[0][0] == 'fold':
-                fr -= 0.3
+                fr -= 0.1  # 降: 0.3→0.1
 
         # all-in 补偿
         ab = 0.0

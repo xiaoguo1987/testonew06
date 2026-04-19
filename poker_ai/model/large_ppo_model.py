@@ -211,7 +211,7 @@ class LargePPOModel:
             advantages = (advantages - np.mean(advantages)) / (std + 1e-8)
         else:
             advantages = advantages - np.mean(advantages)
-        return np.clip(advantages, -10.0, 10.0)
+        return np.clip(advantages, -5.0, 5.0)
 
     # ------------------------------------------------------------------
     #  PPO 训练核心
@@ -225,23 +225,32 @@ class LargePPOModel:
     ):
         # Actor
         with tf.GradientTape() as actor_tape:
-            probs = tf.cast(self.actor(batch_states, training=True), tf.float32)
+            raw_probs = tf.cast(self.actor(batch_states, training=True), tf.float32)
+            # ====== 数值稳定性：概率 clamp 到 [1e-6, 1.0] 防止 log(0) 爆炸 ======
+            probs = tf.clip_by_value(raw_probs, 1e-6, 1.0)
+            probs = probs / (tf.reduce_sum(probs, axis=1, keepdims=True) + 1e-8)  # 重新归一化
+
             action_masks = tf.cast(tf.one_hot(batch_actions, self.output_dim), tf.float32)
-            old_p = tf.cast(batch_old_probs, tf.float32)
+            old_p = tf.clip_by_value(tf.cast(batch_old_probs, tf.float32), 1e-6, 1.0)
             adv = tf.cast(batch_advantages, tf.float32)
             msk = tf.cast(batch_mask, tf.float32)
 
             cur_p = tf.reduce_sum(probs * action_masks, axis=1)
-            ratio = cur_p / (old_p + 1e-8)
+            cur_p = tf.clip_by_value(cur_p, 1e-6, 1.0)
+            old_p = tf.clip_by_value(old_p, 1e-6, 1.0)
+            ratio = cur_p / old_p
 
-            log_ratio = tf.math.log(cur_p + 1e-8) - tf.math.log(old_p + 1e-8)
-            mean_kl = tf.reduce_mean((tf.exp(log_ratio) - 1.0) - log_ratio)
+            # ====== log_ratio clamp 防止 KL 爆炸 ======
+            log_ratio = tf.math.log(cur_p) - tf.math.log(old_p)
+            log_ratio = tf.clip_by_value(log_ratio, -20.0, 20.0)  # 防止极端值
+            approx_kl = tf.reduce_mean((tf.exp(log_ratio) - 1.0) - log_ratio)
+            mean_kl = tf.clip_by_value(approx_kl, 0.0, 100.0)  # KL 不应超过 100
 
             clipped = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
             surr = tf.minimum(ratio * adv, clipped * adv)
             policy_loss = -tf.reduce_sum(surr * msk) / (tf.reduce_sum(msk) + 1e-8)
 
-            entropy = -tf.reduce_sum(probs * tf.math.log(probs + 1e-8), axis=1)
+            entropy = -tf.reduce_sum(probs * tf.math.log(probs), axis=1)
             entropy_loss = -tf.reduce_sum(entropy * msk) / (tf.reduce_sum(msk) + 1e-8)
             actor_loss = policy_loss + self.entropy_coef * entropy_loss
 
