@@ -21,6 +21,14 @@ from ..game.poker_game import PokerGame, Player
 from ..model.state_representation import StateRepresentation
 from ..reward.reward_calculator import RewardCalculator
 
+# ---- C++ 引擎 (可选) ----
+try:
+    from ..engine import USE_CC_ENGINE
+    if USE_CC_ENGINE:
+        from ..engine.poker_engine_cc import GameEngine, decode_action as cc_decode_action
+except ImportError:
+    USE_CC_ENGINE = False
+
 
 # ========================================================================
 #  合法动作掩码 / 翻牌前位置过滤（复制自 mp_worker.py，避免 TF 导入）
@@ -339,6 +347,15 @@ def env_worker_loop(
             if not ok:
                 game.handle_action(cp, 'fold', None)
 
+    # ---- C++ 引擎快速路径 ----
+    if USE_CC_ENGINE:
+        _env_worker_loop_cc(
+            worker_id, state_pipe, traj_queue, game_cfg,
+            opp_type_list, total_hands, sb, bb, stack,
+            eq_thr, bonus_cap, tables_per_worker,
+        )
+        return
+
     try:
         # 初始化所有牌桌
         tables = [TableState() for _ in range(tables_per_worker)]
@@ -382,6 +399,285 @@ def env_worker_loop(
             for tidx, pname, state_vec, cp, is_main in pending_infers:
                 action_probs, value = state_pipe.recv()
                 _apply_infer_result(tables[tidx], cp, pname, action_probs, value, is_main)
+
+    except Exception as e:
+        traj_queue.put(('error', worker_id, str(e), traceback.format_exc()))
+    finally:
+        traj_queue.put(('done', worker_id))
+
+
+# ========================================================================
+#  C++ 引擎快速路径 —— 全部用 index-based API，零 Python 对象分配
+# ========================================================================
+
+def _env_worker_loop_cc(
+    worker_id: int,
+    state_pipe: Connection,
+    traj_queue: Queue,
+    game_cfg: dict,
+    opp_type_list: List[str],
+    total_hands: int,
+    sb: int, bb: int, stack: int,
+    eq_thr: float, bonus_cap: float,
+    tables_per_worker: int,
+):
+    """C++ 引擎 Worker 主循环，完全代替 Python 路径。"""
+    MAIN_IDX = 0  # 主 agent 始终是 player 0
+    ACTION_MAP = {0: 0, 1: 1, 2: 2, 3: 2, 4: 2}  # aidx → C++ action (0=fold, 1=call, 2=raise)
+    hands_done = 0
+
+    # ---- 简化的羻牌前位置过滤 ----
+    PREFLOP_THR = [0.30, 0.35, 0.25, 0.50, 0.45, 0.35]
+
+    def _preflop_filter_cc(probs, eng, pi, hs):
+        if eng.round != 1:
+            return probs
+        dist = (pi - eng.dealer_pos + eng.num_players) % eng.num_players
+        thr = PREFLOP_THR[min(dist, 5)]
+        if hs >= thr:
+            return probs
+        r = max(0.05, hs / thr)
+        a = probs.copy()
+        a[2] *= r
+        a[3] *= r * 0.5
+        a[4] *= r * 0.2
+        s = float(np.sum(a))
+        return a / s if s > 1e-8 else probs
+
+    def _apply_mask_and_sample_cc(action_probs, eng, pi):
+        """C++ 版本的掩码 + 采样"""
+        lm = np.array(eng.get_legal_mask(pi), dtype=np.float32)
+        mp_ = action_probs * lm
+        s = float(np.sum(mp_))
+        mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
+
+        hs = eng.get_hand_strength(pi)
+        mp_ = _preflop_filter_cc(mp_, eng, pi, hs)
+
+        aidx = int(np.random.choice(5, p=mp_))
+        # 解码动作
+        act_str, amt = cc_decode_action(
+            aidx, eng.current_bet, eng.big_blind,
+            eng.get_player_bet(pi), eng.get_player_stack(pi),
+        )
+        old_prob = float(np.clip(mp_[aidx], 1e-8, 1.0))
+        return act_str, amt, aidx, old_prob, hs
+
+    def _fish_action_cc(eng, pi):
+        lm = np.array(eng.get_legal_mask(pi), dtype=np.float32)
+        p = lm / (np.sum(lm) + 1e-8)
+        aidx = int(np.random.choice(5, p=p))
+        act_str, amt = cc_decode_action(
+            aidx, eng.current_bet, eng.big_blind,
+            eng.get_player_bet(pi), eng.get_player_stack(pi),
+        )
+        return act_str, amt, aidx
+
+    # ---- C++ 牌桌状态 ----
+    class CCTable:
+        __slots__ = ['eng', 'arecs', 'allin', 'traj', 'finished']
+        def __init__(self):
+            self.eng = None
+            self.arecs = None
+            self.allin = None
+            self.traj = None
+            self.finished = False
+
+    def _init_cc(table: CCTable):
+        eng = GameEngine(sb, bb, stack, 6)
+        eng.start_new_hand(random.randrange(6))
+        table.eng = eng
+        table.arecs = {i: [] for i in range(6)}
+        table.allin = {'happened': False, 'round': None, 'equity': 0.0}
+        table.traj = {'states': [], 'actions': [], 'old_probs': []}
+        table.finished = False
+
+    def _settle_cc(table: CCTable) -> bool:
+        nonlocal hands_done
+        eng = table.eng
+        arecs = table.arecs
+        allin = table.allin
+        traj = table.traj
+
+        fp = eng.get_player_stack(MAIN_IDX) - stack
+        w_indices = list(eng.get_winner_indices())
+        iw = MAIN_IDX in w_indices
+
+        # 简化奖励计算（避免创建 Python Player/Game 代理对象）
+        fr = float(np.clip(fp / max(bb, 1), -2.0, 2.0))
+        if iw:
+            fr += 0.5
+
+        # ---- Anti-Fold-Bot 勇气奖励 ----
+        ma = arecs.get(MAIN_IDX, [])
+        total_actions = len(ma)
+        fold_count = sum(1 for a, _ in ma if a == 'fold')
+        vpip_count = sum(1 for a, _ in ma if a in ('call', 'raise'))
+
+        if total_actions >= 1:
+            if fold_count == total_actions and fp <= 0:
+                fr -= 1.0
+            if vpip_count > 0:
+                fr += 2.0
+            if total_actions == 1 and ma[0][0] == 'fold':
+                fr -= 0.5
+
+        # all-in 补偿
+        ab = 0.0
+        if not iw and allin['happened'] and allin['round'] in (1, 2):
+            eq = allin['equity']
+            if eq >= eq_thr:
+                ub = min(bonus_cap, 0.20 + (eq - eq_thr) * 2.0)
+                fr += ub
+                ab = ub
+
+        fr = float(np.clip(fr, -2.0, 2.0))
+        traj['final_reward'] = fr
+        traj['allin_unlucky'] = {
+            'triggered': ab > 0, 'bonus': ab, 'equity': allin['equity'],
+        }
+
+        # 统计指标
+        agg = raises = 0
+        for a, _ in ma:
+            if a in ('raise', 'call'):
+                agg += 1
+            if a == 'raise':
+                raises += 1
+
+        ws_names = [f"Player_{w}" for w in w_indices]
+        profits = {f"Player_{i}": eng.get_player_stack(i) - stack for i in range(6)}
+        arecs_named = {}
+        for i in range(6):
+            name = "Main_AI" if i == 0 else f"Opponent_{i}"
+            arecs_named[name] = arecs.get(i, [])
+
+        res = {
+            'winner': ws_names[0] if ws_names else 'Unknown',
+            'winners': ws_names,
+            'player_profits': profits,
+            'action_histories': arecs_named,
+            'metrics': {'bluffs': 0, 'aggressive': agg, 'raises': raises, 'invalid_bets': 0},
+        }
+        traj_queue.put(('traj', res, traj))
+        hands_done += 1
+        table.finished = True
+        return True
+
+    def _advance_cc(table: CCTable):
+        """推进 C++ 牌桌直到需要 NN 推理或手牌结束。"""
+        eng = table.eng
+        while True:
+            if eng.is_hand_over():
+                _settle_cc(table)
+                return None
+
+            if eng.is_round_over():
+                done = eng.proceed_to_next_round()
+                if done:
+                    _settle_cc(table)
+                    return None
+
+            pi = eng.next_player()
+            if pi < 0:
+                # 没有可行动的玩家，尝试推进到下一轮
+                if eng.is_round_over():
+                    done = eng.proceed_to_next_round()
+                    if done:
+                        _settle_cc(table)
+                        return None
+                    continue
+                _settle_cc(table)
+                return None
+
+            is_main = (pi == MAIN_IDX)
+
+            if is_main:
+                state_vec = np.array(eng.get_state_vector(pi), dtype=np.float32)
+                return (pi, state_vec, is_main)
+
+            # 对手处理
+            oi = max(0, min(pi - 1, len(opp_type_list) - 1))
+            opp_kind = opp_type_list[oi]
+
+            if opp_kind == 'fish':
+                act_str, amt, aidx = _fish_action_cc(eng, pi)
+                table.arecs[pi].append((act_str, amt if amt else 0))
+                cc_act = ACTION_MAP[aidx]
+                if not eng.handle_action(pi, cc_act, amt if amt else 0):
+                    eng.handle_action(pi, 0, 0)  # fold
+            else:
+                # PPO 对手也需要推理
+                state_vec = np.array(eng.get_state_vector(pi), dtype=np.float32)
+                return (pi, state_vec, is_main)
+
+    def _apply_cc_result(table: CCTable, pi: int, is_main: bool,
+                         action_probs: np.ndarray, value: float):
+        eng = table.eng
+        act_str, amt, aidx, old_prob, hs = _apply_mask_and_sample_cc(action_probs, eng, pi)
+        table.arecs[pi].append((act_str, amt if amt else 0))
+
+        cc_act = ACTION_MAP[aidx]
+        ok = eng.handle_action(pi, cc_act, amt if amt else 0)
+
+        if is_main:
+            if ok:
+                if not table.allin['happened'] and eng.get_player_is_all_in(pi) and eng.round in (1, 2):
+                    try:
+                        eq = float(eng.get_hand_strength(pi))
+                    except Exception:
+                        eq = 0.0
+                    table.allin.update({'happened': True, 'round': int(eng.round),
+                                        'equity': max(0.0, min(1.0, eq))})
+
+            if not ok:
+                eng.handle_action(pi, 0, 0)  # fold
+                lm = np.array(eng.get_legal_mask(pi), dtype=np.float32)
+                fp = float(np.clip(action_probs[0], 1e-8, 1.0)) if np.sum(lm) > 0 else 1.0
+                table.traj['actions'].append(0)
+                table.traj['old_probs'].append(fp)
+            else:
+                table.traj['actions'].append(int(aidx))
+                table.traj['old_probs'].append(old_prob)
+        else:
+            if not ok:
+                eng.handle_action(pi, 0, 0)  # fold
+
+    try:
+        tables = [CCTable() for _ in range(tables_per_worker)]
+        for t in tables:
+            if hands_done < total_hands:
+                _init_cc(t)
+            else:
+                t.finished = True
+
+        while hands_done < total_hands:
+            pending = []
+            for tidx, table in enumerate(tables):
+                if table.finished:
+                    if hands_done < total_hands:
+                        _init_cc(table)
+                    else:
+                        continue
+                result = _advance_cc(table)
+                if result is not None:
+                    pi, state_vec, is_main = result
+                    if is_main:
+                        table.traj['states'].append(state_vec)
+                    pname = "Main_AI" if pi == MAIN_IDX else f"Opponent_{pi}"
+                    pending.append((tidx, pname, state_vec, pi, is_main))
+
+            if not pending:
+                if all(t.finished for t in tables):
+                    break
+                continue
+
+            for tidx, pname, state_vec, pi, is_main in pending:
+                state_pipe.send(('infer', worker_id, pname, state_vec))
+
+            for tidx, pname, state_vec, pi, is_main in pending:
+                action_probs, value = state_pipe.recv()
+                _apply_cc_result(tables[tidx], pi, is_main, action_probs, value)
 
     except Exception as e:
         traj_queue.put(('error', worker_id, str(e), traceback.format_exc()))
