@@ -123,7 +123,7 @@ def _fish_action(game: PokerGame, player: Player, sr: StateRepresentation):
 
 
 # ========================================================================
-#  Worker 主循环
+#  Worker 主循环（向量化环境 — 每个 worker 同时管理多张牌桌）
 # ========================================================================
 
 def env_worker_loop(
@@ -135,16 +135,18 @@ def env_worker_loop(
     total_hands: int,
 ):
     """
-    Worker 进程入口。
+    向量化环境 Worker 进程入口。
+
+    每个 worker 同时管理 tables_per_worker 张独立牌桌，
+    批量收集推理请求后一次性发送，大幅提升 GPU batch size。
 
     Args:
         worker_id: 本 worker 编号
-        state_pipe: 双向 Pipe 与主进程通信（发送推理请求 / 接收推理结果）
+        state_pipe: 双向 Pipe 与主进程通信
         traj_queue: Queue 用于回传完成的轨迹
-        game_cfg: {'small_blind', 'big_blind', 'initial_stack',
-                    'allin_eq_threshold', 'allin_bonus_cap'}
-        opp_type_list: 长度 5 的列表，每个元素 'ppo' 或 'fish'
-        total_hands: 本 worker 需要跑的手牌数
+        game_cfg: 游戏配置
+        opp_type_list: 对手类型列表
+        total_hands: 本 worker 需要跑的手牌总数
     """
     sr = StateRepresentation()
     rc = RewardCalculator()
@@ -154,139 +156,228 @@ def env_worker_loop(
     stack = game_cfg['initial_stack']
     eq_thr = game_cfg.get('allin_eq_threshold', 0.65)
     bonus_cap = game_cfg.get('allin_bonus_cap', 0.80)
+    tables_per_worker = game_cfg.get('tables_per_worker', 8)
 
     hands_done = 0
 
+    # 牌桌状态结构
+    class TableState:
+        __slots__ = ['game', 'players', 'arecs', 'allin', 'traj', 'finished']
+        def __init__(self):
+            self.game = None
+            self.players = None
+            self.arecs = None
+            self.allin = None
+            self.traj = None
+            self.finished = False
+
+    def _init_table(table: TableState):
+        """(re)初始化一张牌桌"""
+        players = [Player("Main_AI", stack, True)]
+        for i in range(5):
+            players.append(Player(f"Opponent_{i + 1}", stack, True))
+        game = PokerGame(sb, bb, players)
+        game.dealer_pos = random.randrange(6)
+        game.start_new_hand()
+        table.game = game
+        table.players = players
+        table.arecs = {p.name: [] for p in players}
+        table.allin = {'happened': False, 'round': None, 'equity': 0.0}
+        table.traj = {'states': [], 'actions': [], 'old_probs': []}
+        table.finished = False
+
+    def _settle_table(table: TableState) -> bool:
+        """结算一张牌桌，返回 True 表示已发送轨迹"""
+        nonlocal hands_done
+        game, players, arecs, allin, traj = (
+            table.game, table.players, table.arecs, table.allin, table.traj
+        )
+
+        alive = [p for p in players if p.is_active]
+        if len(alive) == 1 and game.pot > 0:
+            game._award_pot(alive[0])
+
+        fp = players[0].stack - stack
+        ws = [p.name for p in getattr(game, 'winners', [])]
+        if not ws and hasattr(game, 'winner') and game.winner:
+            ws = [game.winner.name]
+        iw = "Main_AI" in ws
+
+        fr = rc.calculate_reward(
+            player=players[0], game=game, action="end",
+            action_amount=0, is_winner=iw, profit_loss=fp, done=True,
+        )
+        ma = arecs.get("Main_AI", [])
+
+        # ---- Anti-Fold-Bot 奖励塑形 ----
+        total_actions = len(ma)
+        fold_count = sum(1 for a, _ in ma if a == 'fold')
+        vpip_count = sum(1 for a, _ in ma if a in ('call', 'raise'))
+
+        if total_actions >= 1:
+            if fold_count == total_actions and fp <= 0:
+                fr -= 0.5
+            if vpip_count > 0:
+                fr += 0.15 * min(vpip_count, 3)
+            if total_actions == 1 and ma[0][0] == 'fold':
+                fr -= 0.3
+
+        # all-in 补偿
+        ab = 0.0
+        if not iw and allin['happened'] and allin['round'] in (1, 2):
+            eq = allin['equity']
+            if eq >= eq_thr:
+                ub = min(bonus_cap, 0.20 + (eq - eq_thr) * 2.0)
+                fr += ub
+                ab = ub
+
+        traj['final_reward'] = fr
+        traj['allin_unlucky'] = {
+            'triggered': ab > 0, 'bonus': ab, 'equity': allin['equity'],
+        }
+
+        agg = raises = 0
+        for a, _ in ma:
+            if a in ('raise', 'call'):
+                agg += 1
+            if a == 'raise':
+                raises += 1
+
+        res = {
+            'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
+            'winners': ws,
+            'player_profits': {p.name: p.stack - stack for p in players},
+            'action_histories': arecs,
+            'metrics': {'bluffs': 0, 'aggressive': agg, 'raises': raises, 'invalid_bets': 0},
+        }
+
+        traj_queue.put(('traj', res, traj))
+        hands_done += 1
+        table.finished = True
+        return True
+
+    def _advance_table_until_infer(table: TableState) -> Optional[Tuple]:
+        """
+        推进一张牌桌直到需要 NN 推理或手牌结束。
+        返回 (player_name, state_vec) 如果需要推理，否则 None。
+        """
+        game = table.game
+        while True:
+            if game.is_hand_over():
+                _settle_table(table)
+                return None
+
+            if game.is_round_over():
+                if not game.proceed_to_next_round():
+                    _settle_table(table)
+                    return None
+
+            cp = game.next_player()
+            if not cp or not cp.is_active:
+                continue
+
+            pname = cp.name
+            is_main = (pname == "Main_AI")
+
+            if is_main:
+                state_vec = sr.get_state(game, cp)
+                return (pname, state_vec, cp, True)  # 需要推理
+
+            # 对手处理
+            oi = int(pname.split('_')[-1]) - 1 if '_' in pname else 0
+            oi = max(0, min(oi, len(opp_type_list) - 1))
+            opp_kind = opp_type_list[oi]
+
+            if opp_kind == 'fish':
+                act, amt = _fish_action(game, cp, sr)
+                table.arecs[pname].append((act, amt if amt else 0))
+                if not game.handle_action(cp, act, amt):
+                    game.handle_action(cp, 'fold', None)
+            else:
+                # PPO 对手也需要推理
+                state_vec = sr.get_state(game, cp)
+                return (pname, state_vec, cp, False)  # 需要推理
+
+    def _apply_infer_result(
+        table: TableState, cp: Player, pname: str,
+        action_probs: np.ndarray, value: float, is_main: bool
+    ):
+        """将推理结果应用到牌桌。"""
+        game = table.game
+        act, amt, aidx, old_prob = _apply_mask_and_sample(action_probs, game, cp, sr)
+        table.arecs[pname].append((act, amt if amt else 0))
+        ok = game.handle_action(cp, act, amt)
+
+        if is_main:
+            # 记录轨迹
+            state_vec = sr.get_state(game, cp) if not hasattr(cp, '_last_state') else cp._last_state
+            # 实际上 state_vec 在 _advance_table_until_infer 中已经编码了
+            # 这里使用之前编码的 state
+            if ok:
+                if not table.allin['happened'] and cp.is_all_in and game.round in (1, 2):
+                    try:
+                        eq = float(sr.calculate_hand_strength(cp, game))
+                    except Exception:
+                        eq = 0.0
+                    table.allin.update({'happened': True, 'round': int(game.round),
+                                        'equity': max(0.0, min(1.0, eq))})
+
+            if not ok:
+                game.handle_action(cp, 'fold', None)
+                lm = _legal_mask(game, cp)
+                fp = float(np.clip(action_probs[0], 1e-8, 1.0)) if np.sum(lm) > 0 else 1.0
+                table.traj['actions'].append(0)
+                table.traj['old_probs'].append(fp)
+            else:
+                table.traj['actions'].append(int(aidx))
+                table.traj['old_probs'].append(old_prob)
+        else:
+            if not ok:
+                game.handle_action(cp, 'fold', None)
+
     try:
+        # 初始化所有牌桌
+        tables = [TableState() for _ in range(tables_per_worker)]
+        for t in tables:
+            if hands_done < total_hands:
+                _init_table(t)
+            else:
+                t.finished = True
+
         while hands_done < total_hands:
-            # ---- 创建游戏 ----
-            players = [Player("Main_AI", stack, True)]
-            for i in range(5):
-                players.append(Player(f"Opponent_{i + 1}", stack, True))
-            game = PokerGame(sb, bb, players)
-            game.dealer_pos = random.randrange(6)
-            game.start_new_hand()
+            # ---- 第 1 步：推进所有牌桌，收集推理请求 ----
+            pending_infers = []  # [(table_idx, pname, state_vec, cp, is_main), ...]
 
-            arecs: Dict[str, list] = {p.name: [] for p in players}
-            allin = {'happened': False, 'round': None, 'equity': 0.0}
-            traj: Dict = {'states': [], 'actions': [], 'old_probs': []}
-
-            # ---- 牌局模拟 ----
-            while not game.is_hand_over():
-                if game.is_round_over():
-                    if not game.proceed_to_next_round():
-                        break
-                cp = game.next_player()
-                if not cp or not cp.is_active:
-                    continue
-
-                pname = cp.name
-                is_main = (pname == "Main_AI")
-
-                if is_main:
-                    # 主 Agent：必须走 GPU 推理
-                    state_vec = sr.get_state(game, cp)
-                    state_pipe.send(('infer', worker_id, pname, state_vec))
-                    action_probs, value = state_pipe.recv()  # 阻塞等 GPU 返回
-
-                    act, amt, aidx, old_prob = _apply_mask_and_sample(
-                        action_probs, game, cp, sr
-                    )
-                    arecs[pname].append((act, amt if amt else 0))
-                    ok = game.handle_action(cp, act, amt)
-
-                    # all-in 记录
-                    if ok and not allin['happened'] and cp.is_all_in and game.round in (1, 2):
-                        try:
-                            eq = float(sr.calculate_hand_strength(cp, game))
-                        except Exception:
-                            eq = 0.0
-                        allin.update({'happened': True, 'round': int(game.round),
-                                      'equity': max(0.0, min(1.0, eq))})
-
-                    if not ok:
-                        game.handle_action(cp, 'fold', None)
-                        lm = _legal_mask(game, cp)
-                        fp = float(np.clip(action_probs[0], 1e-8, 1.0)) if np.sum(lm) > 0 else 1.0
-                        traj['states'].append(state_vec)
-                        traj['actions'].append(0)
-                        traj['old_probs'].append(fp)
+            for tidx, table in enumerate(tables):
+                if table.finished:
+                    # 重启牌桌
+                    if hands_done < total_hands:
+                        _init_table(table)
                     else:
-                        traj['states'].append(state_vec)
-                        traj['actions'].append(int(aidx))
-                        traj['old_probs'].append(old_prob)
-                else:
-                    # ---- 对手 ----
-                    oi = int(pname.split('_')[-1]) - 1 if '_' in pname else 0
-                    oi = max(0, min(oi, len(opp_type_list) - 1))
-                    opp_kind = opp_type_list[oi]
+                        continue
 
-                    if opp_kind == 'fish':
-                        act, amt = _fish_action(game, cp, sr)
-                    else:
-                        # PPO 对手：也走 GPU 推理
-                        state_vec = sr.get_state(game, cp)
-                        state_pipe.send(('infer', worker_id, pname, state_vec))
-                        action_probs, _ = state_pipe.recv()
-                        act, amt, _, _ = _apply_mask_and_sample(
-                            action_probs, game, cp, sr
-                        )
+                result = _advance_table_until_infer(table)
+                if result is not None:
+                    pname, state_vec, cp, is_main = result
+                    # 如果是主 agent，记录 state——轨迹用
+                    if is_main:
+                        table.traj['states'].append(state_vec)
+                    pending_infers.append((tidx, pname, state_vec, cp, is_main))
 
-                    arecs[pname].append((act, amt if amt else 0))
-                    if not game.handle_action(cp, act, amt):
-                        game.handle_action(cp, 'fold', None)
+            if not pending_infers:
+                # 所有牌桌都结束了
+                if all(t.finished for t in tables):
+                    break
+                continue
 
-            # ---- 结算 ----
-            alive = [p for p in players if p.is_active]
-            if len(alive) == 1 and game.pot > 0:
-                game._award_pot(alive[0])
+            # ---- 第 2 步：批量发送推理请求 ----
+            for tidx, pname, state_vec, cp, is_main in pending_infers:
+                state_pipe.send(('infer', worker_id, pname, state_vec))
 
-            fp = players[0].stack - stack
-            ws = [p.name for p in getattr(game, 'winners', [])]
-            if not ws and hasattr(game, 'winner') and game.winner:
-                ws = [game.winner.name]
-            iw = "Main_AI" in ws
-
-            fr = rc.calculate_reward(
-                player=players[0], game=game, action="end",
-                action_amount=0, is_winner=iw, profit_loss=fp, done=True,
-            )
-            ma = arecs.get("Main_AI", [])
-            if len(ma) == 1 and ma[0][0] == "fold" and fp <= 0:
-                fr -= 0.25
-
-            # all-in 补偿
-            ab = 0.0
-            if not iw and allin['happened'] and allin['round'] in (1, 2):
-                eq = allin['equity']
-                if eq >= eq_thr:
-                    ub = min(bonus_cap, 0.20 + (eq - eq_thr) * 2.0)
-                    fr += ub
-                    ab = ub
-
-            traj['final_reward'] = fr
-            traj['allin_unlucky'] = {
-                'triggered': ab > 0, 'bonus': ab, 'equity': allin['equity'],
-            }
-
-            # 轻量指标
-            agg = raises = 0
-            for a, _ in ma:
-                if a in ('raise', 'call'):
-                    agg += 1
-                if a == 'raise':
-                    raises += 1
-
-            res = {
-                'winner': game.winner.name if hasattr(game, 'winner') and game.winner else 'Unknown',
-                'winners': ws,
-                'player_profits': {p.name: p.stack - stack for p in players},
-                'action_histories': arecs,
-                'metrics': {'bluffs': 0, 'aggressive': agg, 'raises': raises, 'invalid_bets': 0},
-            }
-
-            traj_queue.put(('traj', res, traj))
-            hands_done += 1
+            # ---- 第 3 步：批量接收推理结果（保持顺序）----
+            for tidx, pname, state_vec, cp, is_main in pending_infers:
+                action_probs, value = state_pipe.recv()
+                _apply_infer_result(tables[tidx], cp, pname, action_probs, value, is_main)
 
     except Exception as e:
         traj_queue.put(('error', worker_id, str(e), traceback.format_exc()))

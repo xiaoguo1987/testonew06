@@ -43,15 +43,16 @@ class RewardCalculator:
             'winning_hand': 1.0,          # 赢牌奖励
             'losing_hand': -0.8,          # 输牌惩罚
             'pot_odds': 0.2,              # 底池赔率奖励
-            'hand_strength': 0.4,         # 手牌强度奖励（增加）
-            'bluff_success': 0.6,         # 成功诈唬奖励（增加）
-            'fold_when_weak': 0.5,        # 及时弃牌奖励（显著增加）
-            'aggressive_play': 0.05,      # 主动进攻奖励（降低）
+            'hand_strength': 0.4,         # 手牌强度奖励
+            'bluff_success': 0.6,         # 成功诈唱奖励
+            'fold_when_weak': 0.15,       # 及时弃牌奖励（大幅降低，避免弃牌机器人）
+            'aggressive_play': 0.15,      # 主动进攻奖励（提高，鼓励参与）
+            'vpip_bonus': 0.20,           # 主动入池奖励（新增，反弃牌机器人）
             'position_advantage': 0.15,   # 位置优势奖励
             'bankroll_change': 0.5,       # 筹码变化奖励
             'decision_consistency': 0.2,  # 决策一致性奖励
             'position_utilization': 0.2,  # 位置利用奖励
-            'invalid_bet': 0.6            # 无效下注惩罚（增加）
+            'invalid_bet': 0.6            # 无效下注惩罚
         }
         
         # 定义不同游戏阶段的奖励调整因子
@@ -380,8 +381,12 @@ class RewardCalculator:
         if action == 'raise':
             total_reward += self.reward_weights['aggressive_play']
 
-        # 7. 及时弃牌奖励
-        if action == 'fold' and hand_strength < 0.2:
+        # 6.5 VPIP 奖励（反弃牌机器人）：用较好的手牌主动入池
+        if action in ['call', 'raise'] and hand_strength >= 0.3:
+            total_reward += self.reward_weights.get('vpip_bonus', 0.0) * hand_strength
+
+        # 7. 及时弃牌奖励（仅当手牌真的很弱时）
+        if action == 'fold' and hand_strength < 0.15:
             total_reward += self.reward_weights['fold_when_weak']
 
         # 8. 成功诈唬奖励

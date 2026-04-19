@@ -66,8 +66,8 @@ class PPOConfig:
     # 价值损失裁剪
     value_clip: float = 0.2
 
-    # KL散度早停
-    kl_target: float = 0.015
+    # KL散度早停（大模型 + 大 batch 需要更宽松的阈值）
+    kl_target: float = 0.03
     kl_early_stop: bool = True
 
     # 每批轨迹更新轮次与批次（根据扑克游戏样本生成率优化）

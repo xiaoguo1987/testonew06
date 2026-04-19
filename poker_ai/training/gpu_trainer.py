@@ -48,11 +48,13 @@ class SeedRLTrainer:
         skip_final_eval: bool = False,
         allin_eq_threshold: float = 0.65,
         allin_bonus_cap: float = 0.80,
+        tables_per_worker: int = 8,
     ):
         """
         Args:
             model: LargePPOModel 实例（已在 GPU 上构建）
             num_workers: CPU 游戏 worker 进程数
+            tables_per_worker: 每个 worker 同时管理的牌桌数（向量化环境）
             inference_min_batch: 推理最小批量
             inference_max_batch: 推理最大批量
             inference_timeout_s: 推理收集超时（秒）
@@ -75,6 +77,7 @@ class SeedRLTrainer:
         self.skip_final_eval = skip_final_eval
         self.allin_eq_threshold = allin_eq_threshold
         self.allin_bonus_cap = allin_bonus_cap
+        self.tables_per_worker = tables_per_worker
 
         # 训练统计
         self.total_hands = 0
@@ -384,7 +387,9 @@ class SeedRLTrainer:
 
         logger.info(
             f"[SEED RL] 训练开始: num_hands={num_hands}, "
-            f"workers={self.num_workers}, ppo_buffer={self.ppo_buffer_size}, "
+            f"workers={self.num_workers}, tables_per_worker={self.tables_per_worker}, "
+            f"并发牌桌={self.num_workers * self.tables_per_worker}, "
+            f"ppo_buffer={self.ppo_buffer_size}, "
             f"inference_batch=[{self.inference_min_batch}, {self.inference_max_batch}]"
         )
 
@@ -405,6 +410,7 @@ class SeedRLTrainer:
             'initial_stack': self.initial_stack,
             'allin_eq_threshold': self.allin_eq_threshold,
             'allin_bonus_cap': self.allin_bonus_cap,
+            'tables_per_worker': self.tables_per_worker,
         }
 
         # 创建通信管道

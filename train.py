@@ -84,6 +84,12 @@ def _apply_hardware_profile(args) -> None:
             args.ppo_buffer_size = 4096
             args.inference_min_batch = 32
             args.inference_max_batch = 512
+            # Anti-Fold-Bot: SEED RL 大模型需要更强的探索
+            if float(getattr(args, 'ppo_entropy_coef', 0.02)) <= 0.02:
+                args.ppo_entropy_coef = 0.05
+            # 向量化环境：每个 worker 管理 8 张牌桌，64×8=512 并发牌桌
+            if int(getattr(args, 'tables_per_worker', 0)) <= 0:
+                args.tables_per_worker = 8
         else:
             # Legacy 架构：CPU 多进程采样 + 小模型
             if int(getattr(args, 'train_workers', 0)) <= 0:
@@ -422,6 +428,7 @@ def _train_seed_rl(args):
             skip_final_eval=getattr(args, 'skip_final_eval', False),
             allin_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
             allin_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
+            tables_per_worker=getattr(args, 'tables_per_worker', 8),
         )
 
         # 加载 checkpoint

@@ -88,8 +88,8 @@ class LargePPOModel:
         # 价值损失裁剪
         self.value_clip = getattr(cfg, 'value_clip', 0.2)
 
-        # KL 早停
-        self.kl_target = getattr(cfg, 'kl_target', 0.015)
+        # KL 早停（大模型 + 大 batch 需要更宽松的阈值）
+        self.kl_target = getattr(cfg, 'kl_target', 0.03)
         self.kl_early_stop = getattr(cfg, 'kl_early_stop', True)
         self.last_kl = 0.0
 
@@ -320,6 +320,14 @@ class LargePPOModel:
         done_batches = 0
         sdim = states.shape[1]
 
+        # 诊断日志：GAE 统计
+        adv_mean, adv_std = float(np.mean(advantages)), float(np.std(advantages))
+        adv_abs_max = float(np.max(np.abs(advantages))) if len(advantages) > 0 else 0.0
+        logger.info(
+            f"[LargePPO] GAE统计: mean={adv_mean:.6f}, std={adv_std:.6f}, "
+            f"abs_max={adv_abs_max:.6f}, returns_mean={float(np.mean(returns)):.4f}"
+        )
+
         for epoch in range(self.update_epochs):
             idx = np.random.permutation(buf)
             epoch_kl, epoch_n = 0.0, 0
@@ -354,20 +362,29 @@ class LargePPOModel:
                 )
 
                 bkl = float(kl.numpy())
-                epoch_kl += bkl
-                epoch_n += 1
+                bal = float(al.numpy())
+                bcl = float(cl.numpy())
 
-                if self.kl_early_stop and epoch_n >= 1 and (epoch_kl / epoch_n) > self.kl_target:
-                    stopped = True
-                    break
-
-                total_a += float(al.numpy())
-                total_c += float(cl.numpy())
+                # 先记录指标，再判断 KL 早停（修复原先 break 后指标丢失的 bug）
+                total_a += bal
+                total_c += bcl
                 total_kl += bkl
                 done_batches += 1
 
+                epoch_kl += bkl
+                epoch_n += 1
+
                 self.current_step += 1
                 self.update_lr(self.current_step)
+
+                # KL 早停：至少跑完 2 个 batch 后才允许触发（避免单 batch 过早终止）
+                if self.kl_early_stop and epoch_n >= 2 and (epoch_kl / epoch_n) > self.kl_target:
+                    logger.info(
+                        f"[LargePPO] KL早停: epoch={epoch}, batch={epoch_n}, "
+                        f"avg_kl={epoch_kl / epoch_n:.6f} > target={self.kl_target}"
+                    )
+                    stopped = True
+                    break
 
             if stopped:
                 break
