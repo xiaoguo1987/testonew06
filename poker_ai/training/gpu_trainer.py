@@ -360,7 +360,7 @@ class SeedRLTrainer:
     #  Checkpoint
     # ------------------------------------------------------------------
 
-    def save_checkpoint(self, is_best: bool = False):
+    def save_checkpoint(self, is_best: bool = False, max_keep: int = 27):
         path = os.path.join(self.checkpoint_dir, f"seed_rl_hands_{self.total_hands}")
         self.model.save_weights(path)
         logger.info(f"Checkpoint 保存: {path}")
@@ -368,6 +368,25 @@ class SeedRLTrainer:
             best_path = os.path.join(self.checkpoint_dir, "seed_rl_best")
             self.model.save_weights(best_path)
             logger.info(f"Best model 保存: {best_path}")
+
+        # ---- 自动清理：只保留最近 max_keep 个 checkpoint ----
+        try:
+            import glob
+            pattern = os.path.join(self.checkpoint_dir, "seed_rl_hands_*")
+            # 收集所有 checkpoint 的 index 文件（TF 格式为 .index）
+            index_files = sorted(glob.glob(pattern + ".index"))
+            if len(index_files) > max_keep:  # 超过 27 个才触发清理
+                to_remove = index_files[:-max_keep]
+                for idx_file in to_remove:
+                    prefix = idx_file.replace(".index", "")
+                    for f in glob.glob(prefix + "*"):
+                        try:
+                            os.remove(f)
+                        except OSError:
+                            pass
+                    logger.info(f"清理旧 checkpoint: {os.path.basename(prefix)}")
+        except Exception as e:
+            logger.warning(f"清理 checkpoint 时出错: {e}")
 
     def load_checkpoint(self, path: Optional[str] = None) -> bool:
         if path is None:
