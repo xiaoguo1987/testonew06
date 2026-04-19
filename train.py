@@ -90,6 +90,11 @@ def _apply_hardware_profile(args) -> None:
             # 向量化环境：每个 worker 管理 8 张牌桌，64×8=512 并发牌桌
             if int(getattr(args, 'tables_per_worker', 0)) <= 0:
                 args.tables_per_worker = 8
+            # RL 训练禁用混合精度：PPO 的 log-prob 计算在 FP16 下不稳定
+            args.mixed_precision = False
+            # 14M 大模型降低学习率，防止步子迈太大
+            if float(getattr(args, 'learning_rate', 3e-4)) >= 3e-4:
+                args.learning_rate = 1e-4
         else:
             # Legacy 架构：CPU 多进程采样 + 小模型
             if int(getattr(args, 'train_workers', 0)) <= 0:
@@ -116,10 +121,11 @@ def _apply_hardware_profile(args) -> None:
             if int(getattr(args, 'ppo_epochs', 10)) <= 10:
                 args.ppo_epochs = 15
 
-        # 默认走 GPU + XLA + 混合精度
+        # 默认走 GPU + XLA + 混合精度（seed-rl 已单独禁用 FP16）
         if getattr(args, 'device', 'auto') == 'auto':
             args.device = 'gpu'
-        args.mixed_precision = True
+        if not hasattr(args, 'mixed_precision') or arch != 'seed-rl':
+            args.mixed_precision = True
         args.enable_xla = True
         args.gpu_memory_growth = True
         return

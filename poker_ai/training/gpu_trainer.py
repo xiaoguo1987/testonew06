@@ -452,6 +452,26 @@ class SeedRLTrainer:
 
         try:
             while alive_workers or not traj_queue.empty():
+                # === 背压机制：buffer 超过阈值时优先训练，暂停推理 ===
+                buf_size = len(traj_buffer.get('states', []))
+                if buf_size >= self.ppo_buffer_size:
+                    # 先把队列里剩余的轨迹全部收完
+                    self._collect_trajectories(
+                        traj_queue, traj_buffer, results_buffer, alive_workers
+                    )
+                    # 循环训练直到 buffer 消化完毕
+                    while len(traj_buffer.get('states', [])) >= self.ppo_buffer_size:
+                        loss = self._do_ppo_train(traj_buffer)
+                        if loss is not None:
+                            elapsed = time.time() - training_start
+                            hps = self.total_hands / max(elapsed, 1e-6)
+                            logger.info(
+                                f"[SEED RL] hands={self.total_hands}/{num_hands}, "
+                                f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
+                                f"速度={hps:.1f} hands/s"
+                            )
+                    # 训练完毕，继续正常循环
+
                 # 1. 推理调度
                 inferred = self._dispatch_inference(main_pipes, pending)
 
@@ -461,7 +481,7 @@ class SeedRLTrainer:
                 )
                 self.total_hands += new_hands
 
-                # 3. PPO 训练
+                # 3. PPO 训练（常规路径）
                 buf_size = len(traj_buffer.get('states', []))
                 if buf_size >= self.ppo_buffer_size:
                     loss = self._do_ppo_train(traj_buffer)
@@ -518,15 +538,17 @@ class SeedRLTrainer:
             for pipe in worker_pipes:
                 pipe.close()
 
-        # 训练结束后处理剩余 buffer
+        # 训练结束后处理剩余 buffer（仅当数据足够多时才训练，避免小样本灾难性过拟合）
         remaining = len(traj_buffer.get('states', []))
-        if remaining > 0:
+        min_remaining = max(256, self.model.batch_size)  # 至少要够一个完整 batch
+        if remaining >= min_remaining:
             logger.info(f"[SEED RL] 处理剩余 buffer: {remaining} steps")
-            # 降低阈值强制训练
             old_buf = self.ppo_buffer_size
             self.ppo_buffer_size = 1
             self._do_ppo_train(traj_buffer)
             self.ppo_buffer_size = old_buf
+        elif remaining > 0:
+            logger.info(f"[SEED RL] 丢弃剩余 buffer: {remaining} steps < {min_remaining}（太少会导致过拟合）")
 
         elapsed = time.time() - training_start
         hps = self.total_hands / max(elapsed, 1e-6)
