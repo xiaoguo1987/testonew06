@@ -661,8 +661,10 @@ class SeedRLTrainer:
                             f"速度={hps:.1f} hands/s"
                         )
 
-                # 4. 定期评估
-                if (self.total_hands - last_eval_hand) >= self.eval_interval and self.total_hands > 0:
+                # 4. 定期评估（与 checkpoint 间隔对齐，避免阻塞训练流水线）
+                # 评估在主线程串行执行，会阻塞推理调度导致所有 worker 停滞
+                eval_interval_actual = max(self.eval_interval, self.checkpoint_interval)
+                if (self.total_hands - last_eval_hand) >= eval_interval_actual and self.total_hands > 0:
                     last_eval_hand = self.total_hands
                     eval_res = self._run_evaluation(self.num_eval_games)
                     score = eval_res['avg_profit']
