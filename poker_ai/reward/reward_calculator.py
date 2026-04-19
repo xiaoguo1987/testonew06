@@ -47,7 +47,7 @@ class RewardCalculator:
             'bluff_success': 0.6,         # 成功诈唱奖励
             'fold_when_weak': 0.15,       # 及时弃牌奖励
             'aggressive_play': 0.15,      # 主动进攻奖励
-            'vpip_bonus': 0.08,           # 主动入池奖励（降低，避免淹没真实胜负信号）
+            'vpip_bonus': 0.0,            # 主动入池奖励（已禁用：100万手后AI已学会入池，现强制靠真实胜负学习）
             'position_advantage': 0.15,   # 位置优势奖励
             'bankroll_change': 0.5,       # 筹码变化奖励
             'decision_consistency': 0.2,  # 决策一致性奖励

@@ -101,9 +101,9 @@ def _apply_hardware_profile(args) -> None:
                 args.tables_per_worker = 32 if _cc else 8
             # RL 训练禁用混合精度：PPO 的 log-prob 计算在 FP16 下不稳定
             args.mixed_precision = False
-            # 14M 大模型需要极低学习率：防止 KL 飙到 33+ 导致每次只训练 3 batch
-            if float(getattr(args, 'learning_rate', 3e-4)) >= 3e-5:
-                args.learning_rate = 3e-5
+            # 14M 大模型学习率：使用默认 3e-4，配合 KL target=15.0 和 critic_lr_multiplier=3.0
+            # 注意：不再强制降低学习率，之前 3e-5 太低导致模型无法有效学习
+            pass
         else:
             # Legacy 架构：CPU 多进程采样 + 小模型
             if int(getattr(args, 'train_workers', 0)) <= 0:
@@ -376,8 +376,9 @@ def setup_environment(args):
             f"ppo_update_min_steps={getattr(args, 'ppo_update_min_steps', 0)}"
         )
         logger.info(
-            f"训练策略: opponent_update_interval={getattr(args, 'opponent_update_interval', 10000)}, "
-            f"critic_lr_multiplier=3.0, Curriculum=Phase1(全鱼)→Phase2(混合)→Phase3(自对弈)"
+            f"训练策略: dynamic_opp_interval(Phase1=50K/Phase2=50K/Phase3=150K), "
+            f"critic_lr_multiplier=3.0, Curriculum=Phase1(全鱼)→Phase2(混合)→Phase3(自对弈), "
+            f"历史对手池=开启(pool_size=20, 70%近期+30%远期), VPIP奖励=已禁用"
         )
         logger.info(f"可用GPU数量: {len(gpus)}")
         for i, gpu in enumerate(gpus):

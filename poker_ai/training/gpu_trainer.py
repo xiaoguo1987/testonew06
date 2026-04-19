@@ -14,6 +14,9 @@ import os
 import time
 import logging
 import threading
+import shutil
+import random
+import glob
 import numpy as np
 import multiprocessing as mp
 from multiprocessing import Queue, Process, Pipe
@@ -114,11 +117,28 @@ class SeedRLTrainer:
         self.opp_model.set_weights(model.get_weights())
         self._opp_weights = None  # 废弃旧的权重快照变量
 
+        # 历史对手池 (Fictitious Self-Play)
+        # 保存历史 checkpoint 路径，对手更新时随机抽取（近期权重更高）
+        self._opponent_pool: List[str] = []  # 可用的历史 checkpoint 路径列表
+        self._opponent_pool_max_size = 20    # 对手池最大容量
+        self._archive_dir = '/root/autodl-tmp/poker_checkpoints'  # 数据盘归档目录
+        self._max_keep_local = 30  # 本地保留最近30个 checkpoint
+        os.makedirs(self._archive_dir, exist_ok=True)
+
         os.makedirs(checkpoint_dir, exist_ok=True)
 
     # ------------------------------------------------------------------
     #  Curriculum Learning
     # ------------------------------------------------------------------
+
+    def _get_dynamic_opp_interval(self) -> int:
+        """根据当前 Curriculum 阶段返回动态对手更新间隔。
+        Phase 0: 不更新（全鱼）
+        Phase 1: 50000（混合阶段，慢速适应）
+        Phase 2: 150000（自对弈阶段，防止军备竞赛）
+        """
+        phase_intervals = [50000, 50000, 150000]  # Phase0/1/2 对应的间隔
+        return phase_intervals[min(self._curriculum_phase, 2)]
 
     def _update_curriculum_phase(self):
         """根据训练进度自动切换对手难度阶段。
@@ -145,7 +165,7 @@ class SeedRLTrainer:
             logger.info(
                 f"[SEED RL] Curriculum 阶段切换: {phase_names[old_phase]} → {phase_names[new_phase]}, "
                 f"hands={self.total_hands}, progress={progress:.1%}, "
-                f"opp_types={self.opp_type_list}"
+                f"opp_types={self.opp_type_list}, opp_interval={self._get_dynamic_opp_interval()}"
             )
             # 阶段切换时立刻同步一次对手权重（如果新阶段包含 PPO 对手）
             if new_phase >= 1:
@@ -426,7 +446,34 @@ class SeedRLTrainer:
     #  Checkpoint
     # ------------------------------------------------------------------
 
-    def save_checkpoint(self, is_best: bool = False, max_keep: int = 27):
+    def _update_opponent_from_pool(self):
+        """从历史对手池中随机抽取一个版本加载到对手模型。
+
+        抽取策略：70% 概率抽最近 3 个版本，30% 概率抽更早的版本。
+        如果对手池为空或加载失败，回退到同步当前模型权重。
+        """
+        if not self._opponent_pool:
+            # 池为空，回退到同步当前权重
+            self.opp_model.set_weights(self.model.get_weights())
+            return
+
+        # 加权抽取：最近的版本被抽中概率更高
+        pool_size = len(self._opponent_pool)
+        if pool_size >= 3 and random.random() < 0.7:
+            # 70% 概率从最近 3 个中抽
+            chosen = random.choice(self._opponent_pool[-3:])
+        else:
+            # 30% 概率从全池中抽
+            chosen = random.choice(self._opponent_pool)
+
+        try:
+            self.opp_model.load_weights(chosen)
+            logger.info(f"[SEED RL] 对手池抽取: {os.path.basename(chosen)} (pool_size={pool_size})")
+        except Exception as e:
+            logger.warning(f"[SEED RL] 加载历史对手失败: {e}，回退到当前权重")
+            self.opp_model.set_weights(self.model.get_weights())
+
+    def save_checkpoint(self, is_best: bool = False, max_keep: int = 30):
         path = os.path.join(self.checkpoint_dir, f"seed_rl_hands_{self.total_hands}")
         self.model.save_weights(path)
         logger.info(f"Checkpoint 保存: {path}")
@@ -435,24 +482,33 @@ class SeedRLTrainer:
             self.model.save_weights(best_path)
             logger.info(f"Best model 保存: {best_path}")
 
-        # ---- 自动清理：只保留最近 max_keep 个 checkpoint ----
+        # 添加到对手池
+        self._opponent_pool.append(path)
+        if len(self._opponent_pool) > self._opponent_pool_max_size:
+            self._opponent_pool = self._opponent_pool[-self._opponent_pool_max_size:]
+
+        # ---- 自动管理：超过 max_keep 的归档到数据盘 ----
         try:
-            import glob
             pattern = os.path.join(self.checkpoint_dir, "seed_rl_hands_*")
-            # 收集所有 checkpoint 的 index 文件（TF 格式为 .index）
             index_files = sorted(glob.glob(pattern + ".index"))
-            if len(index_files) > max_keep:  # 超过 27 个才触发清理
-                to_remove = index_files[:-max_keep]
-                for idx_file in to_remove:
+            if len(index_files) > max_keep:
+                to_archive = index_files[:-max_keep]
+                for idx_file in to_archive:
                     prefix = idx_file.replace(".index", "")
+                    base_name = os.path.basename(prefix)
+                    # 移动到数据盘而不是删除
                     for f in glob.glob(prefix + "*"):
+                        dst = os.path.join(self._archive_dir, os.path.basename(f))
                         try:
-                            os.remove(f)
+                            shutil.move(f, dst)
                         except OSError:
-                            pass
-                    logger.info(f"清理旧 checkpoint: {os.path.basename(prefix)}")
+                            try:
+                                os.remove(f)
+                            except OSError:
+                                pass
+                    logger.info(f"归档旧 checkpoint 到数据盘: {base_name}")
         except Exception as e:
-            logger.warning(f"清理 checkpoint 时出错: {e}")
+            logger.warning(f"归档 checkpoint 时出错: {e}")
 
     def load_checkpoint(self, path: Optional[str] = None) -> bool:
         if path is None:
@@ -490,11 +546,22 @@ class SeedRLTrainer:
         logger.info(
             f"[SEED RL] Curriculum Learning 已启用: "
             f"Phase1(0-20%全鱼) → Phase2(20-50%混合) → Phase3(50%+自对弈), "
-            f"opponent_update_interval={self.opponent_update_interval}"
+            f"dynamic_opp_interval=[50K, 50K, 150K], "
+            f"历史对手池=开启(max_size={self._opponent_pool_max_size}), "
+            f"archive_dir={self._archive_dir}"
         )
 
         # 初始化对手模型权重并预热
         self.opp_model.set_weights(self.model.get_weights())
+
+        # 初始化对手池：扫描现有 checkpoint 加入池
+        existing_ckpts = sorted(glob.glob(
+            os.path.join(self.checkpoint_dir, "seed_rl_hands_*.index")
+        ))
+        for idx_file in existing_ckpts[-self._opponent_pool_max_size:]:
+            self._opponent_pool.append(idx_file.replace(".index", ""))
+        if self._opponent_pool:
+            logger.info(f"[SEED RL] 对手池已加载 {len(self._opponent_pool)} 个历史版本")
 
         # 模型预热（主模型 + 对手模型）
         self.model.warmup()
@@ -617,12 +684,14 @@ class SeedRLTrainer:
                 # 6. Curriculum Learning 阶段检查 + 对手权重更新
                 self._update_curriculum_phase()
 
-                if (self.total_hands - last_opp_update_hand) >= self.opponent_update_interval and self.total_hands > 0:
+                # 动态对手更新间隔：Phase越高，间隔越长（防止军备竞赛）
+                dynamic_interval = self._get_dynamic_opp_interval()
+                if (self.total_hands - last_opp_update_hand) >= dynamic_interval and self.total_hands > 0:
                     last_opp_update_hand = self.total_hands
-                    # Phase 1 全鱼模式不需要同步权重（鱼用随机策略）
+                    # Phase 0 全鱼模式不需要同步权重（鱼用随机策略）
                     if self._curriculum_phase >= 1:
-                        self.opp_model.set_weights(self.model.get_weights())
-                        logger.info(f"[SEED RL] 对手权重已更新 @{self.total_hands}")
+                        self._update_opponent_from_pool()
+                        logger.info(f"[SEED RL] 对手权重已更新 @{self.total_hands} (interval={dynamic_interval})")
 
                 # 短暂 sleep 避免 CPU 空转
                 if inferred == 0 and new_hands == 0:
