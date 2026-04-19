@@ -1,10 +1,28 @@
 # state_representation.py (6-Max 专用增强版)
 
+import json
+import os
 import numpy as np
 from typing import List, Dict, Optional
 from ..game.cards import Card, RANK_VALUES
 from ..game.poker_game import Player, PokerGame
 from ..model.hand_evaluator import HandEvaluator
+
+# ---- 翻牌前胜率查找表 (LUT) 共享单例 ----
+_PREFLOP_LUT: Optional[Dict] = None
+
+
+def _get_preflop_lut() -> Dict:
+    global _PREFLOP_LUT
+    if _PREFLOP_LUT is not None:
+        return _PREFLOP_LUT
+    lut_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'preflop_equity.json')
+    try:
+        with open(lut_path, 'r') as f:
+            _PREFLOP_LUT = json.load(f)
+    except FileNotFoundError:
+        _PREFLOP_LUT = {}
+    return _PREFLOP_LUT
 
 class StateRepresentation:
     """德州扑克状态表示转换器 (6-Max 专用增强版)"""
@@ -184,13 +202,25 @@ class StateRepresentation:
         return win_rate
 
     def _quick_preflop_strength(self, cards: List[Card]) -> float:
-        # 复用刚才的高性能版本代码
+        """翻牌前手牌强度：优先查LUT（精确MC胜率），fallback到评分公式"""
         if len(cards) != 2: return 0.0
         c1, c2 = sorted(cards, key=lambda x: x.value, reverse=True)
         is_suited = c1.suit == c2.suit
-        key = f"{c1.rank}{c2.rank}{'s' if is_suited else 'o'}"
+        if c1.value == c2.value:
+            key = f"{c1.rank}{c2.rank}"
+        else:
+            key = f"{c1.rank}{c2.rank}{'s' if is_suited else 'o'}"
         if key in self._preflop_cache: return self._preflop_cache[key]
-        
+
+        # 优先查LUT
+        lut = _get_preflop_lut()
+        if lut and key in lut:
+            # 默认取 vs 3 opponents（6人桌中位情况）
+            strength = float(lut[key].get('3', lut[key].get('1', 0.5)))
+            self._preflop_cache[key] = strength
+            return strength
+
+        # Fallback: 评分公式
         score = 0.0
         rank_scores = {14: 10, 13: 8, 12: 7, 11: 6, 10: 5}
         score += rank_scores.get(c1.value, c1.value / 2.0)

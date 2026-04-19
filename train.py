@@ -81,7 +81,7 @@ def _apply_hardware_profile(args) -> None:
 
         # PPO 训练并行批次策略
         if int(getattr(args, 'train_rollouts_per_worker', 0)) <= 0:
-            args.train_rollouts_per_worker = 4
+            args.train_rollouts_per_worker = 8  # 每个worker单次推进8手牌，减少线程切换开销
         if int(getattr(args, 'train_sync_every_batches', 0)) <= 0:
             args.train_sync_every_batches = 8
 

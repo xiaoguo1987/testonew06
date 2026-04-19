@@ -1,3 +1,5 @@
+import json
+import os
 import numpy as np
 import random
 import threading
@@ -5,6 +7,32 @@ from functools import lru_cache
 from typing import Dict, List, Tuple, Optional, Set
 from ..game.poker_game import PokerGame, Player
 from ..game.cards import Card, evaluate_hand, compare_hands
+
+# ---- 翻牌前胜率查找表 (LUT) ----
+_PREFLOP_EQUITY_LUT: Optional[Dict] = None
+
+
+def _load_preflop_lut() -> Dict:
+    """懒加载翻牌前胜率LUT（模块级单例）"""
+    global _PREFLOP_EQUITY_LUT
+    if _PREFLOP_EQUITY_LUT is not None:
+        return _PREFLOP_EQUITY_LUT
+    lut_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'preflop_equity.json')
+    try:
+        with open(lut_path, 'r') as f:
+            _PREFLOP_EQUITY_LUT = json.load(f)
+    except FileNotFoundError:
+        _PREFLOP_EQUITY_LUT = {}
+    return _PREFLOP_EQUITY_LUT
+
+
+def _cards_to_lut_key(cards: List[Card]) -> str:
+    """将两张手牌转换为LUT查询键，如 'AKs'、'AKo'、'AA'"""
+    c1, c2 = sorted(cards, key=lambda c: c.value, reverse=True)
+    if c1.value == c2.value:
+        return f"{c1.rank}{c2.rank}"  # 对子：AA, KK
+    suffix = 's' if c1.suit == c2.suit else 'o'
+    return f"{c1.rank}{c2.rank}{suffix}"
 
 class RewardCalculator:
     """德州扑克奖励计算器（精细化优化版）"""
@@ -35,7 +63,7 @@ class RewardCalculator:
         }
         
         # 蒙特卡洛模拟参数
-        self.monte_carlo_iterations = 1000  # 模拟次数
+        self.monte_carlo_iterations = 200  # 模拟次数（从1000降至200：RL只需梯度方向，不需绝对精确胜率）
         # 并行训练时多个 worker 都会出现同名玩家（如 Main_AI）。
         # 使用线程本地存储，避免不同 worker 之间互相覆盖/删除状态。
         self._thread_local = threading.local()
@@ -54,22 +82,37 @@ class RewardCalculator:
         return id(player)
 
     def calculate_hand_strength(self, player: Player, game: PokerGame) -> float:
-        """估算手牌强度（0-1之间），含蒙特卡洛缓存优化"""
+        """估算手牌强度（0-1之间），翻牌前查表O(1)，翻牌后MC模拟+缓存"""
         if not player.is_active:
             return 0.0
         
-        # 缓存键：手牌+公共牌（确保可哈希）
-        cache_key = self._get_hand_cache_key(player.cards, game.board)
-        
-        # 优先从缓存获取，无缓存则执行模拟
         if game.board:
+            # 翻牌后：MC模拟+LRU缓存
+            cache_key = self._get_hand_cache_key(player.cards, game.board)
             win_prob = self._cached_win_probability(cache_key, player, game)
         else:
-            win_prob = self._preflop_hand_strength(player.cards)
+            # 翻牌前：O(1) 查表，彻底跳过MC
+            win_prob = self._preflop_lut_lookup(player.cards, game)
         
         # 记录当前手牌强度（用于决策一致性判断）
         self._update_player_last_state(player, win_prob)
         return win_prob
+
+    def _preflop_lut_lookup(self, cards: List[Card], game: PokerGame) -> float:
+        """翻牌前查表获取胜率（O(1)，零CPU开销）"""
+        if len(cards) != 2:
+            return 0.0
+        lut = _load_preflop_lut()
+        if not lut:
+            return self._preflop_hand_strength(cards)  # fallback
+        key = _cards_to_lut_key(cards)
+        entry = lut.get(key)
+        if entry is None:
+            return self._preflop_hand_strength(cards)  # fallback
+        # 根据当前活跃对手数查对应胜率
+        num_opp = sum(1 for p in game.players if p.is_active) - 1
+        num_opp = max(1, min(5, num_opp))
+        return float(entry.get(str(num_opp), entry.get('1', 0.5)))
 
     def _get_hand_cache_key(self, player_cards: List[Card], board: List[Card]) -> str:
         """生成手牌+公共牌的缓存键（可哈希）"""
