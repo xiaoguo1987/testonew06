@@ -155,21 +155,32 @@ class LargePPOModel:
     #  推理
     # ------------------------------------------------------------------
 
+    @tf.function(reduce_retracing=True)
+    def _predict_actor(self, states):
+        return self.actor(states, training=False)
+
+    @tf.function(reduce_retracing=True)
+    def _predict_critic(self, states):
+        return self.critic(states, training=False)
+
     def predict(self, state: np.ndarray) -> Tuple[np.ndarray, float]:
         state = np.expand_dims(state, axis=0) if state.ndim == 1 else state
         st = tf.convert_to_tensor(state, dtype=tf.float32)
-        ap = self.actor(st, training=False).numpy()
-        v = self.critic(st, training=False).numpy()
+        ap = self._predict_actor(st).numpy()
+        v = self._predict_critic(st).numpy()
         return ap[0], float(v[0, 0])
 
     def predict_batch(self, states: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """批量推理 — GPU 集中式推理服务器核心接口。"""
+        """批量推理 — GPU 集中式推理服务器核心接口。
+        
+        使用 @tf.function 编译的内部方法，消除 Python 调用开销。
+        """
         states = np.asarray(states, dtype=np.float32)
         if states.ndim == 1:
             states = np.expand_dims(states, axis=0)
         st = tf.convert_to_tensor(states, dtype=tf.float32)
-        ap = self.actor(st, training=False).numpy()
-        v = self.critic(st, training=False).numpy().reshape(-1)
+        ap = self._predict_actor(st).numpy()
+        v = self._predict_critic(st).numpy().reshape(-1)
         return ap, v
 
     # ------------------------------------------------------------------

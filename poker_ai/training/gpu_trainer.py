@@ -84,8 +84,17 @@ class SeedRLTrainer:
         # 对手类型：前 4 个是 PPO，第 5 个是 Fish
         self.opp_type_list = ['ppo', 'ppo', 'ppo', 'ppo', 'fish']
 
-        # 对手模型权重快照（PPO 对手共享同一套权重）
-        self._opp_weights = None  # 将在 train() 中初始化
+        # ====== 初始化专属的对手模型，彻底消除权重切换开销 ======
+        from ..model.large_ppo_model import LargePPOModel
+        self.opp_model = LargePPOModel(
+            input_dim=model.input_dim,
+            output_dim=model.output_dim,
+            hidden_dims=model.hidden_dims,
+            residual_layer_idx=model.residual_layer_idx,
+        )
+        # 初始化时就同步一次权重
+        self.opp_model.set_weights(model.get_weights())
+        self._opp_weights = None  # 废弃旧的权重快照变量
 
         os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -97,67 +106,85 @@ class SeedRLTrainer:
         self, pipes: List, pending: Dict
     ) -> int:
         """
-        非阻塞地从所有 worker Pipe 收集待推理状态，
-        攒够批量后 GPU 推理并分发结果。
+        超时积攒式批量推理调度。
 
-        返回本次处理的推理请求数。
+        核心思路：循环收集 worker 请求，直到满足以下任一条件才触发 GPU 推理：
+          1. batch 达到 inference_max_batch（立刻开火）
+          2. batch >= inference_min_batch 且超时（开火）
+          3. batch > 0 且等待超过 3× timeout（防死锁开火）
+          4. 1 秒内无任何数据（退出）
+
+        主 agent 用 self.model 推理，PPO 对手用独立的 self.opp_model 推理，
+        彻底消除 set_weights 开销。
         """
-        # 收集待推理请求
-        for wid, pipe in enumerate(pipes):
-            try:
-                while pipe.poll(0):  # 非阻塞
-                    msg = pipe.recv()
-                    if msg[0] == 'infer':
-                        _, w_id, player_name, state_vec = msg
-                        pending[wid].append((player_name, state_vec))
-            except (EOFError, BrokenPipeError):
-                continue
-
-        # 汇总所有 pending
+        t0 = time.time()
         batch_items = []  # [(wid, player_name, state_vec), ...]
-        for wid in list(pending.keys()):
-            while pending[wid]:
-                pname, sv = pending[wid].pop(0)
-                batch_items.append((wid, pname, sv))
+
+        while True:
+            # 1. 扫描所有管道收集请求
+            for wid, pipe in enumerate(pipes):
+                try:
+                    while pipe.poll(0):  # 非阻塞
+                        msg = pipe.recv()
+                        if msg[0] == 'infer':
+                            _, w_id, player_name, state_vec = msg
+                            pending[wid].append((player_name, state_vec))
+                except (EOFError, BrokenPipeError):
+                    continue
+
+            # 2. 从 pending 组装 batch
+            for wid in list(pending.keys()):
+                while pending[wid] and len(batch_items) < self.inference_max_batch:
+                    pname, sv = pending[wid].pop(0)
+                    batch_items.append((wid, pname, sv))
+
+            # 3. 判断 GPU 触发条件
             if len(batch_items) >= self.inference_max_batch:
-                break
+                break  # 达到最大上限，立刻开火
+
+            elapsed = time.time() - t0
+            if len(batch_items) >= self.inference_min_batch and elapsed >= self.inference_timeout_s:
+                break  # 满足最小批量且超时，开火
+
+            if len(batch_items) > 0 and elapsed >= self.inference_timeout_s * 3:
+                break  # 防死锁：虽然没达到最小批量，但等太久了
+
+            if elapsed > 1.0:
+                break  # 1 秒内无任何数据，退出
 
         if not batch_items:
             return 0
 
-        # GPU 批量推理
-        states = np.array([item[2] for item in batch_items], dtype=np.float32)
-
-        # 区分主 agent 和对手 agent（对手用对手权重）
-        # 简化实现：所有 NN agent 用同一个模型做推理
-        # （主 agent 和 PPO 对手共享模型结构，训练时只更新主 agent）
-        # 可以通过交替应用权重实现差异化，但开销大
-        # 这里统一推理，对手在评估时用较老的权重（通过定期 snapshot 模拟）
-
-        action_probs, values = self.model.predict_batch(states)
-
-        # 如果有对手权重快照，对手用对手权重推理
-        # 为避免反复切换权重的开销，分两批推理
-        main_indices = []
-        opp_indices = []
+        # ---- GPU 批量推理 ----
+        # 区分主 agent 和 PPO 对手
+        main_items = []  # (original_index, wid, pname, sv)
+        opp_items = []
         for i, (wid, pname, sv) in enumerate(batch_items):
             if pname == "Main_AI":
-                main_indices.append(i)
+                main_items.append((i, wid, pname, sv))
             else:
-                opp_indices.append(i)
+                opp_items.append((i, wid, pname, sv))
 
-        if opp_indices and self._opp_weights is not None:
-            # 对手用旧权重推理
-            opp_states = states[opp_indices]
-            # 临时切换权重
-            current_weights = self.model.get_weights()
-            self.model.set_weights(self._opp_weights)
-            opp_probs, opp_vals = self.model.predict_batch(opp_states)
-            self.model.set_weights(current_weights)
-            # 写回
-            for j, oi in enumerate(opp_indices):
-                action_probs[oi] = opp_probs[j]
-                values[oi] = opp_vals[j]
+        # 预分配结果数组
+        n = len(batch_items)
+        action_probs = np.zeros((n, self.model.output_dim), dtype=np.float32)
+        values = np.zeros(n, dtype=np.float32)
+
+        # 主 agent 推理
+        if main_items:
+            main_states = np.array([it[3] for it in main_items], dtype=np.float32)
+            m_probs, m_vals = self.model.predict_batch(main_states)
+            for j, (oi, _, _, _) in enumerate(main_items):
+                action_probs[oi] = m_probs[j]
+                values[oi] = m_vals[j]
+
+        # PPO 对手用独立模型推理 — 零权重切换开销
+        if opp_items:
+            opp_states = np.array([it[3] for it in opp_items], dtype=np.float32)
+            o_probs, o_vals = self.opp_model.predict_batch(opp_states)
+            for j, (oi, _, _, _) in enumerate(opp_items):
+                action_probs[oi] = o_probs[j]
+                values[oi] = o_vals[j]
 
         # 分发结果
         for i, (wid, pname, sv) in enumerate(batch_items):
@@ -190,7 +217,7 @@ class SeedRLTrainer:
                 # 轨迹写入 PPO buffer
                 n_steps = len(traj.get('states', []))
                 if n_steps > 0:
-                    for k in ('states', 'actions', 'old_probs', 'values'):
+                    for k in ('states', 'actions', 'old_probs'):
                         traj_buffer[k].extend(traj.get(k, []))
                     # 构建 dones 和 rewards
                     dones = [0.0] * n_steps
@@ -361,11 +388,12 @@ class SeedRLTrainer:
             f"inference_batch=[{self.inference_min_batch}, {self.inference_max_batch}]"
         )
 
-        # 初始化对手权重快照
-        self._opp_weights = self.model.get_weights_snapshot()
+        # 初始化对手模型权重并预热
+        self.opp_model.set_weights(self.model.get_weights())
 
-        # 模型预热
+        # 模型预热（主模型 + 对手模型）
         self.model.warmup()
+        self.opp_model.warmup()
 
         # 计算每个 worker 需要跑的手牌数
         hands_per_worker = max(1, num_hands // self.num_workers)
@@ -460,10 +488,10 @@ class SeedRLTrainer:
                     last_ckpt_hand = self.total_hands
                     self.save_checkpoint(is_best=False)
 
-                # 6. 定期更新对手权重
+                # 6. 定期更新对手模型权重（仅此一次 set_weights，而非每次推理）
                 if (self.total_hands - last_opp_update_hand) >= self.opponent_update_interval and self.total_hands > 0:
                     last_opp_update_hand = self.total_hands
-                    self._opp_weights = self.model.get_weights_snapshot()
+                    self.opp_model.set_weights(self.model.get_weights())
                     logger.info(f"[SEED RL] 对手权重已更新 @{self.total_hands}")
 
                 # 短暂 sleep 避免 CPU 空转

@@ -169,7 +169,7 @@ def env_worker_loop(
 
             arecs: Dict[str, list] = {p.name: [] for p in players}
             allin = {'happened': False, 'round': None, 'equity': 0.0}
-            traj: Dict = {'states': [], 'actions': [], 'old_probs': [], 'values': []}
+            traj: Dict = {'states': [], 'actions': [], 'old_probs': []}
 
             # ---- 牌局模拟 ----
             while not game.is_hand_over():
@@ -211,12 +211,10 @@ def env_worker_loop(
                         traj['states'].append(state_vec)
                         traj['actions'].append(0)
                         traj['old_probs'].append(fp)
-                        traj['values'].append(value)
                     else:
                         traj['states'].append(state_vec)
                         traj['actions'].append(int(aidx))
                         traj['old_probs'].append(old_prob)
-                        traj['values'].append(value)
                 else:
                     # ---- 对手 ----
                     oi = int(pname.split('_')[-1]) - 1 if '_' in pname else 0
