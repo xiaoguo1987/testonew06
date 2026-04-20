@@ -393,7 +393,9 @@ class SeedRLTrainer:
 
             while not game.is_hand_over():
                 if game.is_round_over():
-                    if not game.proceed_to_next_round():
+                    # proceed_to_next_round 返回 True = 手牌结束（摊牌或只剩1人）
+                    # 返回 False = 仅进入下一轮（flop/turn/river），手牌继续
+                    if game.proceed_to_next_round():
                         break
                 cp = game.next_player()
                 if not cp or not cp.is_active:

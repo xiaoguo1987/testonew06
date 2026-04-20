@@ -456,8 +456,8 @@ def _env_worker_loop_cc(
         mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
 
         hs = eng.get_hand_strength(pi)
-        mp_ = _preflop_filter_cc(mp_, eng, pi, hs)
-
+        # 移除 _preflop_filter_cc：训练采样时不应干预 action 分布，
+        # 否则 old_prob(过滤后) 与 new_prob(未过滤) 产生虚假 ratio，导致 PPO 梯度被污染，模型学不会加注。
         aidx = int(np.random.choice(5, p=mp_))
         # 解码动作
         act_str, amt = cc_decode_action(
@@ -526,6 +526,11 @@ def _env_worker_loop_cc(
             if total_actions == 1 and ma[0][0] == 'fold':
                 fr -= 0.1
 
+        # 加注专项奖励：防止模型永远 call，鼓励探索 raise
+        raise_count = sum(1 for a, _ in ma if a == 'raise')
+        if raise_count > 0:
+            fr += 0.2  # 加注动作额外 +0.2（不依赖输赢输）
+
         # all-in 补偿
         ab = 0.0
         if not iw and allin['happened'] and allin['round'] in (1, 2):
@@ -535,7 +540,7 @@ def _env_worker_loop_cc(
                 fr += ub
                 ab = ub
 
-        fr = float(np.clip(fr, -2.0, 2.0))
+        fr = float(np.clip(fr, -2.0, 3.0))  # 上限从 2.0 扩大到 3.0，确保 raise+win 奖励可超过纯 call+win
         traj['final_reward'] = fr
         traj['allin_unlucky'] = {
             'triggered': ab > 0, 'bonus': ab, 'equity': allin['equity'],
