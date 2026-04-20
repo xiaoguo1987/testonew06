@@ -364,17 +364,24 @@ class SeedRLTrainer:
     # ------------------------------------------------------------------
 
     def _run_evaluation(self, num_games: int = 100) -> Dict:
-        """简易评估：用当前模型 vs Fish 对手打 num_games 手。
-        
+        """简易评估：用当前模型 vs 随机对手打 num_games 手。
+
+        修复说明：
+        1. 移除 _preflop_filter：评估应反映模型真实输出，不叠加翻牌前过滤偏差
+        2. 改用 argmax（确定性策略）：评估时取概率最高的动作，而非随机采样
+        3. 新增行动分布日志：打印 fold/call/raise 比例，便于诊断弃牌机器人问题
         注意：评估在主进程中串行执行（非多进程），保持简洁。
         """
         from ..model.state_representation import StateRepresentation
         from ..game.poker_game import PokerGame, Player
+        from .env_worker import _legal_mask
 
         sr = StateRepresentation()
         wins, total_profit = 0, 0.0
         invalid_bets = 0
         total_actions = 0
+        # 行动分布统计（用于诊断弃牌机器人）
+        action_counts = [0, 0, 0, 0, 0]  # fold, call, raise2x, raise4x, allin
 
         for _ in range(num_games):
             players_e = [Player("Main_AI", self.initial_stack, True)]
@@ -395,25 +402,27 @@ class SeedRLTrainer:
                 if cp.name == "Main_AI":
                     state = sr.get_state(game, cp)
                     ap, v = self.model.predict(state)
-                    from .env_worker import _legal_mask, _preflop_filter
                     lm = _legal_mask(game, cp)
                     mp_ = ap * lm
                     s = float(np.sum(mp_))
+                    # 归一化（不加 _preflop_filter，评估看真实策略）
                     mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
-                    hs = sr.calculate_hand_strength(cp, game)
-                    mp_ = _preflop_filter(mp_, game, cp, hs)
-                    ai = int(np.random.choice(5, p=mp_))
+                    # 确定性策略：取概率最高的合法动作（argmax）
+                    ai = int(np.argmax(mp_))
+                    action_counts[ai] += 1
                     av = np.zeros(5, dtype=np.float32)
                     av[ai] = 1.0
+                    hs = sr.calculate_hand_strength(cp, game)
                     act, amt = sr.decode_action(av, game, cp, hs)
                     total_actions += 1
                     if not game.handle_action(cp, act, amt):
                         invalid_bets += 1
+                        action_counts[0] += 1  # 无效动作降级为弃牌
+                        action_counts[ai] -= 1
                         game.handle_action(cp, 'fold', None)
                 else:
                     # 对手随机
-                    from .env_worker import _legal_mask as _lm
-                    lm = _lm(game, cp)
+                    lm = _legal_mask(game, cp)
                     p = lm / (np.sum(lm) + 1e-8)
                     ai = int(np.random.choice(5, p=p))
                     av = np.zeros(5, dtype=np.float32)
@@ -434,6 +443,17 @@ class SeedRLTrainer:
                 ws = [game.winner.name]
             if "Main_AI" in ws:
                 wins += 1
+
+        # 行动分布日志：帮助诊断弃牌机器人问题
+        action_names = ['fold', 'call', 'raise2x', 'raise4x', 'allin']
+        if total_actions > 0:
+            dist_str = ', '.join(
+                f"{action_names[i]}={action_counts[i]/total_actions:.1%}"
+                for i in range(5)
+            )
+            logger.info(f"[评估] 行动分布 (总{total_actions}次): {dist_str}")
+        else:
+            logger.warning("[评估] Main_AI 未执行任何行动，可能存在游戏逻辑问题")
 
         return {
             'win_rate': wins / max(num_games, 1),
@@ -487,16 +507,17 @@ class SeedRLTrainer:
         if len(self._opponent_pool) > self._opponent_pool_max_size:
             self._opponent_pool = self._opponent_pool[-self._opponent_pool_max_size:]
 
-        # ---- 自动管理：超过 max_keep 的归档到数据盘 ----
+        # ---- 自动管理：按时间排序保留最新 max_keep 个，旧的归档到数据盘 ----
         try:
             pattern = os.path.join(self.checkpoint_dir, "seed_rl_hands_*")
-            index_files = sorted(glob.glob(pattern + ".index"))
+            index_files = glob.glob(pattern + ".index")
+            # 按文件修改时间升序排列（最旧的在前）
+            index_files.sort(key=lambda f: os.path.getmtime(f))
             if len(index_files) > max_keep:
                 to_archive = index_files[:-max_keep]
                 for idx_file in to_archive:
                     prefix = idx_file.replace(".index", "")
                     base_name = os.path.basename(prefix)
-                    # 移动到数据盘而不是删除
                     for f in glob.glob(prefix + "*"):
                         dst = os.path.join(self._archive_dir, os.path.basename(f))
                         try:
