@@ -245,11 +245,12 @@ class LargePPOModel:
             old_p = tf.clip_by_value(old_p, 1e-6, 1.0)
             ratio = cur_p / old_p
 
-            # ====== log_ratio clamp 防止 KL 爆炸 ======
-            log_ratio = tf.math.log(cur_p) - tf.math.log(old_p)
-            log_ratio = tf.clip_by_value(log_ratio, -20.0, 20.0)  # 防止极端值
+            # ====== ratio 硬 clamp + log_ratio clamp 防止 KL 爆炸 ======
+            ratio = tf.clip_by_value(ratio, 0.05, 5.0)  # 硬限制概率比，防止 stale buffer 导致极端更新
+            log_ratio = tf.math.log(ratio)  # 基于 clamp 后的 ratio 计算
+            log_ratio = tf.clip_by_value(log_ratio, -2.0, 2.0)  # 收紧范围
             approx_kl = tf.reduce_mean((tf.exp(log_ratio) - 1.0) - log_ratio)
-            mean_kl = tf.clip_by_value(approx_kl, 0.0, 100.0)  # KL 不应超过 100
+            mean_kl = tf.clip_by_value(approx_kl, 0.0, 10.0)  # KL 上限收紧到 10
 
             clipped = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
             surr = tf.minimum(ratio * adv, clipped * adv)
@@ -391,8 +392,8 @@ class LargePPOModel:
                 self.current_step += 1
                 self.update_lr(self.current_step)
 
-                # KL 早停：至少跑完 2 个 batch 后才允许触发（避免单 batch 过早终止）
-                if self.kl_early_stop and epoch_n >= 2 and (epoch_kl / epoch_n) > self.kl_target:
+                # KL 早停：从第 1 个 batch 开始检查（及时捕获 stale buffer 导致的 KL 爆炸）
+                if self.kl_early_stop and epoch_n >= 1 and (epoch_kl / epoch_n) > self.kl_target:
                     logger.info(
                         f"[LargePPO] KL早停: epoch={epoch}, batch={epoch_n}, "
                         f"avg_kl={epoch_kl / epoch_n:.6f} > target={self.kl_target}"
