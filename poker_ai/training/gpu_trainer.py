@@ -547,13 +547,13 @@ class SeedRLTrainer:
         # ---- 自动管理：按时间排序保留最新 max_keep 个，旧的归档到数据盘 ----
         try:
             pattern = os.path.join(self.checkpoint_dir, "seed_rl_hands_*")
-            index_files = glob.glob(pattern + ".index")
+            index_files = glob.glob(pattern + ".actor.weights.h5")
             # 按文件修改时间升序排列（最旧的在前）
             index_files.sort(key=lambda f: os.path.getmtime(f))
             if len(index_files) > max_keep:
                 to_archive = index_files[:-max_keep]
                 for idx_file in to_archive:
-                    prefix = idx_file.replace(".index", "")
+                    prefix = idx_file.replace(".actor.weights.h5", "")
                     base_name = os.path.basename(prefix)
                     for f in glob.glob(prefix + "*"):
                         dst = os.path.join(self._archive_dir, os.path.basename(f))
