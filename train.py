@@ -92,13 +92,13 @@ def _apply_hardware_profile(args) -> None:
             args.ppo_epochs = 4
             args.ppo_buffer_size = 16384
             args.inference_min_batch = 32
-            args.inference_max_batch = 512
+            args.inference_max_batch = 1024  # 最大推理批量（从512提升：RTX 4090D显存充足，提高GPU吞吐）
             # Anti-Fold-Bot: SEED RL 大模型需要更强的探索
             if float(getattr(args, 'ppo_entropy_coef', 0.02)) <= 0.02:
                 args.ppo_entropy_coef = 0.05
             # 向量化环境：根据引擎类型决定 tables_per_worker
             if int(getattr(args, 'tables_per_worker', 0)) <= 0:
-                args.tables_per_worker = 32 if _cc else 8
+                args.tables_per_worker = 48 if _cc else 8  # C++引擎用48张表/worker（从32提升：增加GPU批量稳定性）
             # RL 训练禁用混合精度：PPO 的 log-prob 计算在 FP16 下不稳定
             args.mixed_precision = False
             # 14M 大模型学习率：使用 1e-4（折中值）

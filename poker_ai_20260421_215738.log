@@ -1,0 +1,181 @@
+2026-04-21 21:57:38,239 - PokerAITrainer - INFO - 日志已配置，记录到: logs/poker_ai_20260421_215738.log
+2026-04-21 21:57:41,299 - PokerAITrainer - INFO - mixed precision 已禁用，使用 float32
+2026-04-21 21:57:41,299 - PokerAITrainer - INFO - 已启用 XLA JIT
+2026-04-21 21:57:41,299 - PokerAITrainer - INFO - TensorFlow版本: 2.21.0
+2026-04-21 21:57:41,299 - PokerAITrainer - INFO - DEBUG: 平台=Linux, 逻辑核心数=256, 进程可用核心数=256
+2026-04-21 21:57:41,299 - PokerAITrainer - INFO - 并行配置: TF intra_op=32, inter_op=4
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - 并行配置: train_workers=16, eval_workers=42
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - 引擎状态: C++ Engine, tables_per_worker=32
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - 并行配置: train_rollouts_per_worker=8, train_sync_every_batches=8
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - PPO配置: batch_size=4096, ppo_update_min_steps=0
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - 训练策略: dynamic_opp_interval(Phase1=50K/Phase2=50K/Phase3=150K), critic_lr_multiplier=3.0, Curriculum=Phase1(全鱼)→Phase2(混合)→Phase3(自对弈), 历史对手池=开启(pool_size=20, 70%近期+30%远期), VPIP奖励=已禁用
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - 可用GPU数量: 1
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - GPU 0: /physical_device:GPU:0
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - TF CPU设备数: 1（这是TensorFlow逻辑设备数，不等于CPU核心数）
+2026-04-21 21:57:41,300 - PokerAITrainer - INFO - 训练将使用: GPU
+2026-04-21 21:57:41,565 - PokerAITrainer - INFO - [GPU诊断] GPU预热矩阵乘法成功，结果设备: /job:localhost/replica:0/task:0/device:GPU:0
+2026-04-21 21:57:41,565 - PokerAITrainer - INFO - 环境设置完成: 检查点目录=./checkpoints
+2026-04-21 21:57:41,565 - PokerAITrainer - INFO - 当前运行模式: train
+2026-04-21 21:57:41,565 - PokerAITrainer - INFO - 使用模型类型: ppo
+2026-04-21 21:57:41,565 - PokerAITrainer - INFO - [SEED RL] 启动 GPU-Centric 训练架构
+2026-04-21 21:57:41,565 - PokerAITrainer - INFO - 训练参数: {'mode': 'train', 'hardware_profile': 'rtx4090d', 'arch': 'seed-rl', 'auto_tune': False, 'auto_tune_hands': 4000, 'auto_tune_max_candidates': 3, 'model_type': 'ppo', 'model_path': None, 'checkpoint_dir': './checkpoints', 'num_hands': 3000000, 'learning_rate': 0.0001, 'batch_size': 4096, 'ppo_clip': 0.2, 'ppo_epochs': 4, 'ppo_entropy_coef': 0.05, 'ppo_update_min_steps': 0, 'target_update': 10, 'optimizer': 'adam', 'eval_interval': 5000, 'checkpoint_interval': 50000, 'num_eval_games': 100, 'eval_workers': 42, 'train_workers': 16, 'skip_final_eval': False, 'allin_unlucky_eq_threshold': 0.65, 'allin_unlucky_bonus_cap': 0.8, 'cpu_threads': 32, 'tf_inter_op_threads': 4, 'train_rollouts_per_worker': 8, 'train_sync_every_batches': 8, 'dqn_replay_updates_per_hand': 0, 'device': 'gpu', 'mixed_precision': False, 'enable_xla': True, 'disable_onednn': False, 'gpu_memory_growth': True, 'small_blind': 5, 'big_blind': 10, 'initial_stack': 1000, 'num_players': 6, 'use_ensemble': False, 'resume': False, 'save_best_only': False, 'verbose': False, 'eval_opponent': 'previous_version', 'eval_output': 'eval_results.json', 'demo_hands': 10, 'use_self_play': True, 'opponent_update_interval': 10000, 'eps_start': 1.0, 'eps_end': 0.01, 'eps_decay': 0.0001, 'hidden_dims': [2048, 2048, 1024, 512], 'ppo_buffer_size': 16384, 'inference_min_batch': 32, 'inference_max_batch': 512, 'tables_per_worker': 32}
+2026-04-21 21:57:42,586 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M), actor_lr=1.0e-04, critic_lr=3.0e-04 (3.0x)
+2026-04-21 21:57:42,676 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M), actor_lr=3.0e-04, critic_lr=9.0e-04 (3.0x)
+2026-04-21 21:57:42,787 - PokerAITrainer - INFO - [SEED RL] 开始训练 3000000 手牌...
+2026-04-21 21:57:42,807 - SeedRLTrainer - INFO - [SEED RL] 训练开始: num_hands=3000000, workers=16, tables_per_worker=32, 并发牌桌=512, ppo_buffer=16384, inference_batch=[32, 512]
+2026-04-21 21:57:42,807 - SeedRLTrainer - INFO - [SEED RL] Curriculum Learning 已启用: Phase1(0-20%全鱼) → Phase2(20-50%混合) → Phase3(50%+自对弈), dynamic_opp_interval=[50K, 50K, 150K], 历史对手池=开启(max_size=20), archive_dir=/root/autodl-tmp/poker_checkpoints
+2026-04-21 21:57:43,714 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+2026-04-21 21:57:43,759 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+2026-04-21 21:57:44,158 - SeedRLTrainer - INFO - [SEED RL] 16 个 worker 进程已启动
+2026-04-21 21:57:45,158 - SeedRLTrainer - WARNING - Worker 0 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 1 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 2 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 3 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 4 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 5 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 6 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 7 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 8 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 9 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 10 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 11 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 12 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,159 - SeedRLTrainer - WARNING - Worker 13 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,161 - SeedRLTrainer - WARNING - Worker 14 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,161 - SeedRLTrainer - WARNING - Worker 15 出错: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+Traceback (most recent call last):
+  File "/root/testo/poker_ai/training/env_worker.py", line 730, in _env_worker_loop_cc
+    _init_cc(t)
+  File "/root/testo/poker_ai/training/env_worker.py", line 563, in _init_cc
+    eng.set_preflop_lut(_preflop_lut_for_cc)
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'poker_ai.engine.poker_engine_cc.GameEngine' object has no attribute 'set_preflop_lut'
+
+2026-04-21 21:57:45,192 - SeedRLTrainer - INFO - [SEED RL] 训练完成: 总手牌=0, 总PPO更新=0, 耗时=1.0s, 速度=0.0 hands/s
+2026-04-21 21:57:45,341 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_0
+2026-04-21 21:57:45,342 - SeedRLTrainer - INFO - [SEED RL] 最终评估...
+2026-04-21 21:57:48,111 - SeedRLTrainer - INFO - [评估] 行动分布 (总232次): fold=0.4%, call=48.3%, raise2x=22.0%, raise4x=29.3%, allin=0.0%
+2026-04-21 21:57:48,111 - SeedRLTrainer - INFO - [SEED RL] 最终评估结果: 胜率=0.390, 平均收益=114.93, 无效下注率=0.000
+2026-04-21 21:57:48,112 - PokerAITrainer - INFO - [SEED RL] 训练完成！总耗时: 6.55s
+2026-04-21 21:57:48,112 - PokerAITrainer - INFO - 训练总结已保存到: ./checkpoints/training_summary_20260421_215748.json
+2026-04-21 21:57:48,114 - PokerAITrainer - INFO - 任务执行成功！

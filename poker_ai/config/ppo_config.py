@@ -74,7 +74,7 @@ class PPOConfig:
 
     # 每批轨迹更新轮次（减少同一 buffer 的重复使用，避免策略偏移过大）
     update_epochs: int = 4
-    batch_size: int = 256
+    batch_size: int = 512  # mini-batch大小（从256提升到512：提高GPU利用率）
     
     # 梯度累积
     gradient_accumulation_steps: int = 1

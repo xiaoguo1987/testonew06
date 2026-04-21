@@ -415,7 +415,7 @@ public:
             }
             return std::min(1.f, sc/20.f);
         }
-        // postflop MC (30 sims)
+        // postflop MC (16 sims)
         bool known[52]={};
         known[hole_[pi][0]]=true; known[hole_[pi][1]]=true;
         for (int i=0;i<bcnt_;i++) known[board_[i]]=true;
@@ -425,7 +425,7 @@ public:
         if (nopp==0) nopp=1;
         int needed=5-bcnt_;
         float total_score = 0.f;
-        for (int sim=0;sim<30;sim++) {
+        for (int sim=0;sim<16;sim++) {
             std::shuffle(rem, rem+nr, g_rng);
             int idx=0;
             int8_t sb[5];
@@ -444,7 +444,7 @@ public:
             }
             total_score += sim_score;
         }
-        return total_score / 30.f;
+        return total_score / 16.f;
     }
 
     // ---- property accessors ----

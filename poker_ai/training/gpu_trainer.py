@@ -46,7 +46,7 @@ class SeedRLTrainer:
         opponent_update_interval: int = 1000,
         inference_min_batch: int = 32,
         inference_max_batch: int = 512,
-        inference_timeout_s: float = 0.001,
+        inference_timeout_s: float = 0.002,  # 推理批量积攒超时（从1ms提升到2ms：给批量更多积攒时间，提高GPU吞吐）
         ppo_buffer_size: int = 4096,
         skip_final_eval: bool = False,
         allin_eq_threshold: float = 0.65,
