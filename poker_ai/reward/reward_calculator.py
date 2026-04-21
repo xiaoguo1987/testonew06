@@ -542,8 +542,9 @@ class AdaptiveRewardCalculator:
         avg_defensive = np.mean([self.base_calculator.reward_weights[w] for w in defensive_weights])
         avg_analytical = np.mean([self.base_calculator.reward_weights[w] for w in analytical_weights])
         
-        # 1. 确保手牌强度权重有最低值（这是理性决策的基础）
-        min_hand_strength_weight = 0.8
+        # 注意：hand_strength 权重已在P2优化中降至0.05（避免与bankroll_change重复计费），
+        # 此处下限需与之对齐，不得强制拉高
+        min_hand_strength_weight = 0.05
         if self.base_calculator.reward_weights['hand_strength'] < min_hand_strength_weight:
             self.base_calculator.reward_weights['hand_strength'] = min_hand_strength_weight
         

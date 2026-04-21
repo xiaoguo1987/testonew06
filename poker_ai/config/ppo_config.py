@@ -67,8 +67,9 @@ class PPOConfig:
     # 价值损失裁剪
     value_clip: float = 0.2
 
-    # KL散度早停（限制每次更新的策略偏移幅度，正常训练KL~0.02-0.08/batch）
-    kl_target: float = 0.5
+    # KL早停阈值（从0.5提高到2.0：避免低概率动作的ratio爆炸触发过早KL早停，
+    # 导致raise2x/4x等动作永远无法获得梯度更新）
+    kl_target: float = 2.0
     kl_early_stop: bool = True
 
     # 每批轨迹更新轮次（减少同一 buffer 的重复使用，避免策略偏移过大）
