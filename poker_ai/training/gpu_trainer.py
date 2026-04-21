@@ -91,13 +91,13 @@ class SeedRLTrainer:
         # Curriculum Learning 阶段定义
         # Phase 1 (0-20%): 全鱼对手 → 学习基本策略（别乱弃牌、基本下注）
         # Phase 2 (20-50%): 混合对手（3鱼+2旧版） → 过渡阶段
-        # Phase 3 (50%+): 正常自对弈（4PPO+1鱼） → 充分博弈
+        # Phase 3 (50%+): 自对弈（3PPO+2鱼） → 防止策略坍缩
         self._curriculum_phase = 0  # 当前阶段
         self._curriculum_thresholds = (0.20, 0.50)  # 阶段切换阈值
         self._curriculum_opp_configs = [
             ['fish', 'fish', 'fish', 'fish', 'fish'],      # Phase 1: 全鱼
             ['ppo', 'ppo', 'fish', 'fish', 'fish'],        # Phase 2: 混合
-            ['ppo', 'ppo', 'ppo', 'ppo', 'fish'],          # Phase 3: 正常自对弈
+            ['ppo', 'ppo', 'ppo', 'fish', 'fish'],         # Phase 3: 自对弈（保留2鱼防坍缩）
         ]
         # 初始为 Phase 1
         self.opp_type_list = self._curriculum_opp_configs[0]
@@ -125,6 +125,8 @@ class SeedRLTrainer:
         self._max_keep_local = 30  # 本地保留最近30个 checkpoint
         os.makedirs(self._archive_dir, exist_ok=True)
 
+        self._latest_win_rate = 0.5  # 最近一次评估胜率，用于安全阀判断
+
         os.makedirs(checkpoint_dir, exist_ok=True)
 
     # ------------------------------------------------------------------
@@ -134,10 +136,10 @@ class SeedRLTrainer:
     def _get_dynamic_opp_interval(self) -> int:
         """根据当前 Curriculum 阶段返回动态对手更新间隔。
         Phase 0: 不更新（全鱼）
-        Phase 1: 50000（混合阶段，慢速适应）
-        Phase 2: 150000（自对弈阶段，防止军备竞赛）
+        Phase 1: 100000（混合阶段，慢速适应）
+        Phase 2: 500000（自对弈阶段，防止军备竞赛）
         """
-        phase_intervals = [50000, 50000, 150000]  # Phase0/1/2 对应的间隔
+        phase_intervals = [50000, 100000, 500000]  # Phase0/1/2 对应的间隔
         return phase_intervals[min(self._curriculum_phase, 2)]
 
     def _update_curriculum_phase(self):
@@ -471,9 +473,42 @@ class SeedRLTrainer:
     def _update_opponent_from_pool(self):
         """从历史对手池中随机抽取一个版本加载到对手模型。
 
+        安全阀机制：
+        - win_rate < 0.2: 临时降级对手配置（增加鱼的比例）
+        - win_rate < 0.3: 冻结对手池更新（不换更强的对手）
         抽取策略：70% 概率抽最近 3 个版本，30% 概率抽更早的版本。
         如果对手池为空或加载失败，回退到同步当前模型权重。
         """
+        wr = self._latest_win_rate
+
+        # 安全阀 1: 胜率极低时，临时降级对手配置
+        if wr < 0.2 and self._curriculum_phase >= 2:
+            degraded = ['ppo', 'fish', 'fish', 'fish', 'fish']
+            if self.opp_type_list != degraded:
+                self.opp_type_list = degraded
+                logger.warning(
+                    f"[安全阀] 胜率过低({wr:.3f}<0.2)，Phase3临时降级为1PPO+4鱼"
+                )
+            return  # 降级后不更新对手权重
+
+        # 安全阀 2: 胜率偏低时，冻结对手池更新
+        if wr < 0.3:
+            logger.info(
+                f"[安全阀] 胜率偏低({wr:.3f}<0.3)，冻结对手池更新"
+            )
+            # 如果之前被降级过，恢复正常配置
+            normal_config = self._curriculum_opp_configs[min(self._curriculum_phase, 2)]
+            if self.opp_type_list != normal_config:
+                self.opp_type_list = normal_config
+                logger.info(f"[安全阀] 胜率回升，恢复正常对手配置: {normal_config}")
+            return  # 不更新对手权重
+
+        # 胜率正常（>= 0.3），如果之前被降级过则恢复
+        normal_config = self._curriculum_opp_configs[min(self._curriculum_phase, 2)]
+        if self.opp_type_list != normal_config:
+            self.opp_type_list = normal_config
+            logger.info(f"[安全阀] 胜率正常({wr:.3f})，恢复正常对手配置: {normal_config}")
+
         if not self._opponent_pool:
             # 池为空，回退到同步当前权重
             self.opp_model.set_weights(self.model.get_weights())
@@ -697,6 +732,7 @@ class SeedRLTrainer:
                         f"平均收益={score:.2f}, "
                         f"无效下注率={eval_res['invalid_bet_rate']:.3f}"
                     )
+                    self._latest_win_rate = eval_res['win_rate']
                     if score > self.best_score and eval_res['invalid_bet_rate'] < 0.5:
                         self.best_score = score
                         self.save_checkpoint(is_best=True)

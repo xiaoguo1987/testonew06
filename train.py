@@ -86,8 +86,8 @@ def _apply_hardware_profile(args) -> None:
                 args.tf_inter_op_threads = 4
             # 大模型专用参数
             args.hidden_dims = [2048, 2048, 1024, 512]
-            if int(getattr(args, 'batch_size', 64)) <= 4096:
-                args.batch_size = 4096
+            if int(getattr(args, 'batch_size', 64)) <= 1024:
+                args.batch_size = 1024
             # 强制 ppo_epochs=4（大模型 + SEED RL 异步架构下，过多 epoch 会导致 buffer stale 引发 KL 爆炸）
             args.ppo_epochs = 4
             args.ppo_buffer_size = 16384
