@@ -68,6 +68,10 @@ class RewardCalculator:
         # 并行训练时多个 worker 都会出现同名玩家（如 Main_AI）。
         # 使用线程本地存储，避免不同 worker 之间互相覆盖/删除状态。
         self._thread_local = threading.local()
+        # 翻牌后胜率 dict 缓存（替代失效的 lru_cache）
+        # lru_cache 因 player/game 参数为不可稳定哈希对象（每次新建）导致几乎不命中
+        self._win_prob_cache: Dict[str, float] = {}
+        self._win_prob_cache_max = 10000
 
     def _get_player_state_store(self) -> Dict[int, Dict[str, float]]:
         """获取当前线程的玩家状态表。"""
@@ -121,10 +125,18 @@ class RewardCalculator:
         board_str = ",".join(sorted([f"{c.rank}-{c.suit}" for c in board]))
         return f"{hand_str}|{board_str}"
 
-    @lru_cache(maxsize=10000)  # 缓存10000个结果，自动淘汰旧数据
     def _cached_win_probability(self, cache_key: str, player: Player, game: PokerGame) -> float:
-        """缓存版胜率计算（核心蒙特卡洛逻辑）"""
-        return self._estimate_win_probability(player, game)
+        """缓存版胜率计算（dict cache，以 cache_key 为键，避免 lru_cache 因 player/game 对象地址不同而失效）"""
+        if cache_key in self._win_prob_cache:
+            return self._win_prob_cache[cache_key]
+        result = self._estimate_win_probability(player, game)
+        # 超出上限时清除前半部分（简单 FIFO 近似，避免内存无限增长）
+        if len(self._win_prob_cache) >= self._win_prob_cache_max:
+            keys = list(self._win_prob_cache.keys())
+            for k in keys[:len(keys) // 2]:
+                del self._win_prob_cache[k]
+        self._win_prob_cache[cache_key] = result
+        return result
 
     def _preflop_hand_strength(self, cards: List[Card]) -> float:
         """翻牌前的手牌强度评估"""

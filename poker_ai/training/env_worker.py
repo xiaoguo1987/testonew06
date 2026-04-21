@@ -85,14 +85,16 @@ def _apply_mask_and_sample(
     action_probs: np.ndarray, game: PokerGame, player: Player,
     sr: StateRepresentation,
 ) -> Tuple[str, Optional[int], int, float]:
-    """对 GPU 返回的 action_probs 执行掩码 + 过滤 + 采样 → (act, amt, idx, old_prob)"""
+    """对 GPU 返回的 action_probs 执行掩码 + 采样 → (act, amt, idx, old_prob)"""
     lm = _legal_mask(game, player)
     mp_ = action_probs * lm
     s = float(np.sum(mp_))
     mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
 
+    # 移除 _preflop_filter：训练采样时不应干预 action 分布，
+    # 否则 old_prob(过滤后) 与 new_prob(未过滤) 产生虚假 ratio，导致 PPO 梯度被污染，
+    # 模型学不会加注。与 C++ 路径 (_apply_mask_and_sample_cc) 保持一致。
     hs = sr.calculate_hand_strength(player, game)
-    mp_ = _preflop_filter(mp_, game, player, hs)
 
     ai = int(np.random.choice(5, p=mp_))
     av = np.zeros(5, dtype=np.float32)
