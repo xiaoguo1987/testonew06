@@ -529,7 +529,7 @@ def _env_worker_loop_cc(
         # 加注专项奖励：防止模型永远 call，鼓励探索 raise
         raise_count = sum(1 for a, _ in ma if a == 'raise')
         if raise_count > 0:
-            fr += 0.2  # 加注动作额外 +0.2（不依赖输赢输）
+            fr += 0.1  # 加注动作额外 +0.1（降低远 +0.2，避免初期 allin 爆炸）
 
         # all-in 补偿
         ab = 0.0
