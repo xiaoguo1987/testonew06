@@ -12,8 +12,11 @@
 #include <cstring>
 #include <cmath>
 #include <string>
+#include <unordered_map>
 
 namespace py = pybind11;
+
+static thread_local std::mt19937 g_rng(std::random_device{}());
 
 // ================================================================
 //  Card encoding:  code = rank_idx * 4 + suit_idx
@@ -161,6 +164,8 @@ class GameEngine {
     int     round_, acnt_;     // round (1-4), action count
     std::vector<int> winners_;
     Deck    deck_;
+    // Preflop equity LUT: key = (high_rank<<8)|(low_rank<<4)|(suited?1:0), value = equity per num_opponents[1..5]
+    std::unordered_map<uint32_t, std::array<float, 5>> preflop_lut_;
 
     void post_blinds() {
         int sp=(dpos_+1)%np_, bp=(dpos_+2)%np_;
@@ -217,6 +222,24 @@ public:
         std::memset(hcnt_,0,sizeof(hcnt_));
         std::memset(board_,-1,sizeof(board_));
         for (int i=0;i<np_;i++) stacks_[i]=init_stack_;
+    }
+
+    void set_preflop_lut(py::dict lut) {
+        preflop_lut_.clear();
+        for (auto& item : lut) {
+            uint32_t key = item.first.cast<uint32_t>();
+            py::dict val = item.second.cast<py::dict>();
+            std::array<float, 5> eq = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+            for (int i = 1; i <= 5; i++) {
+                auto s = std::to_string(i);
+                if (val.contains(s.c_str())) eq[i-1] = val[s.c_str()].cast<float>();
+            }
+            preflop_lut_[key] = eq;
+        }
+    }
+
+    static void seed_rng(uint64_t seed) {
+        g_rng.seed(seed);
     }
 
     // ---- game control ----
@@ -359,11 +382,25 @@ public:
     float get_hand_strength(int pi) const {
         if (hcnt_[pi]<2) return 0.f;
         if (bcnt_==0) {
-            // preflop formula
             int r1=rank_val(hole_[pi][0]), r2=rank_val(hole_[pi][1]);
             int s1=suit_of(hole_[pi][0]), s2=suit_of(hole_[pi][1]);
             if (r1<r2) std::swap(r1,r2);
-            bool suited=(s1==s2), pair=(r1==r2);
+            bool suited=(s1==s2);
+
+            // 优先查 LUT
+            if (!preflop_lut_.empty()) {
+                uint32_t key = ((uint32_t)r1 << 8) | ((uint32_t)r2 << 4) | (suited ? 1 : 0);
+                auto it = preflop_lut_.find(key);
+                if (it != preflop_lut_.end()) {
+                    int nopp = 0;
+                    for (int i=0; i<np_; i++) if (i!=pi && active_[i]) nopp++;
+                    nopp = std::max(1, std::min(5, nopp));
+                    return it->second[nopp-1];
+                }
+            }
+
+            // fallback: 启发式公式
+            bool pair=(r1==r2);
             auto rs=[](int v)->float{
                 if(v==14)return 10.f; if(v==13)return 8.f; if(v==12)return 7.f;
                 if(v==11)return 6.f; if(v==10)return 5.f; return v/2.f;};
@@ -378,18 +415,18 @@ public:
             }
             return std::min(1.f, sc/20.f);
         }
-        // postflop MC (5 sims)
-        bool known[52]={}; 
+        // postflop MC (30 sims)
+        bool known[52]={};
         known[hole_[pi][0]]=true; known[hole_[pi][1]]=true;
         for (int i=0;i<bcnt_;i++) known[board_[i]]=true;
         int8_t rem[52]; int nr=0;
         for (int i=0;i<52;i++) if (!known[i]) rem[nr++]=(int8_t)i;
         int nopp=0; for (int i=0;i<np_;i++) if (i!=pi&&active_[i]) nopp++;
         if (nopp==0) nopp=1;
-        thread_local std::mt19937 rng(std::random_device{}());
-        int wins=0, needed=5-bcnt_;
-        for (int sim=0;sim<5;sim++) {
-            std::shuffle(rem, rem+nr, rng);
+        int needed=5-bcnt_;
+        float total_score = 0.f;
+        for (int sim=0;sim<30;sim++) {
+            std::shuffle(rem, rem+nr, g_rng);
             int idx=0;
             int8_t sb[5];
             for (int i=0;i<bcnt_;i++) sb[i]=board_[i];
@@ -397,15 +434,17 @@ public:
             int8_t hh[7]; hh[0]=hole_[pi][0]; hh[1]=hole_[pi][1];
             for (int i=0;i<5;i++) hh[2+i]=sb[i];
             HandRank hr=eval7(hh);
-            bool won=true;
-            for (int o=0;o<nopp&&won;o++) {
+            float sim_score = 1.0f;
+            for (int o=0;o<nopp;o++) {
                 int8_t oh[7]; oh[0]=rem[idx++]; oh[1]=rem[idx++];
                 for (int i=0;i<5;i++) oh[2+i]=sb[i];
-                if (eval7(oh).compare(hr)>=0) won=false;
+                int cmp = eval7(oh).compare(hr);
+                if (cmp > 0) { sim_score = 0.f; break; }
+                else if (cmp == 0) { sim_score = std::min(sim_score, 0.5f); }
             }
-            if (won) wins++;
+            total_score += sim_score;
         }
-        return (float)wins/5.f;
+        return total_score / 30.f;
     }
 
     // ---- property accessors ----
@@ -497,7 +536,10 @@ PYBIND11_MODULE(poker_engine_cc, m) {
         .def("get_player_is_all_in", &GameEngine::player_allin)
         .def("get_player_card_codes",&GameEngine::player_card_codes)
         .def("get_board_codes",      &GameEngine::board_codes)
-        .def("get_winner_indices",   &GameEngine::winner_indices);
+        .def("get_winner_indices",   &GameEngine::winner_indices)
+        .def("set_preflop_lut",  &GameEngine::set_preflop_lut)
+        .def("seed_rng", [](GameEngine&, uint64_t seed) { g_rng.seed(seed); },
+             py::call_guard<py::gil_scoped_release>());
 
     m.def("decode_action", &decode_action_fn,
           "Decode action index → (action_str, amount)",

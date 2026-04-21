@@ -40,10 +40,10 @@ class RewardCalculator:
     def __init__(self):
         # 定义不同奖励类型的权重（平衡策略，减少过度进攻）
         self.reward_weights = {
-            'winning_hand': 1.0,          # 赢牌奖励
-            'losing_hand': -0.8,          # 输牌惩罚
+            'winning_hand': 0.3,          # 赢牌奖励（降权：主要靠bankroll_change驱动学习，避免信号重复放大）
+            'losing_hand': -0.3,          # 输牌惩罚（与winning_hand对称缩减，避免过度惩罚导致保守弃牌）
             'pot_odds': 0.2,              # 底池赔率奖励
-            'hand_strength': 0.4,         # 手牌强度奖励
+            'hand_strength': 0.05,        # 手牌强度奖励（大幅降权：避免与bankroll_change重复计费导致保守策略）
             'bluff_success': 0.6,         # 成功诈唱奖励
             'fold_when_weak': 0.15,       # 及时弃牌奖励
             'aggressive_play': 0.15,      # 主动进攻奖励

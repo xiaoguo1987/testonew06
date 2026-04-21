@@ -10,7 +10,9 @@ Fish 对手直接本地随机决策，不走 GPU。
 手牌结束后，通过 traj_queue 回传轨迹数据。
 """
 
+import json
 import numpy as np
+import os
 import random
 import traceback
 from typing import Dict, List, Tuple, Optional
@@ -35,6 +37,43 @@ except ImportError:
 # ========================================================================
 
 _PREFLOP_THRESHOLDS = [0.30, 0.35, 0.25, 0.50, 0.45, 0.35]
+
+
+def _load_and_convert_preflop_lut():
+    """加载 preflop_equity.json 并转换为 C++ 引擎的 key 编码格式"""
+    lut_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'preflop_equity.json')
+    if not os.path.exists(lut_path):
+        return None
+    with open(lut_path, 'r') as f:
+        raw = json.load(f)
+
+    rank_map = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+                '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14}
+
+    converted = {}
+    for key_str, equity_dict in raw.items():
+        # 解析 key_str
+        if len(key_str) == 2:  # pair, e.g. "22", "AA"
+            r = rank_map.get(key_str[0])
+            if r is None:
+                continue
+            high, low, suited = r, r, False
+        elif len(key_str) == 3:  # e.g. "AKs", "32o"
+            r1 = rank_map.get(key_str[0])
+            r2 = rank_map.get(key_str[1])
+            if r1 is None or r2 is None:
+                continue
+            high = max(r1, r2)
+            low = min(r1, r2)
+            suited = (key_str[2] == 's')
+        else:
+            continue
+
+        # C++ key 编码: (high_rank << 8) | (low_rank << 4) | (suited ? 1 : 0)
+        cpp_key = (high << 8) | (low << 4) | (1 if suited else 0)
+        converted[cpp_key] = equity_dict
+
+    return converted if converted else None
 
 
 def _legal_mask(game: PokerGame, player: Player) -> np.ndarray:
@@ -489,9 +528,15 @@ def _env_worker_loop_cc(
             self.traj = None
             self.finished = False
 
+    # 进程级缓存：在 _env_worker_loop_cc 内部加载一次，避免每张牌桌重复读取
+    _preflop_lut_for_cc = _load_and_convert_preflop_lut()
+
     def _init_cc(table: CCTable):
         eng = GameEngine(sb, bb, stack, 6)
         eng.start_new_hand(random.randrange(6))
+        # 传入 preflop equity LUT，与 Python 端查表逻辑对齐
+        if _preflop_lut_for_cc is not None:
+            eng.set_preflop_lut(_preflop_lut_for_cc)
         table.eng = eng
         table.arecs = {i: [] for i in range(6)}
         table.allin = {'happened': False, 'round': None, 'equity': 0.0}

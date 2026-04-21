@@ -145,7 +145,7 @@ class HandEvaluator:
                 if f"{r}{s}" not in known_cards_set:
                     deck_rest.append(Card(r, s))
                     
-        wins = 0
+        wins = 0.0
         needed_community = 5 - len(community_cards)
         
         for _ in range(simulations):
@@ -170,18 +170,16 @@ class HandEvaluator:
             # (虽然它有点慢，但比原来的实现要快，因为不用重造对象)
             _, my_score = self.evaluate_hand(hole_cards, sim_community)
             
-            won = True
+            sim_score = 1.0
             for opp in opp_hands:
                 _, opp_score = self.evaluate_hand(opp, sim_community)
                 if opp_score > my_score: # 列表比较
-                    won = False
+                    sim_score = 0.0
                     break
                 elif opp_score == my_score:
-                    # 平局算输或者算0.5，这里为了保守起见算输
-                    won = False 
-                    break
+                    # 平局计 0.5 (Split Pot)，与 C++ 端逻辑对齐
+                    sim_score = min(sim_score, 0.5)
             
-            if won:
-                wins += 1
+            wins += sim_score
                 
         return wins / simulations
