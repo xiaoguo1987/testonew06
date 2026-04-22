@@ -601,10 +601,12 @@ class SeedRLTrainer:
             f"ppo_buffer={self.ppo_buffer_size}, "
             f"inference_batch=[{self.inference_min_batch}, {self.inference_max_batch}]"
         )
+        _phase_intervals = [50000, 100000, 500000]  # 与 _get_dynamic_opp_interval 保持一致
+        _intervals_str = "/".join(f"Phase{i+1}={v//1000}K" for i, v in enumerate(_phase_intervals))
         logger.info(
             f"[SEED RL] Curriculum Learning 已启用: "
             f"Phase1(0-20%全鱼) → Phase2(20-50%混合) → Phase3(50%+自对弈), "
-            f"dynamic_opp_interval=[50K, 50K, 150K], "
+            f"dynamic_opp_interval=[{_intervals_str}], "
             f"历史对手池=开启(max_size={self._opponent_pool_max_size}), "
             f"archive_dir={self._archive_dir}"
         )
