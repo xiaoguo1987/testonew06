@@ -568,12 +568,53 @@ class SeedRLTrainer:
         except Exception as e:
             logger.warning(f"归档 checkpoint 时出错: {e}")
 
+    def _find_latest_checkpoint(self) -> Optional[str]:
+        """查找最新的 SEED RL checkpoint（按文件名中的手数排序）。"""
+        import re
+        candidates = []
+        for file in os.listdir(self.checkpoint_dir):
+            if file.startswith('seed_rl_hands_') and file.endswith('.actor.weights.h5'):
+                match = re.search(r'seed_rl_hands_(\d+)', file)
+                if match:
+                    hands = int(match.group(1))
+                    base = os.path.join(self.checkpoint_dir, file.replace('.actor.weights.h5', ''))
+                    candidates.append((hands, base))
+        if not candidates:
+            return None
+        # 按手数降序，返回最新的
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+
     def load_checkpoint(self, path: Optional[str] = None) -> bool:
+        """加载 checkpoint 并恢复训练状态（total_hands、curriculum phase）。"""
+        import re
         if path is None:
-            path = os.path.join(self.checkpoint_dir, "seed_rl_best")
+            # 优先加载最新的手数 checkpoint，而非 seed_rl_best
+            path = self._find_latest_checkpoint()
+            if path is None:
+                # 回退到 seed_rl_best
+                path = os.path.join(self.checkpoint_dir, "seed_rl_best")
         try:
             self.model.load_weights(path)
             logger.info(f"Checkpoint 加载: {path}")
+
+            # 从文件名解析 total_hands
+            match = re.search(r'seed_rl_hands_(\d+)', path)
+            if match:
+                self.total_hands = int(match.group(1))
+                logger.info(f"恢复训练进度: total_hands={self.total_hands}")
+                # 恢复 Curriculum 阶段
+                self._update_curriculum_phase()
+                logger.info(f"恢复 Curriculum 阶段: Phase {self._curriculum_phase + 1}, "
+                           f"对手配置={self.opp_type_list}")
+
+            # 同步对手模型权重
+            try:
+                self.opp_model.set_weights(self.model.get_weights())
+                logger.info("对手模型权重已同步")
+            except Exception:
+                pass
+
             return True
         except Exception as e:
             logger.warning(f"加载 checkpoint 失败: {e}")
