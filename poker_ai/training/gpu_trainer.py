@@ -492,9 +492,9 @@ class SeedRLTrainer:
             return  # 降级后不更新对手权重
 
         # 安全阀 2: 胜率偏低时，冻结对手池更新
-        if wr < 0.3:
+        if wr < 0.25:
             logger.info(
-                f"[安全阀] 胜率偏低({wr:.3f}<0.3)，冻结对手池更新"
+                f"[安全阀] 胜率偏低({wr:.3f}<0.25)，冻结对手池更新"
             )
             # 如果之前被降级过，恢复正常配置
             normal_config = self._curriculum_opp_configs[min(self._curriculum_phase, 2)]
@@ -717,6 +717,7 @@ class SeedRLTrainer:
         last_ckpt_hand = 0
         last_opp_update_hand = 0
         training_start = time.time()
+        training_start_hands = self.total_hands  # 记录 resume 后的起始手数
 
         try:
             while alive_workers or not traj_queue.empty():
@@ -732,7 +733,7 @@ class SeedRLTrainer:
                         loss = self._do_ppo_train(traj_buffer)
                         if loss is not None:
                             elapsed = time.time() - training_start
-                            hps = self.total_hands / max(elapsed, 1e-6)
+                            hps = (self.total_hands - training_start_hands) / max(elapsed, 1e-6)
                             logger.info(
                                 f"[SEED RL] hands={self.total_hands}/{num_hands}, "
                                 f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
@@ -755,7 +756,7 @@ class SeedRLTrainer:
                     loss = self._do_ppo_train(traj_buffer)
                     if loss is not None:
                         elapsed = time.time() - training_start
-                        hps = self.total_hands / max(elapsed, 1e-6)
+                        hps = (self.total_hands - training_start_hands) / max(elapsed, 1e-6)
                         logger.info(
                             f"[SEED RL] hands={self.total_hands}/{num_hands}, "
                             f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
@@ -828,7 +829,7 @@ class SeedRLTrainer:
             logger.info(f"[SEED RL] 丢弃剩余 buffer: {remaining} steps < {min_remaining}（太少会导致过拟合）")
 
         elapsed = time.time() - training_start
-        hps = self.total_hands / max(elapsed, 1e-6)
+        hps = (self.total_hands - training_start_hands) / max(elapsed, 1e-6)
         logger.info(
             f"[SEED RL] 训练完成: "
             f"总手牌={self.total_hands}, 总PPO更新={self.total_ppo_updates}, "

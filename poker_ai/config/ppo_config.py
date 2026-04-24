@@ -59,10 +59,10 @@ class PPOConfig:
     gamma: float = 0.99
     lambda_: float = 0.95
     
-    # 熵正则优化
-    entropy_coef: float = 0.02
+    # 熵正则优化（提高熵系数，强制保持策略多样性，防止raise动作坍缩到0%）
+    entropy_coef: float = 0.05
     entropy_adaptive: bool = True
-    entropy_coef_target: float = 0.01
+    entropy_coef_target: float = 0.03
     
     # 价值损失裁剪
     value_clip: float = 0.2

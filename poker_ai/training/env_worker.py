@@ -132,13 +132,14 @@ def _apply_mask_and_sample(
 
     # === 探索保障：为合法动作设置最低采样概率 ===
     # 防止低概率动作永远不被采样，导致策略坍缩（raise2x/4x=0%问题）
-    epsilon = 0.05  # 每个合法动作至少共享 5% 的探索预算
-    legal_count = int(np.sum(lm > 0))
-    if legal_count > 1:
-        min_prob = epsilon / legal_count  # 均分探索预算
-        for i in range(len(mp_)):
-            if lm[i] > 0 and mp_[i] < min_prob:
-                mp_[i] = min_prob
+    # raise2x(idx=2)/raise4x(idx=3) 设置更高下限，防止加注策略消亡
+    action_min_probs = [0.01, 0.01, 0.04, 0.04, 0.01]  # fold, call, raise2x, raise4x, allin
+    has_adjustment = False
+    for i in range(len(mp_)):
+        if lm[i] > 0 and mp_[i] < action_min_probs[i]:
+            mp_[i] = action_min_probs[i]
+            has_adjustment = True
+    if has_adjustment:
         # 重新归一化，确保总和为 1
         mp_ = mp_ / np.sum(mp_)
 
@@ -510,13 +511,14 @@ def _env_worker_loop_cc(
 
         # === 探索保障：为合法动作设置最低采样概率 ===
         # 防止低概率动作永远不被采样，导致策略坍缩（raise2x/4x=0%问题）
-        epsilon = 0.05  # 每个合法动作至少共享 5% 的探索预算
-        legal_count = int(np.sum(lm > 0))
-        if legal_count > 1:
-            min_prob = epsilon / legal_count  # 均分探索预算
-            for i in range(len(mp_)):
-                if lm[i] > 0 and mp_[i] < min_prob:
-                    mp_[i] = min_prob
+        # raise2x(idx=2)/raise4x(idx=3) 设置更高下限，防止加注策略消亡
+        action_min_probs = [0.01, 0.01, 0.04, 0.04, 0.01]  # fold, call, raise2x, raise4x, allin
+        has_adjustment = False
+        for i in range(len(mp_)):
+            if lm[i] > 0 and mp_[i] < action_min_probs[i]:
+                mp_[i] = action_min_probs[i]
+                has_adjustment = True
+        if has_adjustment:
             # 重新归一化，确保总和为 1
             mp_ = mp_ / np.sum(mp_)
 
