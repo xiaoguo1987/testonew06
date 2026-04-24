@@ -1,0 +1,517 @@
+nohup: ignoring input
+2026-04-24 22:22:49,997 - PokerAITrainer - INFO - 日志已配置，记录到: logs/poker_ai_20260424_222249.log
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1777040570.468984    2068 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1777040570.523022    2068 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1777040571.740601    2068 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - mixed precision 已禁用，使用 float32
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - 已启用 XLA JIT
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - TensorFlow版本: 2.21.0
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - DEBUG: 平台=Linux, 逻辑核心数=256, 进程可用核心数=256
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - 并行配置: TF intra_op=32, inter_op=4
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - 并行配置: train_workers=16, eval_workers=42
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - 引擎状态: C++ Engine, tables_per_worker=48
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - 并行配置: train_rollouts_per_worker=8, train_sync_every_batches=8
+2026-04-24 22:22:53,002 - PokerAITrainer - INFO - PPO配置: batch_size=1024, ppo_update_min_steps=0
+2026-04-24 22:22:53,003 - PokerAITrainer - INFO - 训练策略: dynamic_opp_interval(Phase1=50K/Phase2=50K/Phase3=150K), critic_lr_multiplier=3.0, Curriculum=Phase1(全鱼)→Phase2(混合)→Phase3(自对弈), 历史对手池=开启(pool_size=20, 70%近期+30%远期), VPIP奖励=已禁用
+2026-04-24 22:22:53,003 - PokerAITrainer - INFO - 可用GPU数量: 1
+2026-04-24 22:22:53,003 - PokerAITrainer - INFO - GPU 0: /physical_device:GPU:0
+2026-04-24 22:22:53,003 - PokerAITrainer - INFO - TF CPU设备数: 1（这是TensorFlow逻辑设备数，不等于CPU核心数）
+2026-04-24 22:22:53,003 - PokerAITrainer - INFO - 训练将使用: GPU
+I0000 00:00:1777040573.144871    2068 gpu_device.cc:2043] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 22201 MB memory:  -> device: 0, name: NVIDIA GeForce RTX 4090 D, pci bus id: 0000:02:00.0, compute capability: 8.9
+2026-04-24 22:22:53,261 - PokerAITrainer - INFO - [GPU诊断] GPU预热矩阵乘法成功，结果设备: /job:localhost/replica:0/task:0/device:GPU:0
+2026-04-24 22:22:53,261 - PokerAITrainer - INFO - 环境设置完成: 检查点目录=./checkpoints
+2026-04-24 22:22:53,261 - PokerAITrainer - INFO - 当前运行模式: train
+2026-04-24 22:22:53,261 - PokerAITrainer - INFO - 使用模型类型: ppo
+2026-04-24 22:22:53,261 - PokerAITrainer - INFO - [SEED RL] 启动 GPU-Centric 训练架构
+2026-04-24 22:22:53,261 - PokerAITrainer - INFO - 训练参数: {'mode': 'train', 'hardware_profile': 'rtx4090d', 'arch': 'seed-rl', 'auto_tune': False, 'auto_tune_hands': 4000, 'auto_tune_max_candidates': 3, 'model_type': 'ppo', 'model_path': None, 'checkpoint_dir': './checkpoints', 'num_hands': 30000000, 'learning_rate': 0.0001, 'batch_size': 1024, 'ppo_clip': 0.2, 'ppo_epochs': 4, 'ppo_entropy_coef': 0.05, 'ppo_update_min_steps': 0, 'target_update': 10, 'optimizer': 'adam', 'eval_interval': 5000, 'checkpoint_interval': 50000, 'num_eval_games': 100, 'eval_workers': 42, 'train_workers': 16, 'skip_final_eval': False, 'allin_unlucky_eq_threshold': 0.65, 'allin_unlucky_bonus_cap': 0.8, 'cpu_threads': 32, 'tf_inter_op_threads': 4, 'train_rollouts_per_worker': 8, 'train_sync_every_batches': 8, 'dqn_replay_updates_per_hand': 0, 'device': 'gpu', 'mixed_precision': False, 'enable_xla': True, 'disable_onednn': False, 'gpu_memory_growth': True, 'small_blind': 5, 'big_blind': 10, 'initial_stack': 1000, 'num_players': 6, 'use_ensemble': False, 'resume': False, 'save_best_only': False, 'verbose': False, 'eval_opponent': 'previous_version', 'eval_output': 'eval_results.json', 'demo_hands': 10, 'use_self_play': True, 'opponent_update_interval': 10000, 'eps_start': 1.0, 'eps_end': 0.01, 'eps_decay': 0.0001, 'hidden_dims': [2048, 2048, 1024, 512], 'ppo_buffer_size': 16384, 'inference_min_batch': 32, 'inference_max_batch': 1024, 'tables_per_worker': 48}
+2026-04-24 22:22:54,269 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M), actor_lr=1.0e-04, critic_lr=3.0e-04 (3.0x)
+2026-04-24 22:22:54,355 - LargePPOModel - INFO - LargePPOModel 初始化: hidden_dims=[2048, 2048, 1024, 512], residual@layer1, 总参数量=14,217,222 (14.2M), actor_lr=3.0e-04, critic_lr=9.0e-04 (3.0x)
+2026-04-24 22:22:54,470 - PokerAITrainer - INFO - [SEED RL] 开始训练 30000000 手牌...
+2026-04-24 22:22:54,473 - SeedRLTrainer - INFO - [SEED RL] 训练开始: num_hands=30000000, workers=16, tables_per_worker=48, 并发牌桌=768, ppo_buffer=16384, inference_batch=[32, 1024]
+2026-04-24 22:22:54,473 - SeedRLTrainer - INFO - [SEED RL] Curriculum Learning 已启用: Phase1(0-20%全鱼) → Phase2(20-50%混合) → Phase3(50%+自对弈), dynamic_opp_interval=[Phase1=50K/Phase2=100K/Phase3=500K], 历史对手池=开启(max_size=20), archive_dir=/root/autodl-tmp/poker_checkpoints
+2026-04-24 22:22:55,390 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+2026-04-24 22:22:55,436 - LargePPOModel - INFO - LargePPOModel warmup 完成 (batch shapes: 1, 256)
+[Worker 0] 使用 C++ Engine
+[Worker 1] 使用 C++ Engine
+[Worker 2] 使用 C++ Engine
+[Worker 3] 使用 C++ Engine
+[Worker 4] 使用 C++ Engine
+[Worker 5] 使用 C++ Engine
+[Worker 6] 使用 C++ Engine
+[Worker 7] 使用 C++ Engine
+[Worker 8] 使用 C++ Engine
+[Worker 9] 使用 C++ Engine
+[Worker 10] 使用 C++ Engine
+[Worker 11] 使用 C++ Engine
+[Worker 12] 使用 C++ Engine
+[Worker 13] 使用 C++ Engine
+[Worker 14] 使用 C++ Engine
+2026-04-24 22:22:55,737 - SeedRLTrainer - INFO - [SEED RL] 16 个 worker 进程已启动
+[Worker 15] 使用 C++ Engine
+I0000 00:00:1777040575.901573    2131 service.cc:153] XLA service 0x7efbb4002980 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0000 00:00:1777040575.901616    2131 service.cc:161]   StreamExecutor [0]: NVIDIA GeForce RTX 4090 D, Compute Capability 8.9 (Driver: 12.8.0; Runtime: 12.8.0; Toolkit: 12.5.0; DNN: 9.10.2)
+I0000 00:00:1777040575.908992    2131 dump_mlir_util.cc:269] disabling MLIR crash reproducer, set env var `MLIR_CRASH_REPRODUCER_DIRECTORY` to enable.
+I0000 00:00:1777040575.961097    2131 cuda_dnn.cc:461] Loaded cuDNN version 91002
+I0000 00:00:1777040576.858818    2483 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 84 bytes spill stores, 84 bytes spill loads
+
+I0000 00:00:1777040577.498594    2486 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 9700 bytes spill stores, 9900 bytes spill loads
+
+I0000 00:00:1777040578.404999    2489 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 84 bytes spill stores, 84 bytes spill loads
+
+I0000 00:00:1777040579.104217    2487 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 9816 bytes spill stores, 9872 bytes spill loads
+
+I0000 00:00:1777040580.823362    2484 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_16', 9836 bytes spill stores, 10044 bytes spill loads
+
+I0000 00:00:1777040582.331759    2131 device_compiler.h:208] Compiled cluster using XLA!  This line is logged at most once for the lifetime of the process.
+I0000 00:00:1777040584.503014    3106 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 72 bytes spill stores, 72 bytes spill loads
+
+I0000 00:00:1777040585.258987    3105 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 9632 bytes spill stores, 9720 bytes spill loads
+
+I0000 00:00:1777040585.701670    3105 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 16 bytes spill stores, 16 bytes spill loads
+
+I0000 00:00:1777040585.927454    3101 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 72 bytes spill stores, 72 bytes spill loads
+
+I0000 00:00:1777040586.560456    3103 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 9356 bytes spill stores, 9604 bytes spill loads
+
+I0000 00:00:1777040592.383608    3716 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 1712 bytes spill stores, 1456 bytes spill loads
+
+I0000 00:00:1777040593.625900    3721 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 1608 bytes spill stores, 1380 bytes spill loads
+
+I0000 00:00:1777040597.454632    4299 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 36 bytes spill stores, 36 bytes spill loads
+
+I0000 00:00:1777040598.043520    4307 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 2192 bytes spill stores, 2124 bytes spill loads
+
+I0000 00:00:1777040598.538745    4310 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 12 bytes spill stores, 12 bytes spill loads
+
+I0000 00:00:1777040598.676221    4300 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 36 bytes spill stores, 36 bytes spill loads
+
+I0000 00:00:1777040599.427589    4308 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 9904 bytes spill stores, 10048 bytes spill loads
+
+I0000 00:00:1777040599.839167    4301 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_18', 4 bytes spill stores, 4 bytes spill loads
+
+I0000 00:00:1777040603.838014    4883 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 2096 bytes spill stores, 1936 bytes spill loads
+
+I0000 00:00:1777040605.094219    4884 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 2240 bytes spill stores, 2080 bytes spill loads
+
+I0000 00:00:1777040609.351245    5479 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 84 bytes spill stores, 84 bytes spill loads
+
+I0000 00:00:1777040610.063158    5478 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 9816 bytes spill stores, 9872 bytes spill loads
+
+I0000 00:00:1777040610.726854    5488 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 84 bytes spill stores, 84 bytes spill loads
+
+I0000 00:00:1777040611.381316    5487 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 9700 bytes spill stores, 9900 bytes spill loads
+
+I0000 00:00:1777040614.875095    6066 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 8 bytes spill stores, 8 bytes spill loads
+
+I0000 00:00:1777040615.042951    6064 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 72 bytes spill stores, 72 bytes spill loads
+
+I0000 00:00:1777040615.740689    6070 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 9812 bytes spill stores, 9912 bytes spill loads
+
+I0000 00:00:1777040616.239153    6073 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 8 bytes spill stores, 8 bytes spill loads
+
+I0000 00:00:1777040616.255747    6061 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 8 bytes spill stores, 8 bytes spill loads
+
+I0000 00:00:1777040616.398201    6068 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 72 bytes spill stores, 72 bytes spill loads
+
+I0000 00:00:1777040616.975803    6059 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 2184 bytes spill stores, 2108 bytes spill loads
+
+I0000 00:00:1777040621.116782    6647 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 36 bytes spill stores, 36 bytes spill loads
+
+I0000 00:00:1777040621.712485    6649 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 2192 bytes spill stores, 2124 bytes spill loads
+
+I0000 00:00:1777040622.214480    6655 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 12 bytes spill stores, 12 bytes spill loads
+
+I0000 00:00:1777040622.363349    6654 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 36 bytes spill stores, 36 bytes spill loads
+
+I0000 00:00:1777040623.098897    6656 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 9904 bytes spill stores, 10048 bytes spill loads
+
+I0000 00:00:1777040627.101470    7229 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 2144 bytes spill stores, 2024 bytes spill loads
+
+I0000 00:00:1777040627.595557    7228 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 12 bytes spill stores, 12 bytes spill loads
+
+I0000 00:00:1777040628.383806    7237 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 2240 bytes spill stores, 2080 bytes spill loads
+
+I0000 00:00:1777040628.811099    7229 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_18', 4 bytes spill stores, 4 bytes spill loads
+
+I0000 00:00:1777040632.917012    7819 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 84 bytes spill stores, 84 bytes spill loads
+
+I0000 00:00:1777040633.600771    7817 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 9816 bytes spill stores, 9872 bytes spill loads
+
+I0000 00:00:1777040634.243185    7814 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 84 bytes spill stores, 84 bytes spill loads
+
+I0000 00:00:1777040634.884755    7818 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 9700 bytes spill stores, 9900 bytes spill loads
+
+I0000 00:00:1777040639.018941    8398 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 2096 bytes spill stores, 1936 bytes spill loads
+
+I0000 00:00:1777040640.284445    8404 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 2240 bytes spill stores, 2080 bytes spill loads
+
+I0000 00:00:1777040645.508141    8990 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_12', 2096 bytes spill stores, 1936 bytes spill loads
+
+I0000 00:00:1777040646.753328    8992 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_14', 2240 bytes spill stores, 2080 bytes spill loads
+
+2026-04-24 22:24:46,466 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 22:24:46,687 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.876999, returns_mean=-0.1635
+I0000 00:00:1777040691.604910    2130 dot_merger.cc:481] Merging Dots in computation: cluster_12__XlaCompiledKernel_true__XlaHasReferenceVars_false__XlaNumConstantArgs_0__XlaNumResourceArgs_108_.104
+I0000 00:00:1777040692.355046   11404 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_66', 8148 bytes spill stores, 8236 bytes spill loads
+
+I0000 00:00:1777040692.918172   11417 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_64', 712 bytes spill stores, 712 bytes spill loads
+
+I0000 00:00:1777040693.992939   11404 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_50', 2224 bytes spill stores, 2080 bytes spill loads
+
+I0000 00:00:1777040695.682343   11407 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_48', 2100 bytes spill stores, 1940 bytes spill loads
+
+I0000 00:00:1777040697.561899   11414 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_54', 780 bytes spill stores, 856 bytes spill loads
+
+I0000 00:00:1777040699.482972   11410 subprocess_compilation.cc:348] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_MatMul_1_24', 532 bytes spill stores, 500 bytes spill loads
+
+2026-04-24 22:25:12,521 - LargePPOModel - INFO - [LargePPO] train() 完成: 26.055s, batches=68, actor_loss=0.019859, critic_loss=2.053616, KL=0.427705
+2026-04-24 22:25:12,521 - SeedRLTrainer - INFO - [SEED RL] hands=11328/30000000, PPO更新#1, loss=1.036737, 速度=82.8 hands/s
+2026-04-24 22:25:49,161 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:25:49,365 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.750111, returns_mean=-0.1349
+2026-04-24 22:25:49,746 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.585s, batches=64, actor_loss=-0.084205, critic_loss=0.967172, KL=0.092808
+2026-04-24 22:25:49,746 - SeedRLTrainer - INFO - [SEED RL] hands=22752/30000000, PPO更新#2, loss=0.441484, 速度=130.8 hands/s
+2026-04-24 22:26:24,391 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:26:24,598 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.823905, returns_mean=-0.1070
+2026-04-24 22:26:24,985 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.594s, batches=64, actor_loss=-0.090518, critic_loss=0.973795, KL=0.082496
+2026-04-24 22:26:24,986 - SeedRLTrainer - INFO - [SEED RL] hands=34092/30000000, PPO更新#3, loss=0.441638, 速度=162.9 hands/s
+2026-04-24 22:26:58,667 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:26:58,873 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.776552, returns_mean=-0.0792
+2026-04-24 22:26:59,249 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.581s, batches=64, actor_loss=-0.092786, critic_loss=0.973896, KL=0.081301
+2026-04-24 22:26:59,249 - SeedRLTrainer - INFO - [SEED RL] hands=45368/30000000, PPO更新#4, loss=0.440555, 速度=186.3 hands/s
+2026-04-24 22:27:15,189 - SeedRLTrainer - INFO - [评估] 行动分布 (总170次): fold=5.3%, call=79.4%, raise2x=1.2%, raise4x=0.0%, allin=14.1%
+2026-04-24 22:27:15,189 - SeedRLTrainer - INFO - [SEED RL] 评估@50003: 胜率=0.370, 平均收益=121.18, 无效下注率=0.000
+2026-04-24 22:27:15,320 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_50003
+2026-04-24 22:27:15,433 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-24 22:27:15,509 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26263961
+2026-04-24 22:27:15,652 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_50003
+2026-04-24 22:27:37,968 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:27:38,182 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.853178, returns_mean=-0.1388
+2026-04-24 22:27:38,558 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.591s, batches=64, actor_loss=-0.093977, critic_loss=0.976148, KL=0.080656
+2026-04-24 22:27:38,558 - SeedRLTrainer - INFO - [SEED RL] hands=56798/30000000, PPO更新#5, loss=0.441085, 速度=200.8 hands/s
+2026-04-24 22:28:20,386 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:28:20,596 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.790219, returns_mean=-0.1012
+2026-04-24 22:28:20,996 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.610s, batches=64, actor_loss=-0.095072, critic_loss=0.976617, KL=0.092079
+2026-04-24 22:28:20,997 - SeedRLTrainer - INFO - [SEED RL] hands=68148/30000000, PPO更新#6, loss=0.440773, 速度=209.5 hands/s
+2026-04-24 22:28:58,967 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:28:59,185 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.909854, returns_mean=-0.1554
+2026-04-24 22:28:59,587 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.620s, batches=64, actor_loss=-0.093620, critic_loss=1.001146, KL=0.093614
+2026-04-24 22:28:59,587 - SeedRLTrainer - INFO - [SEED RL] hands=79727/30000000, PPO更新#7, loss=0.453763, 速度=219.1 hands/s
+2026-04-24 22:29:40,203 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:29:40,407 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.900017, returns_mean=-0.0260
+2026-04-24 22:29:40,790 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.587s, batches=64, actor_loss=-0.094865, critic_loss=0.988345, KL=0.089770
+2026-04-24 22:29:40,790 - SeedRLTrainer - INFO - [SEED RL] hands=91139/30000000, PPO更新#8, loss=0.446740, 速度=225.0 hands/s
+2026-04-24 22:30:04,252 - SeedRLTrainer - INFO - [评估] 行动分布 (总162次): fold=4.9%, call=75.9%, raise2x=0.0%, raise4x=0.0%, allin=19.1%
+2026-04-24 22:30:04,252 - SeedRLTrainer - INFO - [SEED RL] 评估@100018: 胜率=0.310, 平均收益=-3.40, 无效下注率=0.000
+2026-04-24 22:30:04,361 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_100018
+2026-04-24 22:30:04,421 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26314092
+2026-04-24 22:30:06,603 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:30:06,810 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.878590, returns_mean=-0.1550
+2026-04-24 22:30:07,187 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.584s, batches=64, actor_loss=-0.095092, critic_loss=0.970603, KL=0.086729
+2026-04-24 22:30:07,187 - SeedRLTrainer - INFO - [SEED RL] hands=102500/30000000, PPO更新#9, loss=0.437756, 速度=237.6 hands/s
+2026-04-24 22:30:39,730 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:30:39,935 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.829897, returns_mean=-0.1553
+2026-04-24 22:30:40,324 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.593s, batches=64, actor_loss=-0.097243, critic_loss=0.998057, KL=0.083779
+2026-04-24 22:30:40,324 - SeedRLTrainer - INFO - [SEED RL] hands=114102/30000000, PPO更新#10, loss=0.450407, 速度=245.6 hands/s
+2026-04-24 22:31:14,324 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:31:14,534 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.904629, returns_mean=-0.1695
+2026-04-24 22:31:14,916 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.592s, batches=64, actor_loss=-0.095807, critic_loss=1.008778, KL=0.087717
+2026-04-24 22:31:14,916 - SeedRLTrainer - INFO - [SEED RL] hands=125487/30000000, PPO更新#11, loss=0.456485, 速度=251.4 hands/s
+2026-04-24 22:31:54,643 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:31:54,848 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.689849, returns_mean=-0.0744
+2026-04-24 22:31:55,226 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.584s, batches=64, actor_loss=-0.077536, critic_loss=0.992316, KL=0.077083
+2026-04-24 22:31:55,227 - SeedRLTrainer - INFO - [SEED RL] hands=137264/30000000, PPO更新#12, loss=0.457390, 速度=254.4 hands/s
+2026-04-24 22:32:41,707 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:32:41,911 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.624630, returns_mean=-0.1193
+2026-04-24 22:32:42,279 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.573s, batches=64, actor_loss=-0.078020, critic_loss=0.998601, KL=0.065524
+2026-04-24 22:32:42,279 - SeedRLTrainer - INFO - [SEED RL] hands=149077/30000000, PPO更新#13, loss=0.460291, 速度=254.2 hands/s
+2026-04-24 22:32:45,918 - SeedRLTrainer - INFO - [评估] 行动分布 (总141次): fold=11.3%, call=71.6%, raise2x=0.0%, raise4x=0.0%, allin=17.0%
+2026-04-24 22:32:45,918 - SeedRLTrainer - INFO - [SEED RL] 评估@150019: 胜率=0.260, 平均收益=-79.42, 无效下注率=0.000
+2026-04-24 22:32:46,029 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_150019
+2026-04-24 22:32:46,091 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26364095
+2026-04-24 22:33:18,237 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:33:18,435 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.643170, returns_mean=-0.0744
+2026-04-24 22:33:18,823 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.586s, batches=64, actor_loss=-0.078401, critic_loss=1.002433, KL=0.070771
+2026-04-24 22:33:18,823 - SeedRLTrainer - INFO - [SEED RL] hands=161157/30000000, PPO更新#14, loss=0.462016, 速度=258.6 hands/s
+2026-04-24 22:33:50,957 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:33:51,152 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.647521, returns_mean=-0.0346
+2026-04-24 22:33:51,545 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.589s, batches=64, actor_loss=-0.079558, critic_loss=0.989153, KL=0.060906
+2026-04-24 22:33:51,545 - SeedRLTrainer - INFO - [SEED RL] hands=173036/30000000, PPO更新#15, loss=0.454797, 速度=263.9 hands/s
+2026-04-24 22:34:21,964 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:34:22,159 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.527985, returns_mean=-0.0323
+2026-04-24 22:34:22,552 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.588s, batches=64, actor_loss=-0.077664, critic_loss=0.992176, KL=0.068209
+2026-04-24 22:34:22,552 - SeedRLTrainer - INFO - [SEED RL] hands=184788/30000000, PPO更新#16, loss=0.457256, 速度=269.1 hands/s
+2026-04-24 22:35:06,107 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:35:06,302 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.683129, returns_mean=-0.0745
+2026-04-24 22:35:06,679 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.572s, batches=64, actor_loss=-0.077683, critic_loss=1.036315, KL=0.067677
+2026-04-24 22:35:06,679 - SeedRLTrainer - INFO - [SEED RL] hands=196831/30000000, PPO更新#17, loss=0.479316, 速度=269.3 hands/s
+2026-04-24 22:35:15,269 - SeedRLTrainer - INFO - [评估] 行动分布 (总162次): fold=5.6%, call=83.3%, raise2x=0.0%, raise4x=0.0%, allin=11.1%
+2026-04-24 22:35:15,269 - SeedRLTrainer - INFO - [SEED RL] 评估@200019: 胜率=0.330, 平均收益=46.00, 无效下注率=0.000
+2026-04-24 22:35:15,371 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_200019
+2026-04-24 22:35:15,428 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26414118
+2026-04-24 22:35:37,752 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:35:37,948 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.669651, returns_mean=-0.1855
+2026-04-24 22:35:38,334 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.582s, batches=64, actor_loss=-0.079607, critic_loss=0.988421, KL=0.059937
+2026-04-24 22:35:38,334 - SeedRLTrainer - INFO - [SEED RL] hands=208817/30000000, PPO更新#18, loss=0.454407, 速度=273.8 hands/s
+2026-04-24 22:36:12,611 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:36:12,808 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.540500, returns_mean=-0.1532
+2026-04-24 22:36:13,202 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.591s, batches=64, actor_loss=-0.076955, critic_loss=1.003687, KL=0.062147
+2026-04-24 22:36:13,202 - SeedRLTrainer - INFO - [SEED RL] hands=220713/30000000, PPO更新#19, loss=0.463366, 速度=276.8 hands/s
+2026-04-24 22:36:43,768 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:36:43,966 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.419528, returns_mean=-0.1768
+2026-04-24 22:36:44,349 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.581s, batches=64, actor_loss=-0.077430, critic_loss=0.999480, KL=0.062280
+2026-04-24 22:36:44,350 - SeedRLTrainer - INFO - [SEED RL] hands=232692/30000000, PPO更新#20, loss=0.461025, 速度=280.8 hands/s
+2026-04-24 22:37:14,394 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:37:14,591 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.487848, returns_mean=-0.1604
+2026-04-24 22:37:14,981 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.587s, batches=64, actor_loss=-0.076320, critic_loss=1.012632, KL=0.066877
+2026-04-24 22:37:14,981 - SeedRLTrainer - INFO - [SEED RL] hands=244482/30000000, PPO更新#21, loss=0.468156, 速度=284.5 hands/s
+2026-04-24 22:37:29,663 - SeedRLTrainer - INFO - [评估] 行动分布 (总137次): fold=7.3%, call=64.2%, raise2x=0.0%, raise4x=0.0%, allin=28.5%
+2026-04-24 22:37:29,663 - SeedRLTrainer - INFO - [SEED RL] 评估@250024: 胜率=0.290, 平均收益=-175.94, 无效下注率=0.000
+2026-04-24 22:37:29,764 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_250024
+2026-04-24 22:37:29,818 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26464128
+2026-04-24 22:37:52,668 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:37:52,865 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.461928, returns_mean=-0.2027
+2026-04-24 22:37:53,254 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.586s, batches=64, actor_loss=-0.077050, critic_loss=0.997486, KL=0.064179
+2026-04-24 22:37:53,254 - SeedRLTrainer - INFO - [SEED RL] hands=256223/30000000, PPO更新#22, loss=0.460218, 速度=285.5 hands/s
+2026-04-24 22:38:38,982 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:38:39,180 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.677394, returns_mean=-0.1214
+2026-04-24 22:38:39,551 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.569s, batches=64, actor_loss=-0.079287, critic_loss=0.999487, KL=0.069676
+2026-04-24 22:38:39,551 - SeedRLTrainer - INFO - [SEED RL] hands=267855/30000000, PPO更新#23, loss=0.460100, 速度=283.8 hands/s
+2026-04-24 22:39:18,296 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:39:18,494 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.550775, returns_mean=-0.1127
+2026-04-24 22:39:18,881 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.585s, batches=64, actor_loss=-0.076355, critic_loss=0.989507, KL=0.061340
+2026-04-24 22:39:18,882 - SeedRLTrainer - INFO - [SEED RL] hands=279345/30000000, PPO更新#24, loss=0.456576, 速度=284.1 hands/s
+2026-04-24 22:39:49,923 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 22:39:50,132 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.580225, returns_mean=-0.2270
+2026-04-24 22:39:50,549 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.626s, batches=68, actor_loss=-0.079695, critic_loss=1.031190, KL=0.199061
+2026-04-24 22:39:50,549 - SeedRLTrainer - INFO - [SEED RL] hands=290986/30000000, PPO更新#25, loss=0.475748, 速度=286.7 hands/s
+2026-04-24 22:40:14,155 - SeedRLTrainer - INFO - [评估] 行动分布 (总157次): fold=10.8%, call=75.8%, raise2x=0.0%, raise4x=1.3%, allin=12.1%
+2026-04-24 22:40:14,155 - SeedRLTrainer - INFO - [SEED RL] 评估@300028: 胜率=0.360, 平均收益=172.76, 无效下注率=0.000
+2026-04-24 22:40:14,257 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_300028
+2026-04-24 22:40:14,370 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-24 22:40:14,485 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26514134
+2026-04-24 22:40:14,598 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_300028
+2026-04-24 22:40:21,882 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:40:22,079 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.429811, returns_mean=-0.3617
+2026-04-24 22:40:22,471 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.588s, batches=64, actor_loss=-0.079157, critic_loss=0.983598, KL=0.063400
+2026-04-24 22:40:22,471 - SeedRLTrainer - INFO - [SEED RL] hands=302732/30000000, PPO更新#26, loss=0.452220, 速度=289.2 hands/s
+2026-04-24 22:40:54,250 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16387, batch=1024, epochs=4
+2026-04-24 22:40:54,457 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.445099, returns_mean=-0.3366
+2026-04-24 22:40:54,875 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.626s, batches=68, actor_loss=-0.064725, critic_loss=0.956816, KL=0.200515
+2026-04-24 22:40:54,876 - SeedRLTrainer - INFO - [SEED RL] hands=314466/30000000, PPO更新#27, loss=0.446045, 速度=291.4 hands/s
+2026-04-24 22:41:48,469 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:41:48,671 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.360712, returns_mean=-0.2213
+2026-04-24 22:41:49,073 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.604s, batches=64, actor_loss=-0.074376, critic_loss=0.983804, KL=0.060941
+2026-04-24 22:41:49,073 - SeedRLTrainer - INFO - [SEED RL] hands=326211/30000000, PPO更新#28, loss=0.454714, 速度=287.8 hands/s
+2026-04-24 22:42:21,870 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:42:22,068 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.794301, returns_mean=-0.2014
+2026-04-24 22:42:22,440 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.570s, batches=64, actor_loss=-0.076180, critic_loss=1.009505, KL=0.061018
+2026-04-24 22:42:22,441 - SeedRLTrainer - INFO - [SEED RL] hands=337911/30000000, PPO更新#29, loss=0.466663, 速度=289.6 hands/s
+2026-04-24 22:42:53,938 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:42:54,135 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.595514, returns_mean=-0.2692
+2026-04-24 22:42:54,527 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.588s, batches=64, actor_loss=-0.078845, critic_loss=1.005623, KL=0.058932
+2026-04-24 22:42:54,527 - SeedRLTrainer - INFO - [SEED RL] hands=349546/30000000, PPO更新#30, loss=0.463389, 速度=291.6 hands/s
+2026-04-24 22:42:56,201 - SeedRLTrainer - INFO - [评估] 行动分布 (总125次): fold=12.0%, call=56.8%, raise2x=0.0%, raise4x=0.0%, allin=31.2%
+2026-04-24 22:42:56,202 - SeedRLTrainer - INFO - [SEED RL] 评估@350031: 胜率=0.380, 平均收益=265.43, 无效下注率=0.000
+2026-04-24 22:42:56,309 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_350031
+2026-04-24 22:42:56,425 - SeedRLTrainer - INFO - Best model 保存: ./checkpoints/seed_rl_best
+2026-04-24 22:42:56,486 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26567371
+2026-04-24 22:42:56,682 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_350031
+2026-04-24 22:43:26,139 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:43:26,340 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.507403, returns_mean=-0.3032
+2026-04-24 22:43:26,732 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.593s, batches=64, actor_loss=-0.076761, critic_loss=1.003507, KL=0.063102
+2026-04-24 22:43:26,732 - SeedRLTrainer - INFO - [SEED RL] hands=361122/30000000, PPO更新#31, loss=0.463373, 速度=293.4 hands/s
+2026-04-24 22:43:57,085 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 22:43:57,296 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.456331, returns_mean=-0.2564
+2026-04-24 22:43:57,692 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.607s, batches=68, actor_loss=-0.064986, critic_loss=0.930625, KL=0.200850
+2026-04-24 22:43:57,692 - SeedRLTrainer - INFO - [SEED RL] hands=372833/30000000, PPO更新#32, loss=0.432820, 速度=295.4 hands/s
+2026-04-24 22:44:29,844 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:44:30,040 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.618722, returns_mean=-0.2667
+2026-04-24 22:44:30,443 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.599s, batches=64, actor_loss=-0.069283, critic_loss=0.985760, KL=0.078485
+2026-04-24 22:44:30,443 - SeedRLTrainer - INFO - [SEED RL] hands=384489/30000000, PPO更新#33, loss=0.458239, 速度=297.0 hands/s
+2026-04-24 22:45:00,865 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 22:45:01,076 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.462451, returns_mean=-0.2452
+2026-04-24 22:45:01,482 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.617s, batches=68, actor_loss=-0.103247, critic_loss=1.055947, KL=0.209136
+2026-04-24 22:45:01,482 - SeedRLTrainer - INFO - [SEED RL] hands=396261/30000000, PPO更新#34, loss=0.476350, 速度=298.9 hands/s
+2026-04-24 22:45:11,911 - SeedRLTrainer - INFO - [评估] 行动分布 (总163次): fold=12.9%, call=69.9%, raise2x=0.6%, raise4x=0.0%, allin=16.6%
+2026-04-24 22:45:11,911 - SeedRLTrainer - INFO - [SEED RL] 评估@400034: 胜率=0.260, 平均收益=-101.72, 无效下注率=0.000
+2026-04-24 22:45:12,010 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_400034
+2026-04-24 22:45:12,061 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26617372
+2026-04-24 22:45:34,435 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:45:34,634 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.573272, returns_mean=-0.1317
+2026-04-24 22:45:35,028 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.593s, batches=64, actor_loss=-0.080077, critic_loss=0.992161, KL=0.065648
+2026-04-24 22:45:35,028 - SeedRLTrainer - INFO - [SEED RL] hands=407920/30000000, PPO更新#35, loss=0.456042, 速度=300.1 hands/s
+2026-04-24 22:46:29,671 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:46:29,870 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.452765, returns_mean=-0.2350
+2026-04-24 22:46:30,267 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.596s, batches=64, actor_loss=-0.076136, critic_loss=1.001949, KL=0.071177
+2026-04-24 22:46:30,267 - SeedRLTrainer - INFO - [SEED RL] hands=419676/30000000, PPO更新#36, loss=0.462906, 速度=296.7 hands/s
+2026-04-24 22:47:00,107 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:47:00,304 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.497864, returns_mean=-0.3058
+2026-04-24 22:47:00,688 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.581s, batches=64, actor_loss=-0.079111, critic_loss=0.986519, KL=0.066779
+2026-04-24 22:47:00,689 - SeedRLTrainer - INFO - [SEED RL] hands=431329/30000000, PPO更新#37, loss=0.453704, 速度=298.5 hands/s
+2026-04-24 22:47:31,477 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:47:31,676 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.457177, returns_mean=-0.3713
+2026-04-24 22:47:32,051 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.575s, batches=64, actor_loss=-0.074360, critic_loss=0.985285, KL=0.068075
+2026-04-24 22:47:32,052 - SeedRLTrainer - INFO - [SEED RL] hands=442953/30000000, PPO更新#38, loss=0.455463, 速度=300.0 hands/s
+2026-04-24 22:47:50,701 - SeedRLTrainer - INFO - [评估] 行动分布 (总162次): fold=9.9%, call=71.6%, raise2x=0.6%, raise4x=0.0%, allin=17.9%
+2026-04-24 22:47:50,701 - SeedRLTrainer - INFO - [SEED RL] 评估@450036: 胜率=0.290, 平均收益=58.45, 无效下注率=0.000
+2026-04-24 22:47:50,806 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_450036
+2026-04-24 22:47:50,858 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26667442
+2026-04-24 22:48:03,896 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:48:04,093 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.472683, returns_mean=-0.3456
+2026-04-24 22:48:04,488 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.593s, batches=64, actor_loss=-0.077183, critic_loss=0.987279, KL=0.075237
+2026-04-24 22:48:04,489 - SeedRLTrainer - INFO - [SEED RL] hands=454664/30000000, PPO更新#39, loss=0.455048, 速度=301.4 hands/s
+2026-04-24 22:48:34,724 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:48:34,925 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.524247, returns_mean=-0.4021
+2026-04-24 22:48:35,328 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.604s, batches=64, actor_loss=-0.077666, critic_loss=0.982469, KL=0.067912
+2026-04-24 22:48:35,329 - SeedRLTrainer - INFO - [SEED RL] hands=466319/30000000, PPO更新#40, loss=0.452401, 速度=302.9 hands/s
+2026-04-24 22:49:04,590 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:49:04,792 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.370532, returns_mean=-0.3513
+2026-04-24 22:49:05,182 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.592s, batches=64, actor_loss=-0.077424, critic_loss=0.983217, KL=0.063071
+2026-04-24 22:49:05,182 - SeedRLTrainer - INFO - [SEED RL] hands=477872/30000000, PPO更新#41, loss=0.452897, 速度=304.5 hands/s
+2026-04-24 22:49:34,948 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:49:35,143 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.622192, returns_mean=-0.3122
+2026-04-24 22:49:35,527 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.580s, batches=64, actor_loss=-0.077092, critic_loss=0.991988, KL=0.076971
+2026-04-24 22:49:35,528 - SeedRLTrainer - INFO - [SEED RL] hands=489458/30000000, PPO更新#42, loss=0.457448, 速度=306.0 hands/s
+2026-04-24 22:50:01,188 - SeedRLTrainer - INFO - [评估] 行动分布 (总136次): fold=10.3%, call=63.2%, raise2x=1.5%, raise4x=0.7%, allin=24.3%
+2026-04-24 22:50:01,188 - SeedRLTrainer - INFO - [SEED RL] 评估@500036: 胜率=0.250, 平均收益=-95.97, 无效下注率=0.000
+2026-04-24 22:50:01,291 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_500036
+2026-04-24 22:50:01,342 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26717496
+2026-04-24 22:50:02,974 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 22:50:03,188 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.562324, returns_mean=-0.1947
+2026-04-24 22:50:03,606 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.632s, batches=68, actor_loss=-0.084729, critic_loss=0.949791, KL=0.206258
+2026-04-24 22:50:03,606 - SeedRLTrainer - INFO - [SEED RL] hands=500759/30000000, PPO更新#43, loss=0.432531, 速度=307.6 hands/s
+2026-04-24 22:50:33,702 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:50:33,904 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.581684, returns_mean=-0.2238
+2026-04-24 22:50:34,297 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.595s, batches=64, actor_loss=-0.078777, critic_loss=1.001316, KL=0.070558
+2026-04-24 22:50:34,297 - SeedRLTrainer - INFO - [SEED RL] hands=512136/30000000, PPO更新#44, loss=0.461270, 速度=308.8 hands/s
+2026-04-24 22:51:11,778 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:51:11,975 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.585848, returns_mean=-0.1186
+2026-04-24 22:51:12,364 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.586s, batches=64, actor_loss=-0.077850, critic_loss=1.014349, KL=0.069319
+2026-04-24 22:51:12,364 - SeedRLTrainer - INFO - [SEED RL] hands=523590/30000000, PPO更新#45, loss=0.468249, 速度=308.6 hands/s
+2026-04-24 22:51:56,223 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 22:51:56,431 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.481599, returns_mean=-0.3098
+2026-04-24 22:51:56,848 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.625s, batches=68, actor_loss=-0.174377, critic_loss=1.087033, KL=0.209283
+2026-04-24 22:51:56,848 - SeedRLTrainer - INFO - [SEED RL] hands=534901/30000000, PPO更新#46, loss=0.456328, 速度=307.2 hands/s
+2026-04-24 22:52:31,745 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:52:31,942 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.568141, returns_mean=-0.2865
+2026-04-24 22:52:32,338 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.593s, batches=64, actor_loss=-0.074254, critic_loss=1.024326, KL=0.072535
+2026-04-24 22:52:32,338 - SeedRLTrainer - INFO - [SEED RL] hands=546365/30000000, PPO更新#47, loss=0.475036, 速度=307.5 hands/s
+2026-04-24 22:52:42,040 - SeedRLTrainer - INFO - [评估] 行动分布 (总152次): fold=19.7%, call=67.1%, raise2x=0.0%, raise4x=0.0%, allin=13.2%
+2026-04-24 22:52:42,040 - SeedRLTrainer - INFO - [SEED RL] 评估@550041: 胜率=0.270, 平均收益=-38.12, 无效下注率=0.000
+2026-04-24 22:52:42,154 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_550041
+2026-04-24 22:52:42,219 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26767539
+2026-04-24 22:53:02,179 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:53:02,376 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.559416, returns_mean=-0.3715
+2026-04-24 22:53:02,763 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.584s, batches=64, actor_loss=-0.079112, critic_loss=0.985411, KL=0.070885
+2026-04-24 22:53:02,763 - SeedRLTrainer - INFO - [SEED RL] hands=557765/30000000, PPO更新#48, loss=0.453150, 速度=308.7 hands/s
+2026-04-24 22:53:33,560 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:53:33,757 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.665674, returns_mean=-0.4313
+2026-04-24 22:53:34,147 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.588s, batches=64, actor_loss=-0.075002, critic_loss=0.990452, KL=0.069422
+2026-04-24 22:53:34,148 - SeedRLTrainer - INFO - [SEED RL] hands=569319/30000000, PPO更新#49, loss=0.457725, 速度=309.7 hands/s
+2026-04-24 22:54:05,540 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:54:05,739 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.541010, returns_mean=-0.4769
+2026-04-24 22:54:06,120 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.579s, batches=64, actor_loss=-0.080402, critic_loss=0.986585, KL=0.071911
+2026-04-24 22:54:06,120 - SeedRLTrainer - INFO - [SEED RL] hands=580815/30000000, PPO更新#50, loss=0.453092, 速度=310.5 hands/s
+2026-04-24 22:54:38,024 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:54:38,223 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.788503, returns_mean=-0.4751
+2026-04-24 22:54:38,615 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.591s, batches=64, actor_loss=-0.078842, critic_loss=0.996787, KL=0.074426
+2026-04-24 22:54:38,615 - SeedRLTrainer - INFO - [SEED RL] hands=592370/30000000, PPO更新#51, loss=0.458972, 速度=311.3 hands/s
+2026-04-24 22:54:59,654 - SeedRLTrainer - INFO - [评估] 行动分布 (总124次): fold=12.1%, call=55.6%, raise2x=0.0%, raise4x=0.0%, allin=32.3%
+2026-04-24 22:54:59,655 - SeedRLTrainer - INFO - [SEED RL] 评估@600045: 胜率=0.370, 平均收益=196.93, 无效下注率=0.000
+2026-04-24 22:54:59,757 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_600045
+2026-04-24 22:54:59,813 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26817576
+2026-04-24 22:55:10,615 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:55:10,811 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.659736, returns_mean=-0.4645
+2026-04-24 22:55:11,205 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.590s, batches=64, actor_loss=-0.077926, critic_loss=0.979363, KL=0.070405
+2026-04-24 22:55:11,205 - SeedRLTrainer - INFO - [SEED RL] hands=603902/30000000, PPO更新#52, loss=0.450718, 速度=312.0 hands/s
+2026-04-24 22:55:41,985 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:55:42,184 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.622830, returns_mean=-0.4535
+2026-04-24 22:55:42,580 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.595s, batches=64, actor_loss=-0.074706, critic_loss=0.977727, KL=0.071514
+2026-04-24 22:55:42,580 - SeedRLTrainer - INFO - [SEED RL] hands=615419/30000000, PPO更新#53, loss=0.451511, 速度=312.9 hands/s
+2026-04-24 22:56:18,262 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:56:18,463 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.657861, returns_mean=-0.4280
+2026-04-24 22:56:18,856 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.594s, batches=64, actor_loss=-0.081994, critic_loss=0.993360, KL=0.071359
+2026-04-24 22:56:18,856 - SeedRLTrainer - INFO - [SEED RL] hands=627071/30000000, PPO更新#54, loss=0.455683, 速度=313.0 hands/s
+2026-04-24 22:56:51,490 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:56:51,692 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.517208, returns_mean=-0.4636
+2026-04-24 22:56:52,085 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.595s, batches=64, actor_loss=-0.078672, critic_loss=0.980338, KL=0.068658
+2026-04-24 22:56:52,085 - SeedRLTrainer - INFO - [SEED RL] hands=638823/30000000, PPO更新#55, loss=0.450833, 速度=313.7 hands/s
+2026-04-24 22:57:20,741 - SeedRLTrainer - INFO - [评估] 行动分布 (总154次): fold=11.0%, call=79.9%, raise2x=0.6%, raise4x=0.0%, allin=8.4%
+2026-04-24 22:57:20,742 - SeedRLTrainer - INFO - [SEED RL] 评估@650054: 胜率=0.300, 平均收益=167.85, 无效下注率=0.000
+2026-04-24 22:57:20,843 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_650054
+2026-04-24 22:57:20,968 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26867613
+2026-04-24 22:57:25,722 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16386, batch=1024, epochs=4
+2026-04-24 22:57:25,933 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.539678, returns_mean=-0.5537
+2026-04-24 22:57:26,352 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.630s, batches=68, actor_loss=-0.069503, critic_loss=0.964657, KL=0.206207
+2026-04-24 22:57:26,353 - SeedRLTrainer - INFO - [SEED RL] hands=650732/30000000, PPO更新#56, loss=0.447577, 速度=314.3 hands/s
+2026-04-24 22:58:15,659 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:58:15,856 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.480827, returns_mean=-0.6590
+2026-04-24 22:58:16,250 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.590s, batches=64, actor_loss=-0.078892, critic_loss=0.981114, KL=0.071831
+2026-04-24 22:58:16,250 - SeedRLTrainer - INFO - [SEED RL] hands=662524/30000000, PPO更新#57, loss=0.451111, 速度=312.4 hands/s
+2026-04-24 22:59:06,149 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 22:59:06,345 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.545103, returns_mean=-0.7108
+2026-04-24 22:59:06,736 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.587s, batches=64, actor_loss=-0.077207, critic_loss=0.987974, KL=0.073331
+2026-04-24 22:59:06,736 - SeedRLTrainer - INFO - [SEED RL] hands=674312/30000000, PPO更新#58, loss=0.455383, 速度=310.6 hands/s
+2026-04-24 22:59:38,936 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 22:59:39,143 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.707492, returns_mean=-0.6300
+2026-04-24 22:59:39,559 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.623s, batches=68, actor_loss=-0.111463, critic_loss=1.023126, KL=0.210426
+2026-04-24 22:59:39,559 - SeedRLTrainer - INFO - [SEED RL] hands=685960/30000000, PPO更新#59, loss=0.455832, 速度=311.3 hands/s
+2026-04-24 23:00:09,504 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 23:00:09,715 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.508602, returns_mean=-0.4161
+2026-04-24 23:00:10,135 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.631s, batches=68, actor_loss=-0.050546, critic_loss=0.958748, KL=0.211217
+2026-04-24 23:00:10,135 - SeedRLTrainer - INFO - [SEED RL] hands=697631/30000000, PPO更新#60, loss=0.454101, 速度=312.2 hands/s
+2026-04-24 23:00:17,186 - SeedRLTrainer - INFO - [评估] 行动分布 (总127次): fold=17.3%, call=62.2%, raise2x=0.0%, raise4x=0.0%, allin=20.5%
+2026-04-24 23:00:17,186 - SeedRLTrainer - INFO - [SEED RL] 评估@700054: 胜率=0.270, 平均收益=-73.44, 无效下注率=0.000
+2026-04-24 23:00:17,288 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_700054
+2026-04-24 23:00:17,340 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26918402
+2026-04-24 23:00:43,258 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 23:00:43,454 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.593961, returns_mean=-0.3560
+2026-04-24 23:00:43,852 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.594s, batches=64, actor_loss=-0.078517, critic_loss=0.976234, KL=0.072277
+2026-04-24 23:00:43,853 - SeedRLTrainer - INFO - [SEED RL] hands=709286/30000000, PPO更新#61, loss=0.448858, 速度=312.7 hands/s
+2026-04-24 23:01:14,984 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 23:01:15,181 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.569017, returns_mean=-0.4019
+2026-04-24 23:01:15,559 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.575s, batches=64, actor_loss=-0.080178, critic_loss=0.984934, KL=0.066413
+2026-04-24 23:01:15,559 - SeedRLTrainer - INFO - [SEED RL] hands=721002/30000000, PPO更新#62, loss=0.452378, 速度=313.5 hands/s
+2026-04-24 23:01:46,959 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 23:01:47,158 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.554624, returns_mean=-0.4442
+2026-04-24 23:01:47,549 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.589s, batches=64, actor_loss=-0.078067, critic_loss=0.995098, KL=0.073091
+2026-04-24 23:01:47,549 - SeedRLTrainer - INFO - [SEED RL] hands=732935/30000000, PPO更新#63, loss=0.458515, 速度=314.3 hands/s
+2026-04-24 23:02:19,112 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 23:02:19,309 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.409842, returns_mean=-0.4403
+2026-04-24 23:02:19,697 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.585s, batches=64, actor_loss=-0.078111, critic_loss=0.985875, KL=0.072375
+2026-04-24 23:02:19,698 - SeedRLTrainer - INFO - [SEED RL] hands=744677/30000000, PPO更新#64, loss=0.453882, 速度=315.0 hands/s
+2026-04-24 23:02:34,407 - SeedRLTrainer - INFO - [评估] 行动分布 (总153次): fold=13.7%, call=71.9%, raise2x=0.0%, raise4x=0.0%, allin=14.4%
+2026-04-24 23:02:34,407 - SeedRLTrainer - INFO - [SEED RL] 评估@750054: 胜率=0.290, 平均收益=10.82, 无效下注率=0.000
+2026-04-24 23:02:34,507 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_750054
+2026-04-24 23:02:34,562 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_26969983
+2026-04-24 23:02:51,306 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 23:02:51,504 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.473895, returns_mean=-0.3933
+2026-04-24 23:02:51,897 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.591s, batches=64, actor_loss=-0.076512, critic_loss=0.989546, KL=0.076511
+2026-04-24 23:02:51,897 - SeedRLTrainer - INFO - [SEED RL] hands=756410/30000000, PPO更新#65, loss=0.456517, 速度=315.7 hands/s
+2026-04-24 23:03:22,613 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 23:03:22,827 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.505638, returns_mean=-0.3353
+2026-04-24 23:03:23,246 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.633s, batches=68, actor_loss=-0.073549, critic_loss=1.007081, KL=0.207474
+2026-04-24 23:03:23,246 - SeedRLTrainer - INFO - [SEED RL] hands=768103/30000000, PPO更新#66, loss=0.466766, 速度=316.4 hands/s
+2026-04-24 23:04:00,854 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 23:04:01,063 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.478166, returns_mean=-0.5214
+2026-04-24 23:04:01,482 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.629s, batches=68, actor_loss=-0.115330, critic_loss=1.030915, KL=0.205140
+2026-04-24 23:04:01,482 - SeedRLTrainer - INFO - [SEED RL] hands=779835/30000000, PPO更新#67, loss=0.457793, 速度=316.3 hands/s
+2026-04-24 23:04:31,566 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 23:04:31,766 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.487256, returns_mean=-0.4344
+2026-04-24 23:04:32,161 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.595s, batches=64, actor_loss=-0.075815, critic_loss=0.985850, KL=0.064919
+2026-04-24 23:04:32,161 - SeedRLTrainer - INFO - [SEED RL] hands=791481/30000000, PPO更新#68, loss=0.455017, 速度=317.0 hands/s
+2026-04-24 23:04:55,501 - SeedRLTrainer - INFO - [评估] 行动分布 (总146次): fold=8.2%, call=73.3%, raise2x=0.7%, raise4x=0.0%, allin=17.8%
+2026-04-24 23:04:55,501 - SeedRLTrainer - INFO - [SEED RL] 评估@800061: 胜率=0.360, 平均收益=198.75, 无效下注率=0.000
+2026-04-24 23:04:55,603 - SeedRLTrainer - INFO - Checkpoint 保存: ./checkpoints/seed_rl_hands_800061
+2026-04-24 23:04:55,654 - SeedRLTrainer - INFO - 归档旧 checkpoint 到数据盘: seed_rl_hands_27020073
+2026-04-24 23:05:03,996 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16384, batch=1024, epochs=4
+2026-04-24 23:05:04,194 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=0.000000, std=1.000000, abs_max=2.598284, returns_mean=-0.3611
+2026-04-24 23:05:04,584 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.588s, batches=64, actor_loss=-0.075925, critic_loss=0.986204, KL=0.064830
+2026-04-24 23:05:04,584 - SeedRLTrainer - INFO - [SEED RL] hands=803059/30000000, PPO更新#69, loss=0.455139, 速度=317.6 hands/s
+2026-04-24 23:05:52,274 - LargePPOModel - INFO - [LargePPO] train() 开始: buffer=16385, batch=1024, epochs=4
+2026-04-24 23:05:52,482 - LargePPOModel - INFO - [LargePPO] GAE统计: mean=-0.000000, std=1.000000, abs_max=2.525788, returns_mean=-0.4098
+2026-04-24 23:05:52,898 - LargePPOModel - INFO - [LargePPO] train() 完成: 0.625s, batches=68, actor_loss=-0.103236, critic_loss=0.990788, KL=0.207385
+2026-04-24 23:05:52,898 - SeedRLTrainer - INFO - [SEED RL] hands=814605/30000000, PPO更新#70, loss=0.443776, 速度=316.1 hands/s

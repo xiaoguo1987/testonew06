@@ -31,6 +31,10 @@ try:
 except ImportError:
     USE_CC_ENGINE = False
 
+# 探索保障：按动作类型设置最低采样概率（模块级常量，避免高频调用时重复创建）
+# [fold, call, raise2x, raise4x, allin] - raise类动作需要更高保底防止策略坍缩
+_ACTION_MIN_PROBS = np.array([0.01, 0.01, 0.04, 0.04, 0.01], dtype=np.float32)
+
 
 # ========================================================================
 #  合法动作掩码 / 翻牌前位置过滤（复制自 mp_worker.py，避免 TF 导入）
@@ -130,18 +134,14 @@ def _apply_mask_and_sample(
     s = float(np.sum(mp_))
     mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
 
-    # === 探索保障：为合法动作设置最低采样概率 ===
-    # 防止低概率动作永远不被采样，导致策略坍缩（raise2x/4x=0%问题）
-    # raise2x(idx=2)/raise4x(idx=3) 设置更高下限，防止加注策略消亡
-    action_min_probs = [0.01, 0.01, 0.04, 0.04, 0.01]  # fold, call, raise2x, raise4x, allin
-    has_adjustment = False
-    for i in range(len(mp_)):
-        if lm[i] > 0 and mp_[i] < action_min_probs[i]:
-            mp_[i] = action_min_probs[i]
-            has_adjustment = True
-    if has_adjustment:
-        # 重新归一化，确保总和为 1
-        mp_ = mp_ / np.sum(mp_)
+    # === 探索保障：按动作类型设置最低采样概率 ===
+    # raise2x/4x 需要更高的保底概率，防止策略坍缩
+    action_min_probs = _ACTION_MIN_PROBS  # fold, call, raise2x, raise4x, allin
+    legal_min = action_min_probs * lm  # 非法动作自动为0
+    # 统计 raise2x(idx=2) 和 raise4x(idx=3) 是否被强制提升（用于监控探索保障触发频率）
+    _raise_forced = int((lm[2] > 0 and mp_[2] < legal_min[2]) or (lm[3] > 0 and mp_[3] < legal_min[3]))
+    mp_ = np.maximum(mp_, legal_min)   # 一步到位，向量化提升
+    mp_ = mp_ / (np.sum(mp_) + 1e-9)  # 重新归一化
 
     # 移除 _preflop_filter：训练采样时不应干预 action 分布，
     # 否则 old_prob(过滤后) 与 new_prob(未过滤) 产生虚假 ratio，导致 PPO 梯度被污染，
@@ -509,18 +509,14 @@ def _env_worker_loop_cc(
         s = float(np.sum(mp_))
         mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
 
-        # === 探索保障：为合法动作设置最低采样概率 ===
-        # 防止低概率动作永远不被采样，导致策略坍缩（raise2x/4x=0%问题）
-        # raise2x(idx=2)/raise4x(idx=3) 设置更高下限，防止加注策略消亡
-        action_min_probs = [0.01, 0.01, 0.04, 0.04, 0.01]  # fold, call, raise2x, raise4x, allin
-        has_adjustment = False
-        for i in range(len(mp_)):
-            if lm[i] > 0 and mp_[i] < action_min_probs[i]:
-                mp_[i] = action_min_probs[i]
-                has_adjustment = True
-        if has_adjustment:
-            # 重新归一化，确保总和为 1
-            mp_ = mp_ / np.sum(mp_)
+        # === 探索保障：按动作类型设置最低采样概率 ===
+        # raise2x/4x 需要更高的保底概率，防止策略坍缩
+        action_min_probs = _ACTION_MIN_PROBS  # fold, call, raise2x, raise4x, allin
+        legal_min = action_min_probs * lm  # 非法动作自动为0
+        # 统计 raise2x(idx=2) 和 raise4x(idx=3) 是否被强制提升（用于监控探索保障触发频率）
+        _raise_forced = int((lm[2] > 0 and mp_[2] < legal_min[2]) or (lm[3] > 0 and mp_[3] < legal_min[3]))
+        mp_ = np.maximum(mp_, legal_min)   # 一步到位，向量化提升
+        mp_ = mp_ / (np.sum(mp_) + 1e-9)  # 重新归一化
 
         hs = eng.get_hand_strength(pi)
         # 移除 _preflop_filter_cc：训练采样时不应干预 action 分布，
