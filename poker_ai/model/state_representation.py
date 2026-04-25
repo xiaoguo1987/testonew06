@@ -240,38 +240,98 @@ class StateRepresentation:
         return strength
 
     def encode_action(self, action: str, amount: Optional[int] = None, game: Optional[PokerGame] = None) -> np.ndarray:
-        # 复用之前的逻辑
-        action_vector = np.zeros(5)
-        if action == 'fold': action_vector[0] = 1
-        elif action == 'call': action_vector[1] = 1
+        action_vector = np.zeros(7)
+        if action == 'fold':
+            action_vector[0] = 1
+        elif action == 'call':
+            action_vector[1] = 1
         elif action == 'raise' and game is not None:
-            base_bet = max(game.current_bet, game.big_blind)
-            raise_ratio = amount / base_bet if base_bet > 0 else 0
-            if raise_ratio <= 2.5: action_vector[2] = 1
-            elif raise_ratio <= 5.0: action_vector[3] = 1
-            else: action_vector[4] = 1
+            if game.round == 1:
+                # 翻牌前: 按 base 倍数分类
+                base = max(game.current_bet, game.big_blind)
+                if amount is None:
+                    action_vector[2] = 1
+                    return action_vector
+                ratio = amount / base if base > 0 else 0
+                if ratio <= 2.75:
+                    action_vector[2] = 1
+                elif ratio <= 3.5:
+                    action_vector[3] = 1
+                elif ratio <= 5.0:
+                    action_vector[4] = 1
+                else:
+                    action_vector[6] = 1
+            else:
+                # 翻牌后: 按 pot 比例分类
+                cb = max(game.current_bet, game.big_blind)
+                pot = game.pot
+                if amount is None:
+                    action_vector[2] = 1
+                    return action_vector
+                threshold_2 = cb + pot / 3
+                threshold_3 = cb + pot * 2 / 3
+                threshold_4 = cb + pot
+                threshold_5 = cb + pot * 1.5
+                if amount <= threshold_2 * 1.1:
+                    action_vector[2] = 1
+                elif amount <= threshold_3 * 1.1:
+                    action_vector[3] = 1
+                elif amount <= threshold_4 * 1.1:
+                    action_vector[4] = 1
+                elif amount <= threshold_5 * 1.1:
+                    action_vector[5] = 1
+                else:
+                    action_vector[6] = 1
         return action_vector
-    
-    def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
-        # 复用之前的逻辑
-        action_idx = np.argmax(action_vector)
-        
-        # 移除强制弃牌逻辑，允许AI根据学习自行决定动作
-        # 这使AI能够尝试用弱手牌到达摊牌阶段，有助于学习完整的扑克策略
-        pass
 
-        if action_idx == 0: return ('fold', None)
+    def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
+        action_idx = np.argmax(action_vector)
+
+        if action_idx == 0:
+            return ('fold', None)
         elif action_idx == 1:
             call_amount = max(0, game.current_bet - player.bet)
             return ('call', call_amount)
         elif action_idx == 2:
-            current_bet = max(game.current_bet, game.big_blind)
-            amt = min(current_bet * 2, player.bet + player.stack)
+            cb = max(game.current_bet, game.big_blind)
+            if game.round == 1:
+                amt = min(int(cb * 2.5), player.bet + player.stack)
+            else:
+                amt = min(int(cb + game.pot / 3), player.bet + player.stack)
+            if amt < game.current_bet:
+                return ('call', max(0, game.current_bet - player.bet))
             return ('raise', int(amt))
         elif action_idx == 3:
-            current_bet = max(game.current_bet, game.big_blind)
-            amt = min(current_bet * 4, player.bet + player.stack)
+            cb = max(game.current_bet, game.big_blind)
+            if game.round == 1:
+                amt = min(int(cb * 3), player.bet + player.stack)
+            else:
+                amt = min(int(cb + game.pot * 2 / 3), player.bet + player.stack)
+            if amt < game.current_bet:
+                return ('call', max(0, game.current_bet - player.bet))
             return ('raise', int(amt))
         elif action_idx == 4:
-            return ('raise', int(player.bet + player.stack))
+            cb = max(game.current_bet, game.big_blind)
+            if game.round == 1:
+                amt = min(int(cb * 4), player.bet + player.stack)
+            else:
+                amt = min(int(cb + game.pot), player.bet + player.stack)
+            if amt < game.current_bet:
+                return ('call', max(0, game.current_bet - player.bet))
+            return ('raise', int(amt))
+        elif action_idx == 5:
+            cb = max(game.current_bet, game.big_blind)
+            if game.round == 1:
+                # 翻牌前理论上被 mask 掉不会走到，防御处理返回 allin
+                amt = player.bet + player.stack
+            else:
+                amt = min(int(cb + game.pot * 1.5), player.bet + player.stack)
+            if amt < game.current_bet:
+                return ('call', max(0, game.current_bet - player.bet))
+            return ('raise', int(amt))
+        elif action_idx == 6:
+            amt = player.bet + player.stack
+            if amt < game.current_bet:
+                return ('call', max(0, game.current_bet - player.bet))
+            return ('raise', int(amt))
         return ('fold', None)

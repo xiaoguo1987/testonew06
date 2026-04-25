@@ -383,7 +383,7 @@ class SeedRLTrainer:
         invalid_bets = 0
         total_actions = 0
         # 行动分布统计（用于诊断弃牌机器人）
-        action_counts = [0, 0, 0, 0, 0]  # fold, call, raise2x, raise4x, allin
+        action_counts = [0, 0, 0, 0, 0, 0, 0]  # fold, call, small_raise, mid_raise, large_raise, overbet, allin
 
         for _ in range(num_games):
             players_e = [Player("Main_AI", self.initial_stack, True)]
@@ -414,7 +414,7 @@ class SeedRLTrainer:
                     # 确定性策略：取概率最高的合法动作（argmax）
                     ai = int(np.argmax(mp_))
                     action_counts[ai] += 1
-                    av = np.zeros(5, dtype=np.float32)
+                    av = np.zeros(7, dtype=np.float32)
                     av[ai] = 1.0
                     hs = sr.calculate_hand_strength(cp, game)
                     act, amt = sr.decode_action(av, game, cp, hs)
@@ -428,8 +428,8 @@ class SeedRLTrainer:
                     # 对手随机
                     lm = _legal_mask(game, cp)
                     p = lm / (np.sum(lm) + 1e-8)
-                    ai = int(np.random.choice(5, p=p))
-                    av = np.zeros(5, dtype=np.float32)
+                    ai = int(np.random.choice(7, p=p))
+                    av = np.zeros(7, dtype=np.float32)
                     av[ai] = 1.0
                     hs = sr.calculate_hand_strength(cp, game)
                     act, amt = sr.decode_action(av, game, cp, hs)
@@ -449,11 +449,11 @@ class SeedRLTrainer:
                 wins += 1
 
         # 行动分布日志：帮助诊断弃牌机器人问题
-        action_names = ['fold', 'call', 'raise2x', 'raise4x', 'allin']
+        action_names = ['fold', 'call', 'small_raise', 'mid_raise', 'large_raise', 'overbet', 'allin']
         if total_actions > 0:
             dist_str = ', '.join(
                 f"{action_names[i]}={action_counts[i]/total_actions:.1%}"
-                for i in range(5)
+                for i in range(7)
             )
             logger.info(f"[评估] 行动分布 (总{total_actions}次): {dist_str}")
         else:

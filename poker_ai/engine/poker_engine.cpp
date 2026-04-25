@@ -359,21 +359,38 @@ public:
         return out;
     }
 
-    // ---- legal mask (5 dims) ----
+    // ---- legal mask (7 dims) ----
     py::array_t<float> get_legal_mask(int pi) const {
-        auto out = py::array_t<float>(5);
+        auto out = py::array_t<float>(7);
         float* m = out.mutable_data();
-        std::memset(m, 0, 5*sizeof(float));
+        std::memset(m, 0, 7*sizeof(float));
         if (!active_[pi]||allin_[pi]) { m[0]=1.f; return out; }
         int ca = std::max(0, cbet_-bets_[pi]);
         m[0]=1.f;
         if (ca<=stacks_[pi]) m[1]=1.f;
-        int cb=std::max(cbet_,bb_), r2=cb*2, r4=cb*4;
-        int ai=bets_[pi]+stacks_[pi], mr=std::max(cbet_*2,bb_);
-        if (r2>cbet_&&r2>=mr&&(r2-bets_[pi])<=stacks_[pi]) m[2]=1.f;
-        if (r4>cbet_&&r4>=mr&&(r4-bets_[pi])<=stacks_[pi]) m[3]=1.f;
-        if (ai>cbet_&&ai>=mr&&stacks_[pi]>0) m[4]=1.f;
-        float s=0; for(int i=0;i<5;i++) s+=m[i];
+        int cb=std::max(cbet_,bb_);
+        int mr=std::max(cbet_*2,bb_);
+        int ai=bets_[pi]+stacks_[pi];
+        if (bcnt_==0) { // preflop
+            int r25 = (int)(cb * 2.5f);
+            int r3  = cb * 3;
+            int r4  = cb * 4;
+            if (r25>cbet_&&r25>=mr&&(r25-bets_[pi])<=stacks_[pi]) m[2]=1.f;
+            if (r3 >cbet_&&r3 >=mr&&(r3 -bets_[pi])<=stacks_[pi]) m[3]=1.f;
+            if (r4 >cbet_&&r4 >=mr&&(r4 -bets_[pi])<=stacks_[pi]) m[4]=1.f;
+            m[5]=0.f; // overbet illegal preflop
+        } else { // postflop
+            int r_s = cb + pot_/3;
+            int r_m = cb + pot_*2/3;
+            int r_l = cb + pot_;
+            int r_o = cb + (int)(pot_*1.5f);
+            if (r_s>cbet_&&r_s>=mr&&(r_s-bets_[pi])<=stacks_[pi]) m[2]=1.f;
+            if (r_m>cbet_&&r_m>=mr&&(r_m-bets_[pi])<=stacks_[pi]) m[3]=1.f;
+            if (r_l>cbet_&&r_l>=mr&&(r_l-bets_[pi])<=stacks_[pi]) m[4]=1.f;
+            if (r_o>cbet_&&r_o>=mr&&(r_o-bets_[pi])<=stacks_[pi]) m[5]=1.f;
+        }
+        if (ai>cbet_&&ai>=mr&&stacks_[pi]>0) m[6]=1.f;
+        float s=0; for(int i=0;i<7;i++) s+=m[i];
         if (s<=0) { m[0]=1.f; if (ca<=stacks_[pi]) m[1]=1.f; }
         return out;
     }
@@ -481,13 +498,23 @@ public:
 // ================================================================
 //  Standalone decode_action (matches Python StateRepresentation.decode_action)
 // ================================================================
-static py::tuple decode_action_fn(int aidx, int cbet, int bb, int pbet, int pstack) {
+static py::tuple decode_action_fn(int aidx, int cbet, int bb, int pbet, int pstack, int round, int pot) {
     if (aidx==0) return py::make_tuple("fold", 0);
     if (aidx==1) { int ca=std::max(0,cbet-pbet); return py::make_tuple("call",ca); }
     int cb=std::max(cbet,bb);
-    if (aidx==2) { int a=std::min(cb*2, pbet+pstack); return py::make_tuple("raise",a); }
-    if (aidx==3) { int a=std::min(cb*4, pbet+pstack); return py::make_tuple("raise",a); }
-    if (aidx==4) return py::make_tuple("raise", pbet+pstack);
+    int max_amt = pbet + pstack;
+    if (round==1) { // preflop
+        if (aidx==2) { int a=std::min((int)(cb*2.5f), max_amt); return py::make_tuple("raise",a); }
+        if (aidx==3) { int a=std::min(cb*3, max_amt); return py::make_tuple("raise",a); }
+        if (aidx==4) { int a=std::min(cb*4, max_amt); return py::make_tuple("raise",a); }
+        if (aidx==5) return py::make_tuple("fold", 0); // defensive fallback
+    } else { // postflop
+        if (aidx==2) { int a=std::min(cb + pot/3, max_amt); return py::make_tuple("raise",a); }
+        if (aidx==3) { int a=std::min(cb + pot*2/3, max_amt); return py::make_tuple("raise",a); }
+        if (aidx==4) { int a=std::min(cb + pot, max_amt); return py::make_tuple("raise",a); }
+        if (aidx==5) { int a=std::min(cb + (int)(pot*1.5f), max_amt); return py::make_tuple("raise",a); }
+    }
+    if (aidx==6) return py::make_tuple("raise", max_amt); // allin
     return py::make_tuple("fold", 0);
 }
 
@@ -544,5 +571,6 @@ PYBIND11_MODULE(poker_engine_cc, m) {
     m.def("decode_action", &decode_action_fn,
           "Decode action index → (action_str, amount)",
           py::arg("action_idx"), py::arg("current_bet"), py::arg("big_blind"),
-          py::arg("player_bet"), py::arg("player_stack"));
+          py::arg("player_bet"), py::arg("player_stack"),
+          py::arg("round"), py::arg("pot"));
 }

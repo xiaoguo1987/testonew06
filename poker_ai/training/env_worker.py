@@ -32,8 +32,8 @@ except ImportError:
     USE_CC_ENGINE = False
 
 # 探索保障：按动作类型设置最低采样概率（模块级常量，避免高频调用时重复创建）
-# [fold, call, raise2x, raise4x, allin] - raise类动作需要更高保底防止策略坍缩
-_ACTION_MIN_PROBS = np.array([0.01, 0.01, 0.04, 0.04, 0.01], dtype=np.float32)
+# [fold, call, small_raise, medium_raise, large_raise, overbet, allin] - raise类动作需要更高保底防止策略坍缩
+_ACTION_MIN_PROBS = np.array([0.01, 0.01, 0.03, 0.03, 0.03, 0.02, 0.01], dtype=np.float32)
 
 
 # ========================================================================
@@ -81,7 +81,7 @@ def _load_and_convert_preflop_lut():
 
 
 def _legal_mask(game: PokerGame, player: Player) -> np.ndarray:
-    mask = np.zeros(5, dtype=np.float32)
+    mask = np.zeros(7, dtype=np.float32)
     if not player.is_active or player.is_all_in:
         mask[0] = 1.0
         return mask
@@ -90,15 +90,22 @@ def _legal_mask(game: PokerGame, player: Player) -> np.ndarray:
     if call_amount <= player.stack:
         mask[1] = 1.0
     cb = max(game.current_bet, game.big_blind)
-    r2, r4 = int(cb * 2), int(cb * 4)
+    min_raise = max(game.current_bet * 2, game.big_blind)
     ai = int(player.bet + player.stack)
-    mr = max(game.current_bet * 2, game.big_blind)
-    if r2 > game.current_bet and r2 >= mr and (r2 - player.bet) <= player.stack:
-        mask[2] = 1.0
-    if r4 > game.current_bet and r4 >= mr and (r4 - player.bet) <= player.stack:
-        mask[3] = 1.0
-    if ai > game.current_bet and ai >= mr and player.stack > 0:
-        mask[4] = 1.0
+    if game.round == 1:  # 翻牌前
+        bets = [int(cb * 2.5), int(cb * 3), int(cb * 4)]
+        for i, bet in enumerate(bets, start=2):
+            if bet > game.current_bet and bet >= min_raise and (bet - player.bet) <= player.stack:
+                mask[i] = 1.0
+        mask[5] = 0.0  # overbet 翻牌前非法
+    else:  # 翻牌后
+        pot = game.pot
+        bets = [int(cb + pot / 3), int(cb + pot * 2 / 3), int(cb + pot), int(cb + pot * 1.5)]
+        for i, bet in enumerate(bets, start=2):
+            if bet > game.current_bet and bet >= min_raise and (bet - player.bet) <= player.stack:
+                mask[i] = 1.0
+    if ai > game.current_bet and player.stack > 0:
+        mask[6] = 1.0
     if np.sum(mask) <= 0:
         mask[0] = 1.0
         if call_amount <= player.stack:
@@ -119,7 +126,9 @@ def _preflop_filter(probs: np.ndarray, game: PokerGame,
     a = probs.copy()
     a[2] *= r
     a[3] *= r * 0.5
-    a[4] *= r * 0.2
+    a[4] *= r * 0.3
+    a[5] *= r * 0.2
+    a[6] *= r * 0.1
     s = float(np.sum(a))
     return a / s if s > 1e-8 else probs
 
@@ -135,11 +144,16 @@ def _apply_mask_and_sample(
     mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
 
     # === 探索保障：按动作类型设置最低采样概率 ===
-    # raise2x/4x 需要更高的保底概率，防止策略坍缩
-    action_min_probs = _ACTION_MIN_PROBS  # fold, call, raise2x, raise4x, allin
+    # raise 类动作需要更高的保底概率，防止策略坍缩
+    action_min_probs = _ACTION_MIN_PROBS  # fold, call, small_raise, medium_raise, large_raise, overbet, allin
     legal_min = action_min_probs * lm  # 非法动作自动为0
-    # 统计 raise2x(idx=2) 和 raise4x(idx=3) 是否被强制提升（用于监控探索保障触发频率）
-    _raise_forced = int((lm[2] > 0 and mp_[2] < legal_min[2]) or (lm[3] > 0 and mp_[3] < legal_min[3]))
+    # 统计 raise 类动作(idx=2,3,4,5) 是否被强制提升（用于监控探索保障触发频率）
+    _raise_forced = int(
+        (lm[2] > 0 and mp_[2] < legal_min[2]) or
+        (lm[3] > 0 and mp_[3] < legal_min[3]) or
+        (lm[4] > 0 and mp_[4] < legal_min[4]) or
+        (lm[5] > 0 and mp_[5] < legal_min[5])
+    )
     mp_ = np.maximum(mp_, legal_min)   # 一步到位，向量化提升
     mp_ = mp_ / (np.sum(mp_) + 1e-9)  # 重新归一化
 
@@ -148,8 +162,8 @@ def _apply_mask_and_sample(
     # 模型学不会加注。与 C++ 路径 (_apply_mask_and_sample_cc) 保持一致。
     hs = sr.calculate_hand_strength(player, game)
 
-    ai = int(np.random.choice(5, p=mp_))
-    av = np.zeros(5, dtype=np.float32)
+    ai = int(np.random.choice(7, p=mp_))
+    av = np.zeros(7, dtype=np.float32)
     av[ai] = 1.0
     act, amt = sr.decode_action(av, game, player, hs)
     old_prob = float(np.clip(mp_[ai], 1e-8, 1.0))
@@ -177,8 +191,8 @@ def _apply_mask_and_sample(
 def _fish_action(game: PokerGame, player: Player, sr: StateRepresentation):
     lm = _legal_mask(game, player)
     p = lm / (np.sum(lm) + 1e-8)
-    ai = int(np.random.choice(5, p=p))
-    av = np.zeros(5, dtype=np.float32)
+    ai = int(np.random.choice(7, p=p))
+    av = np.zeros(7, dtype=np.float32)
     av[ai] = 1.0
     hs = sr.calculate_hand_strength(player, game)
     return sr.decode_action(av, game, player, hs)
@@ -481,7 +495,7 @@ def _env_worker_loop_cc(
 ):
     """C++ 引擎 Worker 主循环，完全代替 Python 路径。"""
     MAIN_IDX = 0  # 主 agent 始终是 player 0
-    ACTION_MAP = {0: 0, 1: 1, 2: 2, 3: 2, 4: 2}  # aidx → C++ action (0=fold, 1=call, 2=raise)
+    ACTION_MAP = {0: 0, 1: 1, 2: 2, 3: 2, 4: 2, 5: 2, 6: 2}  # aidx → C++ action (0=fold, 1=call, 2=raise)
     hands_done = 0
 
     # ---- 简化的羻牌前位置过滤 ----
@@ -498,7 +512,9 @@ def _env_worker_loop_cc(
         a = probs.copy()
         a[2] *= r
         a[3] *= r * 0.5
-        a[4] *= r * 0.2
+        a[4] *= r * 0.3
+        a[5] *= r * 0.2
+        a[6] *= r * 0.1
         s = float(np.sum(a))
         return a / s if s > 1e-8 else probs
 
@@ -510,22 +526,28 @@ def _env_worker_loop_cc(
         mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
 
         # === 探索保障：按动作类型设置最低采样概率 ===
-        # raise2x/4x 需要更高的保底概率，防止策略坍缩
-        action_min_probs = _ACTION_MIN_PROBS  # fold, call, raise2x, raise4x, allin
+        # raise 类动作需要更高的保底概率，防止策略坍缩
+        action_min_probs = _ACTION_MIN_PROBS  # fold, call, small_raise, medium_raise, large_raise, overbet, allin
         legal_min = action_min_probs * lm  # 非法动作自动为0
-        # 统计 raise2x(idx=2) 和 raise4x(idx=3) 是否被强制提升（用于监控探索保障触发频率）
-        _raise_forced = int((lm[2] > 0 and mp_[2] < legal_min[2]) or (lm[3] > 0 and mp_[3] < legal_min[3]))
+        # 统计 raise 类动作(idx=2,3,4,5) 是否被强制提升（用于监控探索保障触发频率）
+        _raise_forced = int(
+            (lm[2] > 0 and mp_[2] < legal_min[2]) or
+            (lm[3] > 0 and mp_[3] < legal_min[3]) or
+            (lm[4] > 0 and mp_[4] < legal_min[4]) or
+            (lm[5] > 0 and mp_[5] < legal_min[5])
+        )
         mp_ = np.maximum(mp_, legal_min)   # 一步到位，向量化提升
         mp_ = mp_ / (np.sum(mp_) + 1e-9)  # 重新归一化
 
         hs = eng.get_hand_strength(pi)
         # 移除 _preflop_filter_cc：训练采样时不应干预 action 分布，
         # 否则 old_prob(过滤后) 与 new_prob(未过滤) 产生虚假 ratio，导致 PPO 梯度被污染，模型学不会加注。
-        aidx = int(np.random.choice(5, p=mp_))
+        aidx = int(np.random.choice(7, p=mp_))
         # 解码动作
         act_str, amt = cc_decode_action(
             aidx, eng.current_bet, eng.big_blind,
             eng.get_player_bet(pi), eng.get_player_stack(pi),
+            eng.round, eng.pot,
         )
         old_prob = float(np.clip(mp_[aidx], 1e-8, 1.0))
         return act_str, amt, aidx, old_prob, hs
@@ -533,10 +555,11 @@ def _env_worker_loop_cc(
     def _fish_action_cc(eng, pi):
         lm = np.array(eng.get_legal_mask(pi), dtype=np.float32)
         p = lm / (np.sum(lm) + 1e-8)
-        aidx = int(np.random.choice(5, p=p))
+        aidx = int(np.random.choice(7, p=p))
         act_str, amt = cc_decode_action(
             aidx, eng.current_bet, eng.big_blind,
             eng.get_player_bet(pi), eng.get_player_stack(pi),
+            eng.round, eng.pot,
         )
         return act_str, amt, aidx
 

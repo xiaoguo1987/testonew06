@@ -276,7 +276,7 @@ def run_detailed_evaluation(args, trainer):
     detailed_stats = {
         'game_results': [],
         'hand_strength_distribution': [],
-        'action_distribution': {'fold': 0, 'call': 0, 'raise': 0},
+        'action_distribution': {'fold': 0, 'call': 0, 'small_raise': 0, 'mid_raise': 0, 'large_raise': 0, 'overbet': 0, 'allin': 0},
         'profit_by_stage': {'preflop': [], 'flop': [], 'turn': [], 'river': []},
         'win_by_position': {i: 0 for i in range(args.num_opponents + 1)},
         'win_rate_by_hand_strength': {
@@ -544,7 +544,11 @@ def generate_evaluation_report(args, results, results_file):
     1. 动作分布:
        - 弃牌: {results.get('detailed', {}).get('action_distribution', {}).get('fold', 0)}次
        - 跟注: {results.get('detailed', {}).get('action_distribution', {}).get('call', 0)}次
-       - 加注: {results.get('detailed', {}).get('action_distribution', {}).get('raise', 0)}次
+       - 小加注: {results.get('detailed', {}).get('action_distribution', {}).get('small_raise', 0)}次
+       - 中加注: {results.get('detailed', {}).get('action_distribution', {}).get('mid_raise', 0)}次
+       - 大加注: {results.get('detailed', {}).get('action_distribution', {}).get('large_raise', 0)}次
+       - 超池下注: {results.get('detailed', {}).get('action_distribution', {}).get('overbet', 0)}次
+       - 全押: {results.get('detailed', {}).get('action_distribution', {}).get('allin', 0)}次
     
     2. 各阶段平均利润:
        - 翻牌前: {np.mean(results.get('detailed', {}).get('profit_by_stage', {}).get('preflop', [0])):.2f}
@@ -617,9 +621,9 @@ def generate_visualizations(args, results):
     actions = results['detailed']['action_distribution']
     labels = list(actions.keys())
     sizes = list(actions.values())
-    colors = ['lightcoral', 'lightskyblue', 'lightgreen']
+    colors = ['lightcoral', 'lightskyblue', 'lightgreen', 'lightsalmon', 'plum', 'gold', 'tomato']
     
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(10, 10))
     plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
     plt.axis('equal')  # 确保饼图是圆的
     plt.title('动作分布')

@@ -35,7 +35,7 @@ class PPOModel:
     def __init__(
         self,
         input_dim: Optional[int] = None,
-        output_dim: int = 5,
+        output_dim: int = 7,
         lr: Optional[float] = None,
         clip_epsilon: Optional[float] = None,
         gamma: Optional[float] = None,

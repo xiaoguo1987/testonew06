@@ -42,7 +42,7 @@ class LargePPOModel:
     def __init__(
         self,
         input_dim: Optional[int] = None,
-        output_dim: int = 5,
+        output_dim: int = 7,
         hidden_dims: Optional[List[int]] = None,
         residual_layer_idx: int = 1,
         lr: Optional[float] = None,

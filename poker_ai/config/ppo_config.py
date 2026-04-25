@@ -40,7 +40,7 @@ class PPOConfig:
 
     # 网络结构
     input_dim: int = 134  # 与 StateRepresentation.total_state_dim 一致（6-Max）
-    output_dim: int = 5    # 动作数：fold, call, raise_small, raise_mid, raise_allin
+    output_dim: int = 7    # 动作数：fold, call, raise_small, raise_mid, raise_allin
 
     # 学习率
     lr: float = 3e-4
