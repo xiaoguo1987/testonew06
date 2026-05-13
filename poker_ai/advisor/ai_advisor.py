@@ -621,6 +621,14 @@ class AIAvisor:
 # 导入random模块（在_preflop_hand_strength方法中使用）
 import random
 
+
+# ----- 向后兼容别名 -----
+# 历史代码中类名拼写为 AIAvisor（缺少 'd'），新代码请使用 AIAdvisor，
+# 但为不破坏既有引用同时保留两个名字。
+AIAdvisor = AIAvisor
+
+__all__ = ["AIAvisor", "AIAdvisor"]
+
 # 示例使用
 if __name__ == "__main__":
     # 这里需要创建游戏实例和玩家才能使用建议器

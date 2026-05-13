@@ -11,100 +11,83 @@ import os
 import argparse
 import json
 import logging
+import platform
 import numpy as np
-import matplotlib.pyplot as plt
 from datetime import datetime
-import seaborn as sns
-import traceback
 
-# 设置日志
+# ----- 日志（先建好，后续所有 import 出现的告警都能落盘）-----
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("eval_detail_log.txt"),
+        logging.FileHandler("eval_detail_log.txt", encoding="utf-8"),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger('PokerAIEvaluator')
 
-# 添加TensorFlow GPU内存限制配置
+# ----- TensorFlow 初始化：必须在 import poker_ai.* 之前设置 GPU 显存增长 -----
 try:
     import tensorflow as tf
-    # 设置GPU内存增长模式，避免一次性占用全部内存
-    gpus = tf.config.experimental.list_physical_devices('GPU')
+    gpus = tf.config.list_physical_devices('GPU')
     if gpus:
         try:
-            # 只使用第一块GPU并设置内存增长
             tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
             tf.config.experimental.set_memory_growth(gpus[0], True)
-            # 也可以设置固定内存限制
-            # tf.config.experimental.set_virtual_device_configuration(
-            #     gpus[0],
-            #     [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=10240)])
-            logger.info("成功设置TensorFlow GPU内存限制")
+            logger.info(f"已启用 GPU 显存按需增长 (检测到 {len(gpus)} 块 GPU，仅使用第 0 块)")
         except RuntimeError as e:
-            logger.warning(f"设置GPU内存限制时出错: {e}")
+            logger.warning(f"设置 GPU 显存增长失败 (TF 已初始化?): {e}")
     else:
-        logger.info("未检测到可用GPU，将使用CPU")
+        logger.info("未检测到可用 GPU，将使用 CPU")
 except ImportError:
-    logger.warning("未导入TensorFlow，跳过GPU设置")
-# 移除重复导入，HandEvaluator在后面会统一导入
+    logger.warning("未安装 TensorFlow，部分功能不可用")
+    tf = None  # 让后续代码可感知
 
-# ===== 修正后的中文字体配置（彻底解决 sans-serif 警告）=====
-try:
-    import matplotlib.pyplot as plt
-    import matplotlib.font_manager as fm
+# ----- matplotlib 中文字体：跨平台兜底 -----
+import matplotlib
+matplotlib.use("Agg")  # 评估脚本无需 GUI，避免 Windows/远程环境弹窗或报错
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import seaborn as sns
 
-    # 1. 直接指定系统已安装的具体字体名称（从 fc-list 输出中获取）
-    target_font = 'WenQuanYi Zen Hei'  # 与 fc-list 输出的字体名称完全一致
-    font_path = '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'  # 从 fc-list 输出中复制的路径
 
-    # 2. 优先尝试通过字体名称设置（简单直接）
-    plt.rcParams['font.sans-serif'] = [target_font, 'DejaVu Sans']  # 只保留具体字体，去掉 sans-serif
-    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-
-    # 3. 验证字体是否生效（打印日志确认）
-    available_fonts = [f.name for f in fm.fontManager.ttflist]
-    if target_font in available_fonts:
-        logger.info(f"中文字体设置成功！已加载: {target_font}")
+def _setup_chinese_font() -> None:
+    """跨平台设置中文字体，找不到时静默降级，不再警告刷屏。"""
+    candidates_by_os = {
+        "Windows": ["Microsoft YaHei", "SimHei", "DengXian"],
+        "Darwin":  ["PingFang SC", "Heiti SC", "Arial Unicode MS"],
+        "Linux":   ["WenQuanYi Zen Hei", "Noto Sans CJK SC", "Source Han Sans SC"],
+    }
+    candidates = candidates_by_os.get(platform.system(), [])
+    available = {f.name for f in fm.fontManager.ttflist}
+    chosen = next((name for name in candidates if name in available), None)
+    if chosen:
+        plt.rcParams['font.sans-serif'] = [chosen, 'DejaVu Sans']
+        plt.rcParams['axes.unicode_minus'] = False
+        logger.info(f"matplotlib 中文字体已设置为: {chosen}")
     else:
-        # 兜底：直接通过字体文件路径设置（100% 生效）
-        font_prop = fm.FontProperties(fname=font_path)
-        plt.rcParams['font.family'] = font_prop.get_name()
-        logger.info(f"通过字体文件路径设置成功！路径: {font_path}")
+        plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
+        plt.rcParams['axes.unicode_minus'] = False
+        logger.info("未找到中文字体，图表将使用 DejaVu Sans (中文可能显示为方块)")
 
-except Exception as e:
-    logger.warning(f"设置中文字体支持失败: {e}")
-    # 回退到 matplotlib 默认字体（避免崩溃）
-    plt.rcParams.update(plt.rcParamsDefault)
-    logger.info("已恢复matplotlib默认字体设置")
-# ================================================================
-# 导入必要的模块
+
+_setup_chinese_font()
+
+# ----- 业务模块导入 -----
 try:
-    # 首先尝试导入tensorflow，因为其他模块可能依赖它
-    try:
-        import tensorflow as tf
-        logger.info("成功导入TensorFlow")
-    except ImportError:
-        logger.warning("未安装TensorFlow，部分功能可能无法使用")
-    
-    # 然后导入其他必要模块
     from poker_ai.reward.self_play_trainer import SelfPlayTrainer
     from poker_ai.advisor.ai_advisor import AIAvisor
     from poker_ai.game.poker_game import PokerGame, Player
+    from poker_ai.game.cards import HAND_RANKS as CARDS_HAND_RANKS
     from poker_ai.model.ai_agent import PokerAIAgent
     from poker_ai.model.hand_evaluator import HandEvaluator
     logger.info("成功导入所有必要模块")
 except ImportError as e:
-    if "tensorflow" in str(e):
-        logger.error(f"缺少TensorFlow依赖: {e}")
-        logger.error("请先安装TensorFlow: pip install tensorflow")
+    if "tensorflow" in str(e).lower():
+        logger.error(f"缺少 TensorFlow 依赖: {e}")
+        logger.error("请先安装 TensorFlow: pip install tensorflow")
     else:
         logger.error(f"导入模块失败: {e}")
-    logger.error("请确保所有依赖都已正确安装")
-    # 在本地开发环境中，我们可以继续运行以测试基本功能
-    # 但在生产环境中可能需要退出
     raise
 
 def parse_arguments():
@@ -115,17 +98,18 @@ def parse_arguments():
     
     # 模型参数
     parser.add_argument('--model-path', type=str, required=True,
-                        help='要评估的模型路径')
-    parser.add_argument('--model-type', type=str, choices=['dqn', 'policy_gradient'],
+                        help='要评估的模型路径（PPO 请传 base 路径，不带 .actor.weights.h5 后缀）')
+    parser.add_argument('--model-type', type=str, choices=['dqn', 'policy_gradient', 'ppo'],
                         default='dqn', help='模型类型')
-    
+
     # 评估参数
     parser.add_argument('--num-games', type=int, default=100,
                         help='评估的游戏局数')
     parser.add_argument('--num-opponents', type=int, default=5,
-                        help='对手数量')
-    parser.add_argument('--opponent-type', type=str, choices=['random', 'fixed', 'previous'],
-                        default='fixed', help='对手类型')
+                        help='对手数量（注意：本项目固定 6-Max，因此通常应为 5）')
+    parser.add_argument('--opponent-type', type=str, choices=['previous'],
+                        default='previous',
+                        help='对手类型（当前仅支持使用同模型类型的副本作为对手）')
     
     # 游戏参数
     parser.add_argument('--small-blind', type=int, default=5, help='小盲注')
@@ -158,24 +142,14 @@ def setup_environment(args):
 
 def create_opponents(args, num_opponents):
     """
-    创建对手代理
+    创建对手代理。
+
+    注意：当前 PokerAIAgent 仅支持 'dqn' / 'policy_gradient' / 'ppo' 三类，
+    早期版本提到的 'random' / 'fixed' 类型已废弃，统一使用同模型类型的副本作为对手。
     """
     opponents = []
-    
-    for i in range(num_opponents):
-        if args.opponent_type == 'random':
-            # 创建随机对手代理
-            opponent = PokerAIAgent(agent_type='random')
-        elif args.opponent_type == 'previous':
-            # 创建使用历史模型的对手
-            opponent = PokerAIAgent(agent_type=args.model_type)
-            # 这里简化处理，实际应该加载历史版本的模型
-        else:  # fixed
-            # 创建固定策略对手
-            opponent = PokerAIAgent(agent_type='fixed')
-        
-        opponents.append(opponent)
-    
+    for _ in range(num_opponents):
+        opponents.append(PokerAIAgent(agent_type=args.model_type))
     return opponents
 
 def run_comprehensive_evaluation(args):
@@ -315,8 +289,8 @@ def run_detailed_evaluation(args, trainer):
         
         # 翻牌前阶段没有公共牌，传入空列表作为community_cards
         hand_result, _ = hand_evaluator.evaluate_hand(main_player.cards, [])
-        # 将牌型转换为数值强度
-        preflop_strength = HandEvaluator.HAND_RANKS.get(hand_result, 0) / 9.0  # 归一化到0-1范围
+        # 将牌型转换为数值强度（HAND_RANKS 在 poker_ai.game.cards 模块级，不在 HandEvaluator 类上）
+        preflop_strength = CARDS_HAND_RANKS.get(hand_result, 0) / 9.0  # 归一化到 0-1 范围
         detailed_stats['hand_strength_distribution'].append(preflop_strength)
         
         # 分类手牌强度

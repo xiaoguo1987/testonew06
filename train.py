@@ -87,7 +87,8 @@ def _apply_hardware_profile(args) -> None:
         # PPO 更大批次以充分利用4090D算力
         if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
             args.ppo_update_min_steps = 0  # 自动根据batch_size推算
-        if int(getattr(args, 'batch_size', 64)) <= 256:
+        # 仅在用户没显式提高 batch_size 时往上抬到 256；不要把更大的值压回 256
+        if int(getattr(args, 'batch_size', 64)) < 256:
             args.batch_size = 256
 
         # 默认走 GPU + XLA + 混合精度
@@ -125,7 +126,8 @@ def _apply_hardware_profile(args) -> None:
     # PPO 更大轨迹累计与 mini-batch，提升 3090 利用率
     if int(getattr(args, 'ppo_update_min_steps', 0)) <= 0:
         args.ppo_update_min_steps = 32768
-    if int(getattr(args, 'batch_size', 64)) <= 64:
+    # 仅在用户没显式提高 batch_size 时再上抬，避免覆盖用户手动指定的更大值
+    if int(getattr(args, 'batch_size', 64)) < 512:
         args.batch_size = 512
 
     # 默认优先走 GPU+XLA+混合精度（用户显式指定时仍可覆盖）
@@ -140,7 +142,7 @@ def parse_arguments():
     解析命令行参数
     """
     parser = argparse.ArgumentParser(description='德州扑克AI模型训练和评估脚本')
-    
+
     # 模式选择
     parser.add_argument('--mode', type=str, choices=['train', 'eval', 'demo'],
                         default='train', help='运行模式: train(训练), eval(评估), demo(演示)')
@@ -153,7 +155,7 @@ def parse_arguments():
                         help='自动调参每组短跑手数')
     parser.add_argument('--auto-tune-max-candidates', type=int, default=3,
                         help='自动调参最多测试候选组数')
-    
+
     # 模型参数
     parser.add_argument('--model-type', type=str, choices=['dqn', 'policy_gradient', 'ppo'],
                         default='ppo', help='模型类型')
@@ -206,37 +208,37 @@ def parse_arguments():
                         help='启用GPU按需分配显存')
     parser.add_argument('--no-gpu-memory-growth', action='store_false', dest='gpu_memory_growth',
                         help='禁用GPU按需分配显存')
-    
+
     # 游戏参数
     parser.add_argument('--small-blind', type=int, default=5, help='小盲注')
     parser.add_argument('--big-blind', type=int, default=10, help='大盲注')
     parser.add_argument('--initial-stack', type=int, default=1000, help='初始筹码量')
     parser.add_argument('--num-players', type=int, default=6, help='玩家数量')
-    
+
     # 高级参数
     parser.add_argument('--use-ensemble', action='store_true', help='使用集成模型')
     parser.add_argument('--resume', action='store_true', help='从最近的检查点继续训练')
     parser.add_argument('--save-best-only', action='store_true', help='仅保存最佳模型')
     parser.add_argument('--verbose', action='store_true', help='输出详细日志')
-    
+
     # 评估参数
     parser.add_argument('--eval-opponent', type=str, default='previous_version',
                         help='评估对手类型: previous_version, random, baseline')
     parser.add_argument('--eval-output', type=str, default='eval_results.json',
                         help='评估结果输出文件')
-    
+
     # 演示参数
     parser.add_argument('--demo-hands', type=int, default=10, help='演示的手牌数量')
-    
+
     # 自我对弈参数
     parser.add_argument('--use-self-play', action='store_true', default=True, help='启用自我对弈训练')
     parser.add_argument('--opponent-update-interval', type=int, default=1000, help='对手更新间隔（局数）')
-    
+
     # 探索参数
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
     parser.add_argument('--eps-end', type=float, default=0.01, help='ε-贪婪策略最终探索率')
     parser.add_argument('--eps-decay', type=float, default=0.0001, help='ε衰减速率')
-    
+
     return parser.parse_args()
 
 def setup_environment(args):
@@ -245,13 +247,13 @@ def setup_environment(args):
     """
     # 创建检查点目录
     os.makedirs(args.checkpoint_dir, exist_ok=True)
-    
+
     # 如果启用详细日志，更新日志级别
     if args.verbose:
         for handler in logging.getLogger().handlers:
             handler.setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
-    
+
     args.train_workers = _resolve_auto_workers(getattr(args, 'train_workers', 0), reserved_cores=2)
     args.eval_workers = _resolve_auto_workers(getattr(args, 'eval_workers', 0), reserved_cores=1)
 
@@ -304,8 +306,13 @@ def setup_environment(args):
             logger.info("mixed precision 已禁用，使用 float32")
 
         if getattr(args, 'enable_xla', True):
-            tf.config.optimizer.set_jit(True)
-            logger.info("已启用 XLA JIT")
+            # CPU 上 XLA 多数情况下并无收益，反而首次编译开销大；只有 GPU 才默认启用
+            if has_gpu:
+                tf.config.optimizer.set_jit(True)
+                logger.info("已启用 XLA JIT (GPU)")
+            else:
+                tf.config.optimizer.set_jit(False)
+                logger.info("当前为 CPU 设备，自动禁用 XLA JIT 以避免额外编译开销")
         else:
             tf.config.optimizer.set_jit(False)
             logger.info("XLA JIT 已禁用")
@@ -348,7 +355,7 @@ def setup_environment(args):
         logger.warning("TensorFlow未安装，无法检测硬件信息")
     except Exception as e:
         logger.warning(f"检测硬件信息时出错: {e}")
-    
+
     logger.info(f"环境设置完成: 检查点目录={args.checkpoint_dir}")
     logger.info(f"当前运行模式: {args.mode}")
     logger.info(f"使用模型类型: {args.model_type}")
@@ -359,12 +366,12 @@ def train_model(args):
     """
     logger.info("开始训练德州扑克AI模型")
     logger.info(f"训练参数: {vars(args)}")
-    
+
     start_time = time.time()
-    
+
     try:
         from poker_ai.reward.self_play_trainer import SelfPlayTrainer
-        
+
         def _create_trainer(override: dict = None, tuning_mode: bool = False):
             ov = override or {}
             return SelfPlayTrainer(
@@ -498,13 +505,13 @@ def train_model(args):
 
         # 创建正式训练器
         trainer = _create_trainer()
-        
+
         # 如果启用详细日志，更新日志级别
         if args.verbose:
             logger.setLevel(logging.DEBUG)
-            
+
         _configure_exploration(trainer)
-        
+
         # 如果指定了模型路径或需要恢复训练
         if args.model_path:
             success = trainer.load_checkpoint(args.model_path)
@@ -514,32 +521,32 @@ def train_model(args):
             success = trainer.load_checkpoint()
             if not success:
                 logger.warning("没有找到可恢复的检查点，将从头开始训练")
-        
+
         # 开始训练
         logger.info(f"开始训练 {args.num_hands} 手牌...")
-        
+
         # 添加训练进度日志
         start_hand = trainer.total_hands if hasattr(trainer, 'total_hands') else 0
         logger.info(f"初始手牌数: {start_hand}, 目标手牌数: {start_hand + args.num_hands}")
-        
+
         # 开始训练过程
         trainer.train(args.num_hands)
-        
+
         # 计算训练时间
         end_time = time.time()
         training_time = end_time - start_time
-        
+
         # 计算实际训练的手牌数
         if hasattr(trainer, 'total_hands'):
             actual_hands = trainer.total_hands - start_hand
             logger.info(f"实际训练手牌数: {actual_hands}")
-        
+
         logger.info(f"训练完成！总耗时: {training_time:.2f} 秒")
         logger.info(f"平均每手耗时: {training_time / args.num_hands:.4f} 秒")
-        
+
         # 保存训练总结
         save_training_summary(args, training_time)
-        
+
         return True
     except Exception as e:
         logger.error(f"训练过程中发生错误: {e}")
@@ -550,7 +557,7 @@ def evaluate_model(args):
     评估模型
     """
     logger.info("开始评估德州扑克AI模型")
-    
+
     from poker_ai.reward.self_play_trainer import SelfPlayTrainer
     trainer = SelfPlayTrainer(
         model_type=args.model_type,
@@ -574,7 +581,7 @@ def evaluate_model(args):
         eval_workers=getattr(args, 'eval_workers', 1),
         train_workers=getattr(args, 'train_workers', 1),
     )
-    
+
     # 加载模型
     if args.model_path:
         logger.info(f"使用指定的模型路径: {args.model_path}")
@@ -582,25 +589,25 @@ def evaluate_model(args):
     else:
         logger.info("未指定模型路径，尝试加载最近的检查点...")
         success = trainer.load_checkpoint()
-    
+
     if not success:
         logger.error("无法加载模型，请使用 --model-path 参数指定有效的模型路径")
         return False
-    
+
     try:
         # 执行评估
         logger.info(f"执行评估，共进行 {args.num_eval_games} 局游戏...")
         eval_results = trainer.evaluate()
-        
+
         # 记录评估结果
         logger.info(f"评估结果: {eval_results}")
-        
+
         # 保存评估结果到文件
         save_eval_results(args, eval_results)
-        
+
         # 生成评估报告
         generate_eval_report(args, eval_results)
-        
+
         return True
     except Exception as e:
         logger.error(f"评估过程中发生错误: {e}")
@@ -611,41 +618,41 @@ def run_demo(args):
     演示模型
     """
     logger.info("开始演示德州扑克AI模型")
-    
+
     if not args.model_path:
         logger.error("演示模式需要指定模型路径，请使用 --model-path 参数")
         return False
-    
+
     try:
         from poker_ai.advisor.ai_advisor import AIAvisor
         from poker_ai.game.poker_game import PokerGame, Player
         from poker_ai.model.ai_agent import PokerAIAgent
         # 创建AI代理
         agent = PokerAIAgent(agent_type=args.model_type)
-        
+
         # 加载模型
         success = agent.load_model(args.model_path)
         if not success:
             logger.error(f"无法加载模型: {args.model_path}")
             return False
-        
+
         # 创建游戏环境
         players = [Player(f"Player_{i+1}", args.initial_stack, i == 0) for i in range(args.num_players)]
         game = PokerGame(args.small_blind, args.big_blind, players)
-        
+
         # 创建AI建议器
         advisor = AIAvisor(model_path=args.model_path, model_type=args.model_type)
-        
+
         # 运行演示
         logger.info(f"开始演示 {args.demo_hands} 手牌...")
         demo_results = []
-        
+
         for hand_idx in range(args.demo_hands):
             logger.info(f"\n--- 第 {hand_idx + 1} 手牌 ---")
-            
+
             # 开始新的一手牌
             game.start_new_hand()
-            
+
             # 打印初始状态
             print(f"\n开始新的一手牌: 第 {hand_idx + 1} 手")
             print(f"盲注: 小盲={args.small_blind}, 大盲={args.big_blind}")
@@ -655,7 +662,7 @@ def run_demo(args):
                     print(f"  {player.name}: {[str(card) for card in player.cards]}")
                 else:
                     print(f"  {player.name}: [隐藏]")
-            
+
             # 游戏主循环
             while True:
                 # 处理当前轮次
@@ -663,11 +670,11 @@ def run_demo(args):
                     current_player = game.next_player()
                     if not current_player:
                         break
-                    
+
                     print(f"\n轮到 {current_player.name} 行动")
                     print(f"当前底池: {game.pot}")
                     print(f"当前下注: {game.current_bet}")
-                    
+
                     if current_player.is_human:
                         # 获取AI建议
                         advice = advisor.get_basic_advice(game, current_player)
@@ -679,43 +686,43 @@ def run_demo(args):
                         print(f"  预期价值: {advice['expected_value']:.2f}")
                         print(f"  置信度: {advice['confidence']:.2%}")
                         print(f"  理由: {advice['reasoning']}")
-                    
+
                     # AI代理选择动作
                     action, amount = agent.select_action(game, current_player)
-                    
+
                     # 记录动作
                     print(f"{current_player.name} 决定: {action}")
                     if amount > 0:
                         print(f"金额: {amount}")
-                    
+
                     # 执行动作
                     game.handle_action(current_player, action, amount)
-                
+
                 # 显示公共牌
                 if game.community_cards:
                     print(f"\n公共牌: {[str(card) for card in game.community_cards]}")
-                
+
                 # 进入下一轮或结束
                 if game.proceed_to_next_round():
                     break
-            
+
             # 显示结果
             print(f"\n--- 手牌结果 ---")
             print(f"获胜者: {game.winner.name if game.winner else '无'}")
             print("最终筹码:")
             for player in game.players:
                 print(f"  {player.name}: {player.stack}")
-            
+
             # 记录结果
             demo_results.append({
                 'hand_index': hand_idx + 1,
                 'winner': game.winner.name if game.winner else '无',
                 'final_stacks': {p.name: p.stack for p in game.players}
             })
-        
+
         # 保存演示结果
         save_demo_results(args, demo_results)
-        
+
         logger.info("演示完成！")
         return True
     except Exception as e:
@@ -733,11 +740,11 @@ def save_training_summary(args, training_time):
         'training_time_hours': training_time / 3600,
         'hands_per_second': args.num_hands / training_time if training_time > 0 else 0
     }
-    
+
     # 保存到文件
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = os.path.join(args.checkpoint_dir, f"training_summary_{timestamp}.json")
-    
+
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(summary, f, ensure_ascii=False, indent=2)
@@ -755,12 +762,12 @@ def save_eval_results(args, results):
         'args': vars(args),
         'results': results
     }
-    
+
     # 确保输出目录存在
     output_dir = os.path.dirname(args.eval_output)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
-    
+
     try:
         with open(args.eval_output, 'w', encoding='utf-8') as f:
             json.dump(eval_data, f, ensure_ascii=False, indent=2)
@@ -780,7 +787,7 @@ def generate_eval_report(args, results):
     模型路径: {args.model_path}
     模型类型: {args.model_type}
     评估游戏数: {args.num_eval_games}
-    
+
     评估结果:
     - 平均利润: {results['avg_profit']:.2f}
     - 胜率: {results['win_rate']:.2%}
@@ -789,9 +796,9 @@ def generate_eval_report(args, results):
     - 总游戏数: {results['total_hands']}
     ======================================================
     """
-    
+
     print(report)
-    
+
     # 保存报告到文件
     report_file = args.eval_output.replace('.json', '.txt')
     try:
@@ -811,11 +818,11 @@ def save_demo_results(args, results):
         'args': vars(args),
         'results': results
     }
-    
+
     # 保存到文件
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"demo_results_{timestamp}.json"
-    
+
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(demo_data, f, ensure_ascii=False, indent=2)
@@ -839,7 +846,7 @@ def main():
 
         # 设置环境
         setup_environment(args)
-        
+
         # 根据模式执行不同的功能
         if args.mode == 'train':
             success = train_model(args)
@@ -850,13 +857,13 @@ def main():
         else:
             logger.error(f"未知的模式: {args.mode}")
             success = False
-        
+
         if success:
             logger.info("任务执行成功！")
         else:
             logger.error("任务执行失败！")
             return 1
-        
+
         return 0
     except KeyboardInterrupt:
         logger.info("用户中断了程序")
@@ -869,4 +876,8 @@ def main():
 
 if __name__ == "__main__":
     exit_code = main()
+    exit(exit_code)n()
+    exit(exit_code)ain__":
+    exit_code = main()
+    exit(exit_code)n()
     exit(exit_code)

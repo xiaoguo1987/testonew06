@@ -1,0 +1,51 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 虚拟环境 =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 项目产物 =====
+logs/
+checkpoints/
+checkpoints_*/
+eval_reports/
+eval_results*.json
+eval_results*.txt
+eval_detail_log.txt
+demo_results_*.json
+training_summary_*.json
+*.weights.h5
+*.pkl
+
+# 但保留示例配置/文档
+!docs/
+
+# ===== TensorFlow / Jupyter =====
+.ipynb_checkpoints/
+tensorboard/
+tb_logs/
