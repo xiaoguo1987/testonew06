@@ -1,10 +1,8 @@
-# 核心依赖（请按 Python 版本选择合适的 TensorFlow 版本）
-# Python 3.10-3.11 推荐 tensorflow>=2.12,<2.16
-# Python 3.12 推荐 tensorflow>=2.16,<2.18
-tensorflow>=2.9,<2.18
+# 核心依赖（TensorFlow 2.16+ 与 Python 3.12 完全兼容，并支持 numpy 2.x）
+tensorflow>=2.16,<3.0
 
-# 科学计算 - numpy 2.x 与旧版 TF 不兼容，这里锁到 1.x 末尾的稳定区间
-numpy>=1.21,<2.0
+# 科学计算 - 新版本 TensorFlow 支持 numpy 2.x
+numpy>=1.21,<3.0
 
 # 绘图
 matplotlib>=3.5,<4.0

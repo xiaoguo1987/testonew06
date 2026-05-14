@@ -294,7 +294,7 @@ def setup_environment(args):
         if has_gpu and getattr(args, 'gpu_memory_growth', True):
             for gpu in gpus:
                 try:
-                    tf.config.experimental.set_memory_growth(gpu, True)
+                    tf.config.set_memory_growth(gpu, True)
                 except Exception as _e:
                     logger.warning(f"设置GPU显存按需增长失败({gpu.name}): {_e}")
 

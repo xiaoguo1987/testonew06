@@ -32,8 +32,8 @@ try:
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
         try:
-            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-            tf.config.experimental.set_memory_growth(gpus[0], True)
+            tf.config.set_visible_devices(gpus[0], 'GPU')
+            tf.config.set_memory_growth(gpus[0], True)
             logger.info(f"已启用 GPU 显存按需增长 (检测到 {len(gpus)} 块 GPU，仅使用第 0 块)")
         except RuntimeError as e:
             logger.warning(f"设置 GPU 显存增长失败 (TF 已初始化?): {e}")
