@@ -103,7 +103,13 @@ class PPOModel:
             self.actor_optimizer = base_actor_opt
             self.critic_optimizer = base_critic_opt
 
-        # ===== GPU 设备诊断 =====
+        # ===== GPU 设备诊断（仅首次执行）=====
+        if not PPOModel._gpu_diagnostic_done:
+            self._run_gpu_diagnostic()
+            PPOModel._gpu_diagnostic_done = True
+
+    def _run_gpu_diagnostic(self):
+        """GPU设备诊断（仅执行一次）"""
         import logging as _logging
         _diag_log = _logging.getLogger('PPOModel')
         gpus = tf.config.list_physical_devices('GPU')
