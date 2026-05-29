@@ -317,7 +317,12 @@ class SelfPlayTrainer:
                         probs = action_info.get('action_probabilities', None)
                         fold_prob = float(np.clip(probs[0], 1e-8, 1.0)) if probs is not None else 1.0
                         # 动作非法时真实执行为 fold，轨迹记录也必须是 fold
-                        self.main_agent.append_step(current_state, 0, fold_prob)
+                        self.main_agent.append_step(
+                            current_state,
+                            0,
+                            fold_prob,
+                            old_policy=probs,
+                        )
                     elif is_training and not use_ppo_trajectory and last_step_info is not None:
                         self.main_agent.learn(
                             reward=-0.05,
@@ -327,7 +332,12 @@ class SelfPlayTrainer:
                 elif is_training and use_ppo_trajectory:
                     # 动作合法时，记录真实执行动作
                     old_prob = float(action_info.get('old_prob', 1.0))
-                    self.main_agent.append_step(current_state, int(action_idx), old_prob)
+                    self.main_agent.append_step(
+                        current_state,
+                        int(action_idx),
+                        old_prob,
+                        old_policy=action_info.get('action_probabilities', None),
+                    )
                 last_step_info = (current_state, action_idx)
 
             # === 对手行动逻辑 ===
@@ -494,7 +504,7 @@ class SelfPlayTrainer:
                         )
                         trajectory['states'].append(current_state)
                         trajectory['actions'].append(0)
-                        trajectory['old_probs'].append(fold_prob)
+                        trajectory['old_probs'].append(probs if probs is not None else fold_prob)
                     else:
                         if last_step_info is not None:
                             prev_state, prev_action_idx = last_step_info
@@ -506,7 +516,8 @@ class SelfPlayTrainer:
                         old_prob = float(action_info.get('old_prob', 1.0))
                         trajectory['states'].append(current_state)
                         trajectory['actions'].append(int(action_idx))
-                        trajectory['old_probs'].append(old_prob)
+                        probs = action_info.get('action_probabilities', None)
+                        trajectory['old_probs'].append(probs if probs is not None else old_prob)
                 last_step_info = (current_state, action_idx)
             else:
                 try:
@@ -781,12 +792,13 @@ class SelfPlayTrainer:
                         fold_prob = float(np.clip(probs[0], 1e-8, 1.0)) if probs is not None else 1.0
                         env['trajectory']['states'].append(current_state)
                         env['trajectory']['actions'].append(0)
-                        env['trajectory']['old_probs'].append(fold_prob)
+                        env['trajectory']['old_probs'].append(probs if probs is not None else fold_prob)
                     else:
                         old_prob = float(action_info.get('old_prob', 1.0))
                         env['trajectory']['states'].append(current_state)
                         env['trajectory']['actions'].append(int(action_idx))
-                        env['trajectory']['old_probs'].append(old_prob)
+                        probs = action_info.get('action_probabilities', None)
+                        env['trajectory']['old_probs'].append(probs if probs is not None else old_prob)
                     env['last_step_info'] = (current_state, action_idx)
 
             if not progress_made and not main_requests:
@@ -1019,7 +1031,7 @@ class SelfPlayTrainer:
                 trajectory['actions'],
                 trajectory['old_probs'],
             ):
-                self.main_agent.append_step(s, a, p)
+                self.main_agent.append_step(s, a, p, old_policy=p if hasattr(p, '__len__') else None)
             self.main_agent.finish_trajectory(trajectory['final_reward'])
         else:
             self.main_agent.learn_from_transitions(

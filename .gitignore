@@ -41,6 +41,9 @@ demo_results_*.json
 training_summary_*.json
 *.weights.h5
 *.pkl
+agent_reviews/
+_smoke_ckpt/
+.env
 
 # 但保留示例配置/文档
 !docs/

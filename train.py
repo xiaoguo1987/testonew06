@@ -637,7 +637,7 @@ def run_demo(args):
             return False
 
         # 创建游戏环境
-        players = [Player(f"Player_{i+1}", args.initial_stack, i == 0) for i in range(args.num_players)]
+        players = [Player(f"Player_{i+1}", args.initial_stack, is_ai=(i != 0)) for i in range(args.num_players)]
         game = PokerGame(args.small_blind, args.big_blind, players)
 
         # 创建AI建议器
@@ -692,7 +692,7 @@ def run_demo(args):
 
                     # 记录动作
                     print(f"{current_player.name} 决定: {action}")
-                    if amount > 0:
+                    if amount and amount > 0:
                         print(f"金额: {amount}")
 
                     # 执行动作

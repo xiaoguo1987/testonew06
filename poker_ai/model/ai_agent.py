@@ -401,14 +401,26 @@ class PokerAIAgent:
             pending['dones'].extend(dones)
         self._ppo_train_pending_buffer(force=False)
 
-    def append_step(self, state: np.ndarray, action: int, old_prob: float) -> None:
-        """仅 PPO：每步将 (state, action, old_prob) 加入轨迹，不传 reward。"""
+    def append_step(
+        self,
+        state: np.ndarray,
+        action: int,
+        old_prob: float,
+        old_policy: Optional[np.ndarray] = None,
+    ) -> None:
+        """仅 PPO：每步将状态、动作和旧策略概率加入轨迹，不传 reward。"""
         if self.agent_type != 'ppo':
             return
         self._ppo_ensure_buffer()
         self.ppo_buffer['states'].append(state)
         self.ppo_buffer['actions'].append(action)
-        self.ppo_buffer['old_probs'].append(float(np.clip(old_prob, 1e-8, 1.0)))
+        if old_policy is None:
+            self.ppo_buffer['old_probs'].append(float(np.clip(old_prob, 1e-8, 1.0)))
+        else:
+            old_policy = np.asarray(old_policy, dtype=np.float32)
+            old_policy = np.clip(old_policy, 1e-8, 1.0)
+            old_policy = old_policy / (np.sum(old_policy) + 1e-8)
+            self.ppo_buffer['old_probs'].append(old_policy)
 
     def finish_trajectory(self, final_reward: float) -> None:
         """仅 PPO：一手牌结束时写入累计缓冲，并在达到阈值时批量 PPO 更新。"""

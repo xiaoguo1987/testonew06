@@ -152,6 +152,15 @@ class Player:
     def __str__(self) -> str:
         return f"{self.name} (筹码: {self.stack}, 位置: {self.position})"
 
+    @property
+    def is_human(self) -> bool:
+        """向后兼容旧 demo/advisor 代码：非 AI 玩家视为 human。"""
+        return not self.is_ai
+
+    @is_human.setter
+    def is_human(self, value: bool) -> None:
+        self.is_ai = not bool(value)
+
 class PokerGame:
     """德州扑克游戏管理器"""
     def __init__(self, small_blind: int, big_blind: int, players: List[Player]):
@@ -212,6 +221,20 @@ class PokerGame:
         self._clear_board()
         for card in value[:5]:
             self._append_board_card(card_to_code(card))
+
+    @property
+    def community_cards(self) -> List[Card]:
+        """公共牌别名，兼容旧接口。"""
+        return self.board
+
+    @community_cards.setter
+    def community_cards(self, value: List[Card]) -> None:
+        self.board = value
+
+    @property
+    def round_num(self) -> int:
+        """旧接口使用 0-3 表示翻牌前/翻牌/转牌/河牌。"""
+        return max(0, int(self.round) - 1)
 
     def _clear_board(self) -> None:
         self._board_codes.fill(-1)

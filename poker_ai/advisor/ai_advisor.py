@@ -67,11 +67,11 @@ class AIAvisor:
         Returns:
             手牌强度（0-1之间的浮点数）和手牌类型
         """
-        # 如果有公共牌，使用它们进行评估
-        all_cards = hand + community_cards
-        
-        # 计算当前手牌强度
-        hand_strength, hand_type = self.hand_evaluator.evaluate_hand(all_cards)
+        # 计算当前牌型名称；牌不足 5 张时先用高牌占位
+        if len(hand) + len(community_cards) >= 5:
+            hand_type, _ = self.hand_evaluator.evaluate_hand(hand, community_cards)
+        else:
+            hand_type = 'high_card'
         
         # 如果公共牌少于3张，基于可能的组合进行模拟评估
         if len(community_cards) < 3:
@@ -95,14 +95,22 @@ class AIAvisor:
                     sim_community = random.sample(remaining_cards, needed)
                     # 组合所有牌进行评估
                     sim_all_cards = hand + community_cards + sim_community
-                    strength, _ = self.hand_evaluator.evaluate_hand(sim_all_cards)
+                    sim_type, sim_score = self.hand_evaluator.evaluate_hand(hand, community_cards + sim_community)
+                    strength = min(1.0, max(0.0, (sim_score[0] if sim_score else 0) / 9.0))
                     sim_results.append(strength)
             
             # 返回平均强度
             if sim_results:
                 return np.mean(sim_results), hand_type
         
-        return hand_strength, hand_type
+        active_opponents = sum(1 for p in getattr(self, '_current_players', []) if p.is_active) - 1
+        strength = self.hand_evaluator.calculate_win_probability(
+            hand,
+            community_cards,
+            num_opponents=max(1, active_opponents),
+            simulations=50
+        )
+        return strength, hand_type
     
     def _preflop_hand_strength(self, hand: List[Card]) -> float:
         """计算翻牌前的手牌强度"""
@@ -202,6 +210,7 @@ class AIAvisor:
         # 获取玩家手牌和公共牌
         hand = player.cards
         community_cards = game.community_cards
+        self._current_players = game.players
         
         # 计算手牌强度
         hand_strength, hand_type = self._calculate_hand_strength(hand, community_cards)
@@ -239,7 +248,8 @@ class AIAvisor:
         计算预期价值
         """
         # 简化的预期价值计算
-        pot_size = game.pot
+        pot_size = max(float(game.pot), 1.0)
+        amount = float(amount or 0)
         
         if action == 'fold':
             return -player.bet
@@ -273,10 +283,11 @@ class AIAvisor:
         base_confidence = min(hand_strength * 0.8 + 0.2, 1.0)
         
         # 基于预期价值调整
+        pot_size = max(float(game.pot), 1.0)
         if expected_value > 0:
-            confidence_bonus = min(expected_value / game.pot * 0.5, 0.3)
+            confidence_bonus = min(expected_value / pot_size * 0.5, 0.3)
         else:
-            confidence_bonus = max(expected_value / game.pot * 0.5, -0.3)
+            confidence_bonus = max(expected_value / pot_size * 0.5, -0.3)
         
         # 基于信息完整性调整（公共牌越多，信息越完整）
         info_factor = min(len(game.community_cards) / 5 * 0.2 + 0.8, 1.0)
@@ -383,7 +394,7 @@ class AIAvisor:
                 'risk_level': min((1 - hand_strength) * 0.5 + 0.5, 1.0),
                 'win_probability': min(hand_strength * 1.5, 1.0),
                 'amount': raise_amount,
-                'fold_probability': min(raise_amount / game.pot * 0.5, 0.7)
+                'fold_probability': min(raise_amount / max(float(game.pot), 1.0) * 0.5, 0.7)
             }
         
         return analysis

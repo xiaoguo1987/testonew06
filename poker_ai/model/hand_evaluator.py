@@ -3,13 +3,27 @@
 import random
 import logging
 from typing import List, Tuple, Dict, Optional
-from ..game.cards import Card, SUITS, RANKS
+from ..game.cards import Card, SUITS, RANKS, RANK_VALUES
 
 class HandEvaluator:
     """德州扑克手牌评估器 (高性能版)"""
     
     def __init__(self):
         pass
+
+    def get_rank_value(self, rank: str) -> int:
+        """返回牌面点数，兼容 advisor 中的旧调用。"""
+        return RANK_VALUES[rank]
+
+    def get_remaining_cards(self, known_cards: List[Card]) -> List[Card]:
+        """返回排除已知牌后的剩余牌堆，兼容 advisor 中的旧调用。"""
+        known = {(card.rank, card.suit) for card in known_cards}
+        return [
+            Card(rank, suit)
+            for rank in RANKS
+            for suit in SUITS
+            if (rank, suit) not in known
+        ]
     
     # --- 保持原有的 evaluate_hand 逻辑不变 (这部分很难再纯Python层面优化了) ---
     def evaluate_hand(self, hole_cards: List[Card], community_cards: List[Card]) -> Tuple[str, List[int]]:

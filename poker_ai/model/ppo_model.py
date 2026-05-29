@@ -30,6 +30,8 @@ class PPOModel:
     - LossScaleOptimizer混合精度适配
     - 梯度累积支持
     """
+    _gpu_diagnostic_done = False
+
     def __init__(
         self,
         input_dim: Optional[int] = None,
@@ -159,23 +161,39 @@ class PPOModel:
             # mixed precision 下模型输出可能是 float16，损失计算统一转 float32
             probs_f32 = tf.cast(batch_action_probs, tf.float32)
             action_masks = tf.cast(tf.one_hot(batch_actions, self.output_dim), tf.float32)
-            old_probs_f32 = tf.cast(batch_old_probs, tf.float32)
+            old_input_f32 = tf.cast(batch_old_probs, tf.float32)
+            if batch_old_probs.shape.rank == 2:
+                old_policy_f32 = old_input_f32
+                old_probs_f32 = tf.reduce_sum(old_policy_f32 * action_masks, axis=1)
+            else:
+                old_policy_f32 = None
+                old_probs_f32 = old_input_f32
             advantages_f32 = tf.cast(batch_advantages, tf.float32)
             mask_f32 = tf.cast(batch_mask, tf.float32)
 
             batch_current_probs = tf.reduce_sum(probs_f32 * action_masks, axis=1)
             ratio = batch_current_probs / (old_probs_f32 + 1e-8)
 
-            # KL散度跟踪
-            kl = tf.reduce_sum(
-                old_probs_f32 * (tf.math.log(old_probs_f32 + 1e-8) - tf.math.log(probs_f32 + 1e-8)),
-                axis=1,
-            )
-            mean_kl = tf.reduce_mean(kl)
-
             clipped_ratio = tf.clip_by_value(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
             per_sample = tf.minimum(ratio * advantages_f32, clipped_ratio * advantages_f32)
             policy_loss = -tf.reduce_sum(per_sample * mask_f32) / (tf.reduce_sum(mask_f32) + 1e-8)
+
+            if old_policy_f32 is not None:
+                old_policy_f32 = old_policy_f32 / (
+                    tf.reduce_sum(old_policy_f32, axis=1, keepdims=True) + 1e-8
+                )
+                kl = tf.reduce_sum(
+                    old_policy_f32 * (
+                        tf.math.log(old_policy_f32 + 1e-8) - tf.math.log(probs_f32 + 1e-8)
+                    ),
+                    axis=1,
+                )
+            else:
+                # 兼容旧 checkpoint/旧采样路径：仅有采样动作概率时，用 action-level 近似。
+                kl = old_probs_f32 * (
+                    tf.math.log(old_probs_f32 + 1e-8) - tf.math.log(batch_current_probs + 1e-8)
+                )
+            mean_kl = tf.reduce_sum(kl * mask_f32) / (tf.reduce_sum(mask_f32) + 1e-8)
 
             # 熵正则：抑制策略过早塌缩
             entropy = -tf.reduce_sum(probs_f32 * tf.math.log(probs_f32 + 1e-8), axis=1)
@@ -548,6 +566,8 @@ class PPOModel:
         logger = logging.getLogger('PPOModel')
         _train_t0 = _time.time()
 
+        old_action_probs = np.asarray(old_action_probs, dtype=np.float32)
+        use_old_policy_dist = old_action_probs.ndim == 2
         buffer_size = len(states)
         train_batch_size = self.batch_size
         logger.info(
@@ -598,8 +618,12 @@ class PPOModel:
                     batch_states_np[:actual_len] = states[batch_indices]
                     batch_actions_np = np.zeros(train_batch_size, dtype=np.int32)
                     batch_actions_np[:actual_len] = actions[batch_indices]
-                    batch_old_probs_np = np.zeros(train_batch_size, dtype=np.float32)
-                    batch_old_probs_np[:actual_len] = old_action_probs[batch_indices]
+                    if use_old_policy_dist:
+                        batch_old_probs_np = np.zeros((train_batch_size, self.output_dim), dtype=np.float32)
+                        batch_old_probs_np[:actual_len] = old_action_probs[batch_indices]
+                    else:
+                        batch_old_probs_np = np.zeros(train_batch_size, dtype=np.float32)
+                        batch_old_probs_np[:actual_len] = old_action_probs[batch_indices]
                     batch_advantages_np = np.zeros(train_batch_size, dtype=np.float32)
                     batch_advantages_np[:actual_len] = advantages[batch_indices]
                     batch_returns_np = np.zeros(train_batch_size, dtype=np.float32)
