@@ -52,6 +52,29 @@ def _resolve_auto_workers(requested_workers: int, reserved_cores: int = 2) -> in
     return max(1, (available * 3) // 4)
 
 
+def _has_cc_engine() -> bool:
+    """Return whether the compiled C++ poker engine is importable."""
+    try:
+        from poker_ai.engine import USE_CC_ENGINE as _cc
+    except ImportError:
+        return False
+    return bool(_cc)
+
+
+def _validate_engine_requirements(args) -> None:
+    if getattr(args, 'arch', 'legacy') != 'seed-rl':
+        return
+    if getattr(args, 'allow_python_engine', False):
+        return
+    if _has_cc_engine():
+        return
+    raise RuntimeError(
+        "seed-rl 默认要求 C++ Engine；当前未检测到已编译扩展。"
+        "请先运行: python setup_engine.py build_ext --inplace。"
+        "仅调试慢速 Python Engine 时可显式添加 --allow-python-engine。"
+    )
+
+
 def _apply_hardware_profile(args) -> None:
     """
     根据硬件档位应用更激进的默认参数（仅在对应参数为“自动/未显式设置”时生效）。
@@ -68,10 +91,7 @@ def _apply_hardware_profile(args) -> None:
         if arch == 'seed-rl':
             # SEED RL GPU-Centric 架构：大模型 + 集中式 GPU 推理
             # 检测 C++ 引擎，决定 Worker/Table 配置策略
-            try:
-                from poker_ai.engine import USE_CC_ENGINE as _cc
-            except ImportError:
-                _cc = False
+            _cc = _has_cc_engine()
             if int(getattr(args, 'train_workers', 0)) <= 0:
                 if _cc:
                     # C++ 引擎：减少 Pipe 数，降低 IPC 开销
@@ -101,6 +121,9 @@ def _apply_hardware_profile(args) -> None:
                 args.tables_per_worker = 48 if _cc else 8  # C++引擎用48张表/worker（从32提升：增加GPU批量稳定性）
             # RL 训练禁用混合精度：PPO 的 log-prob 计算在 FP16 下不稳定
             args.mixed_precision = False
+            # SEED RL 的推理 batch 是动态聚合的，XLA auto JIT 会按形状反复编译，
+            # 在 4090D 上实测会长时间刷 ptxas 编译并拖慢吞吐。
+            args.enable_xla = False
             # 14M 大模型学习率：使用 1e-4（折中值）
             # 3e-5 太低导致模型无法学习，3e-4 太高导致 KL 爆炸/速度崩塌
             if float(getattr(args, 'learning_rate', 3e-4)) >= 1e-4:
@@ -131,12 +154,13 @@ def _apply_hardware_profile(args) -> None:
             if int(getattr(args, 'ppo_epochs', 10)) <= 10:
                 args.ppo_epochs = 15
 
-        # 默认走 GPU + XLA + 混合精度（seed-rl 已单独禁用 FP16）
+        # 默认走 GPU；legacy 继续使用 XLA + 混合精度，seed-rl 已单独禁用。
         if getattr(args, 'device', 'auto') == 'auto':
             args.device = 'gpu'
         if not hasattr(args, 'mixed_precision') or arch != 'seed-rl':
             args.mixed_precision = True
-        args.enable_xla = True
+        if arch != 'seed-rl':
+            args.enable_xla = True
         args.gpu_memory_growth = True
         return
 
@@ -189,9 +213,11 @@ def parse_arguments():
     parser.add_argument('--hardware-profile', type=str, default='auto',
                         choices=['auto', 'rtx3090_112cpu', 'rtx4090d'],
                         help='硬件优化档位: auto, rtx3090_112cpu 或 rtx4090d')
-    parser.add_argument('--arch', type=str, default='legacy',
+    parser.add_argument('--arch', type=str, default='seed-rl',
                         choices=['legacy', 'seed-rl'],
-                        help='训练架构: legacy(原有CPU采样) 或 seed-rl(GPU集中式推理+大模型)')
+                        help='训练架构: seed-rl(GPU集中式推理+大模型，默认) 或 legacy(原有CPU采样)')
+    parser.add_argument('--allow-python-engine', action='store_true',
+                        help='允许 seed-rl 回退到纯 Python Engine（仅调试用，速度明显较慢）')
     parser.add_argument('--auto-tune', action='store_true',
                         help='训练前短跑多组参数，自动选择吞吐最高配置（推荐PPO）')
     parser.add_argument('--auto-tune-hands', type=int, default=4000,
@@ -220,7 +246,7 @@ def parse_arguments():
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'adamax', 'rmsprop', 'sgd'], help='优化器类型')
     parser.add_argument('--eval-interval', type=int, default=5000, help='评估间隔（局数）')
-    parser.add_argument('--checkpoint-interval', type=int, default=1000, help='保存检查点间隔（局数）')
+    parser.add_argument('--checkpoint-interval', type=int, default=50000, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
     parser.add_argument('--eval-workers', type=int, default=0, help='评估并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--train-workers', type=int, default=0, help='训练采样并行worker数量（<=0 自动按CPU核数推断）')
@@ -243,7 +269,7 @@ def parse_arguments():
                         help='启用混合精度（GPU上通常更快）')
     parser.add_argument('--no-mixed-precision', action='store_false', dest='mixed_precision',
                         help='禁用混合精度')
-    parser.add_argument('--enable-xla', action='store_true', default=True, help='启用 TensorFlow XLA JIT')
+    parser.add_argument('--enable-xla', action='store_true', default=False, help='启用 TensorFlow XLA JIT')
     parser.add_argument('--disable-xla', action='store_false', dest='enable_xla', help='禁用 TensorFlow XLA JIT')
     parser.add_argument('--disable-onednn', action='store_true', dest='disable_onednn', default=False,
                         help='禁用 oneDNN（可避免部分 GPU 上 DNN library initialization failed）')
@@ -269,6 +295,8 @@ def parse_arguments():
                         help='评估对手类型: previous_version, random, baseline')
     parser.add_argument('--eval-output', type=str, default='eval_results.json',
                         help='评估结果输出文件')
+    parser.add_argument('--metrics-output', type=str, default=None,
+                        help='训练结构化指标 JSONL 输出；默认写到 checkpoint-dir/metrics.jsonl')
     
     # 演示参数
     parser.add_argument('--demo-hands', type=int, default=10, help='演示的手牌数量')
@@ -337,7 +365,10 @@ def setup_environment(args):
         if has_gpu and getattr(args, 'gpu_memory_growth', True):
             for gpu in gpus:
                 try:
-                    tf.config.experimental.set_memory_growth(gpu, True)
+                    set_memory_growth = getattr(tf.config, 'set_memory_growth', None)
+                    if set_memory_growth is None:
+                        set_memory_growth = tf.config.experimental.set_memory_growth
+                    set_memory_growth(gpu, True)
                 except Exception as _e:
                     logger.warning(f"设置GPU显存按需增长失败({gpu.name}): {_e}")
 
@@ -362,10 +393,7 @@ def setup_environment(args):
         )
         logger.info(f"并行配置: TF intra_op={intra_threads}, inter_op={inter_threads}")
         logger.info(f"并行配置: train_workers={args.train_workers}, eval_workers={args.eval_workers}")
-        try:
-            from poker_ai.engine import USE_CC_ENGINE as _cc_flag
-        except ImportError:
-            _cc_flag = False
+        _cc_flag = _has_cc_engine()
         logger.info(f"引擎状态: {'C++ Engine' if _cc_flag else 'Python Engine'}, "
                     f"tables_per_worker={getattr(args, 'tables_per_worker', 8)}")
         logger.info(
@@ -456,6 +484,7 @@ def _train_seed_rl(args):
             allin_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
             allin_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
             tables_per_worker=getattr(args, 'tables_per_worker', 8),
+            metrics_output=getattr(args, 'metrics_output', None),
         )
 
         # 加载 checkpoint
@@ -959,6 +988,7 @@ def main():
         # 解析命令行参数
         args = parse_arguments()
         _apply_hardware_profile(args)
+        _validate_engine_requirements(args)
 
         # 在 import TensorFlow 前禁用 oneDNN，避免部分环境 DNN library initialization failed
         if getattr(args, 'disable_onednn', False):

@@ -13,6 +13,8 @@
 import os
 import time
 import logging
+import json
+import math
 import threading
 import shutil
 import random
@@ -22,6 +24,7 @@ import multiprocessing as mp
 from multiprocessing import Queue, Process, Pipe
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
+from datetime import datetime
 
 logger = logging.getLogger('SeedRLTrainer')
 
@@ -52,6 +55,7 @@ class SeedRLTrainer:
         allin_eq_threshold: float = 0.65,
         allin_bonus_cap: float = 0.80,
         tables_per_worker: int = 8,
+        metrics_output: Optional[str] = None,
     ):
         """
         Args:
@@ -81,6 +85,7 @@ class SeedRLTrainer:
         self.allin_eq_threshold = allin_eq_threshold
         self.allin_bonus_cap = allin_bonus_cap
         self.tables_per_worker = tables_per_worker
+        self.metrics_output = metrics_output or os.path.join(checkpoint_dir, "metrics.jsonl")
 
         # 训练统计
         self.total_hands = 0
@@ -127,7 +132,34 @@ class SeedRLTrainer:
 
         self._latest_win_rate = 0.5  # 最近一次评估胜率，用于安全阀判断
 
+        # 推理与训练诊断计数器，写入 metrics.jsonl 供 agent 分析。
+        self._inference_batches = 0
+        self._inference_items = 0
+        self._inference_main_items = 0
+        self._inference_opp_items = 0
+        self._inference_fish_items = 0
+        self._inference_seconds = 0.0
+        self._last_ppo_seconds = 0.0
+        self._last_ppo_steps = 0
+
         os.makedirs(checkpoint_dir, exist_ok=True)
+        metrics_dir = os.path.dirname(self.metrics_output)
+        if metrics_dir:
+            os.makedirs(metrics_dir, exist_ok=True)
+
+    def _write_metric(self, event: str, **payload) -> None:
+        """Append one structured metric record for offline review agents."""
+        record = {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "event": event,
+            "total_hands": int(self.total_hands),
+            **payload,
+        }
+        try:
+            with open(self.metrics_output, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+        except Exception as exc:
+            logger.warning(f"写入 metrics 失败({self.metrics_output}): {exc}")
 
     # ------------------------------------------------------------------
     #  Curriculum Learning
@@ -277,6 +309,13 @@ class SeedRLTrainer:
                 action_probs[oi] = uniform_prob  # 均匀分布
                 values[oi] = 0.0
 
+        self._inference_batches += 1
+        self._inference_items += len(batch_items)
+        self._inference_main_items += len(main_items)
+        self._inference_opp_items += len(opp_ppo_items)
+        self._inference_fish_items += len(opp_fish_items)
+        self._inference_seconds += time.time() - t0
+
         # 分发结果
         for i, (wid, pname, sv) in enumerate(batch_items):
             try:
@@ -357,7 +396,10 @@ class SeedRLTrainer:
         for k in traj_buffer:
             traj_buffer[k] = []
 
+        t0 = time.time()
         loss = self.model.train(states, actions, rewards, dones, old_probs)
+        self._last_ppo_seconds = time.time() - t0
+        self._last_ppo_steps = int(n)
         self.total_ppo_updates += 1
         return loss
 
@@ -450,19 +492,30 @@ class SeedRLTrainer:
 
         # 行动分布日志：帮助诊断弃牌机器人问题
         action_names = ['fold', 'call', 'small_raise', 'mid_raise', 'large_raise', 'overbet', 'allin']
+        action_distribution = {}
         if total_actions > 0:
-            dist_str = ', '.join(
-                f"{action_names[i]}={action_counts[i]/total_actions:.1%}"
+            action_distribution = {
+                action_names[i]: action_counts[i] / total_actions
                 for i in range(7)
+            }
+            dist_str = ', '.join(
+                f"{name}={value:.1%}"
+                for name, value in action_distribution.items()
             )
             logger.info(f"[评估] 行动分布 (总{total_actions}次): {dist_str}")
         else:
             logger.warning("[评估] Main_AI 未执行任何行动，可能存在游戏逻辑问题")
 
+        avg_profit = total_profit / max(num_games, 1)
+        bb_per_100 = (avg_profit / max(float(self.big_blind), 1.0)) * 100.0
         return {
             'win_rate': wins / max(num_games, 1),
-            'avg_profit': total_profit / max(num_games, 1),
+            'avg_profit': avg_profit,
+            'bb_per_100': bb_per_100,
             'invalid_bet_rate': invalid_bets / max(total_actions, 1),
+            'action_distribution': action_distribution,
+            'total_profit': total_profit,
+            'wins': wins,
             'total_games': num_games,
         }
 
@@ -718,6 +771,60 @@ class SeedRLTrainer:
         last_opp_update_hand = 0
         training_start = time.time()
         training_start_hands = self.total_hands  # 记录 resume 后的起始手数
+        last_metric_time = training_start
+        last_metric_hands = training_start_hands
+
+        self._write_metric(
+            "train_start",
+            target_hands=int(num_hands),
+            workers=int(self.num_workers),
+            tables_per_worker=int(self.tables_per_worker),
+            concurrent_tables=int(self.num_workers * self.tables_per_worker),
+            ppo_buffer_size=int(self.ppo_buffer_size),
+            inference_min_batch=int(self.inference_min_batch),
+            inference_max_batch=int(self.inference_max_batch),
+            small_blind=int(self.small_blind),
+            big_blind=int(self.big_blind),
+            initial_stack=int(self.initial_stack),
+        )
+
+        def log_ppo_update(loss: float, reason: str) -> None:
+            nonlocal last_metric_time, last_metric_hands
+            now = time.time()
+            elapsed = now - training_start
+            hps = (self.total_hands - training_start_hands) / max(elapsed, 1e-6)
+            interval_hps = (self.total_hands - last_metric_hands) / max(now - last_metric_time, 1e-6)
+            avg_batch = self._inference_items / max(self._inference_batches, 1)
+            logger.info(
+                f"[SEED RL] hands={self.total_hands}/{num_hands}, "
+                f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
+                f"速度={hps:.1f} hands/s, 区间速度={interval_hps:.1f} hands/s, "
+                f"推理batch均值={avg_batch:.1f}, PPO耗时={self._last_ppo_seconds:.3f}s, "
+                f"KL={getattr(self.model, 'last_kl', 0.0):.4f}"
+            )
+            self._write_metric(
+                "ppo_update",
+                reason=reason,
+                target_hands=int(num_hands),
+                ppo_updates=int(self.total_ppo_updates),
+                loss=float(loss),
+                hps=float(hps),
+                interval_hps=float(interval_hps),
+                ppo_seconds=float(self._last_ppo_seconds),
+                ppo_steps=int(self._last_ppo_steps),
+                last_kl=float(getattr(self.model, "last_kl", 0.0)),
+                inference_batches=int(self._inference_batches),
+                inference_items=int(self._inference_items),
+                inference_main_items=int(self._inference_main_items),
+                inference_opp_items=int(self._inference_opp_items),
+                inference_fish_items=int(self._inference_fish_items),
+                inference_seconds=float(self._inference_seconds),
+                avg_inference_batch=float(avg_batch),
+                curriculum_phase=int(self._curriculum_phase + 1),
+                opponent_types=list(self.opp_type_list),
+            )
+            last_metric_time = now
+            last_metric_hands = self.total_hands
 
         try:
             while alive_workers or not traj_queue.empty():
@@ -732,13 +839,7 @@ class SeedRLTrainer:
                     while len(traj_buffer.get('states', [])) >= self.ppo_buffer_size:
                         loss = self._do_ppo_train(traj_buffer)
                         if loss is not None:
-                            elapsed = time.time() - training_start
-                            hps = (self.total_hands - training_start_hands) / max(elapsed, 1e-6)
-                            logger.info(
-                                f"[SEED RL] hands={self.total_hands}/{num_hands}, "
-                                f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
-                                f"速度={hps:.1f} hands/s"
-                            )
+                            log_ppo_update(loss, reason="backpressure")
                     # 训练完毕，继续正常循环
 
                 # 1. 推理调度
@@ -755,13 +856,7 @@ class SeedRLTrainer:
                 if buf_size >= self.ppo_buffer_size:
                     loss = self._do_ppo_train(traj_buffer)
                     if loss is not None:
-                        elapsed = time.time() - training_start
-                        hps = (self.total_hands - training_start_hands) / max(elapsed, 1e-6)
-                        logger.info(
-                            f"[SEED RL] hands={self.total_hands}/{num_hands}, "
-                            f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
-                            f"速度={hps:.1f} hands/s"
-                        )
+                        log_ppo_update(loss, reason="regular")
 
                 # 4. 定期评估（与 checkpoint 间隔对齐，避免阻塞训练流水线）
                 # 评估在主线程串行执行，会阻塞推理调度导致所有 worker 停滞
@@ -774,7 +869,18 @@ class SeedRLTrainer:
                         f"[SEED RL] 评估@{self.total_hands}: "
                         f"胜率={eval_res['win_rate']:.3f}, "
                         f"平均收益={score:.2f}, "
+                        f"bb/100={eval_res.get('bb_per_100', 0.0):.1f}, "
                         f"无效下注率={eval_res['invalid_bet_rate']:.3f}"
+                    )
+                    self._write_metric(
+                        "evaluation",
+                        eval_games=int(self.num_eval_games),
+                        win_rate=float(eval_res["win_rate"]),
+                        avg_profit=float(eval_res["avg_profit"]),
+                        bb_per_100=float(eval_res.get("bb_per_100", 0.0)),
+                        invalid_bet_rate=float(eval_res["invalid_bet_rate"]),
+                        action_distribution=eval_res.get("action_distribution", {}),
+                        best_score=float(self.best_score) if math.isfinite(self.best_score) else None,
                     )
                     self._latest_win_rate = eval_res['win_rate']
                     if score > self.best_score and eval_res['invalid_bet_rate'] < 0.5:
@@ -823,7 +929,18 @@ class SeedRLTrainer:
             logger.info(f"[SEED RL] 处理剩余 buffer: {remaining} steps")
             old_buf = self.ppo_buffer_size
             self.ppo_buffer_size = 1
-            self._do_ppo_train(traj_buffer)
+            loss = self._do_ppo_train(traj_buffer)
+            if loss is not None:
+                self._write_metric(
+                    "ppo_update",
+                    reason="final_buffer",
+                    target_hands=int(num_hands),
+                    ppo_updates=int(self.total_ppo_updates),
+                    loss=float(loss),
+                    ppo_seconds=float(self._last_ppo_seconds),
+                    ppo_steps=int(self._last_ppo_steps),
+                    last_kl=float(getattr(self.model, "last_kl", 0.0)),
+                )
             self.ppo_buffer_size = old_buf
         elif remaining > 0:
             logger.info(f"[SEED RL] 丢弃剩余 buffer: {remaining} steps < {min_remaining}（太少会导致过拟合）")
@@ -834,6 +951,16 @@ class SeedRLTrainer:
             f"[SEED RL] 训练完成: "
             f"总手牌={self.total_hands}, 总PPO更新={self.total_ppo_updates}, "
             f"耗时={elapsed:.1f}s, 速度={hps:.1f} hands/s"
+        )
+        self._write_metric(
+            "train_complete",
+            ppo_updates=int(self.total_ppo_updates),
+            elapsed_seconds=float(elapsed),
+            hps=float(hps),
+            inference_batches=int(self._inference_batches),
+            inference_items=int(self._inference_items),
+            avg_inference_batch=float(self._inference_items / max(self._inference_batches, 1)),
+            best_score=float(self.best_score) if math.isfinite(self.best_score) else None,
         )
 
         # 最终 checkpoint
@@ -847,5 +974,15 @@ class SeedRLTrainer:
                 f"[SEED RL] 最终评估结果: "
                 f"胜率={final_eval['win_rate']:.3f}, "
                 f"平均收益={final_eval['avg_profit']:.2f}, "
+                f"bb/100={final_eval.get('bb_per_100', 0.0):.1f}, "
                 f"无效下注率={final_eval['invalid_bet_rate']:.3f}"
+            )
+            self._write_metric(
+                "final_evaluation",
+                eval_games=int(self.num_eval_games),
+                win_rate=float(final_eval["win_rate"]),
+                avg_profit=float(final_eval["avg_profit"]),
+                bb_per_100=float(final_eval.get("bb_per_100", 0.0)),
+                invalid_bet_rate=float(final_eval["invalid_bet_rate"]),
+                action_distribution=final_eval.get("action_distribution", {}),
             )

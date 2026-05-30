@@ -99,6 +99,16 @@ class LargePPOModel:
         # 构建网络
         self.actor = self._build_network(softmax_output=True)
         self.critic = self._build_network(softmax_output=False)
+        self._predict_actor_compiled = tf.function(
+            lambda states: self.actor(states, training=False),
+            input_signature=[tf.TensorSpec(shape=[None, self.input_dim], dtype=tf.float32)],
+            reduce_retracing=True,
+        )
+        self._predict_critic_compiled = tf.function(
+            lambda states: self.critic(states, training=False),
+            input_signature=[tf.TensorSpec(shape=[None, self.input_dim], dtype=tf.float32)],
+            reduce_retracing=True,
+        )
 
         # 优化器：Critic 使用更高学习率，加速价值函数收敛
         critic_lr = lr_val * self.critic_lr_multiplier
@@ -171,8 +181,8 @@ class LargePPOModel:
     def predict(self, state: np.ndarray) -> Tuple[np.ndarray, float]:
         state = np.expand_dims(state, axis=0) if state.ndim == 1 else state
         st = tf.convert_to_tensor(state, dtype=tf.float32)
-        ap = self._predict_actor(st).numpy()
-        v = self._predict_critic(st).numpy()
+        ap = self._predict_actor_compiled(st).numpy()
+        v = self._predict_critic_compiled(st).numpy()
         return ap[0], float(v[0, 0])
 
     def predict_batch(self, states: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -184,8 +194,8 @@ class LargePPOModel:
         if states.ndim == 1:
             states = np.expand_dims(states, axis=0)
         st = tf.convert_to_tensor(states, dtype=tf.float32)
-        ap = self._predict_actor(st).numpy()
-        v = self._predict_critic(st).numpy().reshape(-1)
+        ap = self._predict_actor_compiled(st).numpy()
+        v = self._predict_critic_compiled(st).numpy().reshape(-1)
         return ap, v
 
     # ------------------------------------------------------------------
@@ -298,7 +308,7 @@ class LargePPOModel:
             pad = chunk_size - n
             padded = np.zeros((chunk_size, states.shape[1]), dtype=np.float32)
             padded[:n] = states
-            return self.critic(tf.convert_to_tensor(padded), training=False).numpy().flatten()[:n]
+            return self._predict_critic_compiled(tf.convert_to_tensor(padded)).numpy().flatten()[:n]
         parts = []
         for s in range(0, n, chunk_size):
             e = min(s + chunk_size, n)
@@ -306,9 +316,11 @@ class LargePPOModel:
             if len(chunk) < chunk_size:
                 padded = np.zeros((chunk_size, states.shape[1]), dtype=np.float32)
                 padded[:len(chunk)] = chunk
-                parts.append(self.critic(tf.convert_to_tensor(padded), training=False).numpy().flatten()[:len(chunk)])
+                parts.append(
+                    self._predict_critic_compiled(tf.convert_to_tensor(padded)).numpy().flatten()[:len(chunk)]
+                )
             else:
-                parts.append(self.critic(tf.convert_to_tensor(chunk), training=False).numpy().flatten())
+                parts.append(self._predict_critic_compiled(tf.convert_to_tensor(chunk)).numpy().flatten())
         return np.concatenate(parts)
 
     def train(
@@ -451,9 +463,9 @@ class LargePPOModel:
         bs = min(self.batch_size, 256)
         d1 = np.zeros((1, self.input_dim), dtype=np.float32)
         db = np.zeros((bs, self.input_dim), dtype=np.float32)
-        for m in (self.actor, self.critic):
-            m(tf.convert_to_tensor(d1), training=False)
-            m(tf.convert_to_tensor(db), training=False)
+        for fn in (self._predict_actor_compiled, self._predict_critic_compiled):
+            fn(tf.convert_to_tensor(d1))
+            fn(tf.convert_to_tensor(db))
         self._warmup_done = True
         logger.info(f"LargePPOModel warmup 完成 (batch shapes: 1, {bs})")
 
