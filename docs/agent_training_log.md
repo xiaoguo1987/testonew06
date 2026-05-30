@@ -198,10 +198,30 @@ agent_training_log.md
 - Next code gap: add independent per-historical-opponent evaluation instead of
   relying on one selected opponent-model evaluation.
 
+### 2026-05-30 stopped Phase1-biased historical-pool run
+
+- Run: `/root/testo-seed-rl/runs/seed_histpool_1m_from500k_20260530_230835`
+- Stopped after the first evaluation because the policy was moving in the wrong
+  direction:
+  - hands 700,351
+  - opponent-model bb/100 -495.5
+  - win rate 17.9%
+  - invalid bet rate 0.00%
+  - truncated hand rate 0.00%
+  - KL median 0.0289, p95 0.1830, max 0.2169
+  - cumulative action mix: call 50.98%, all-in 12.67%
+  - median interval speed 1,823 hand/s
+- Diagnosis: training mechanics were stable, but the resumed 500k checkpoint
+  re-entered Phase1 because curriculum progress was measured from the new
+  stage start.  That means the first 200k hands were mostly against fish, which
+  is the wrong distribution for historical-pool robustness.
+- Fix: add a minimum curriculum start phase.  Historical-pool continuation can
+  now start at Phase2 and immediately load an opponent from the historical pool.
+
 ## Next Work Queue
 
-- Start a 1M historical-pool stage from the 500k checkpoint, then extend only if
-  evaluation remains stable.
+- Restart a 1M historical-pool stage from the 500k checkpoint with
+  `CURRICULUM_START_PHASE=2`, then extend only if evaluation remains stable.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.

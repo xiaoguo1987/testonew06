@@ -306,6 +306,8 @@ def parse_arguments():
     # 自我对弈参数
     parser.add_argument('--use-self-play', action='store_true', default=True, help='启用自我对弈训练')
     parser.add_argument('--opponent-update-interval', type=int, default=10000, help='对手更新间隔（局数），过小会导致军备竞赛')
+    parser.add_argument('--curriculum-start-phase', type=int, default=1, choices=[1, 2, 3],
+                       help='SEED RL curriculum 最低起始阶段；恢复历史池训练时可设为2避免重新全鱼热身')
     
     # 探索参数
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
@@ -488,6 +490,7 @@ def _train_seed_rl(args):
             allin_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.25),
             tables_per_worker=getattr(args, 'tables_per_worker', 8),
             metrics_output=getattr(args, 'metrics_output', None),
+            curriculum_start_phase=getattr(args, 'curriculum_start_phase', 1),
         )
 
         # 加载 checkpoint

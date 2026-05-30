@@ -59,6 +59,7 @@ class SeedRLTrainer:
         tables_per_worker: int = 8,
         metrics_output: Optional[str] = None,
         eval_seed: Optional[int] = 20260530,
+        curriculum_start_phase: int = 1,
     ):
         """
         Args:
@@ -102,15 +103,15 @@ class SeedRLTrainer:
         # Phase 1 (0-20%): 全鱼对手 → 学习基本策略（别乱弃牌、基本下注）
         # Phase 2 (20-50%): 混合对手（3鱼+2旧版） → 过渡阶段
         # Phase 3 (50%+): 自对弈（3PPO+2鱼） → 防止策略坍缩
-        self._curriculum_phase = 0  # 当前阶段
+        self._curriculum_min_phase = max(0, min(2, int(curriculum_start_phase) - 1))
+        self._curriculum_phase = self._curriculum_min_phase  # 当前阶段
         self._curriculum_thresholds = (0.20, 0.50)  # 阶段切换阈值
         self._curriculum_opp_configs = [
             ['fish', 'fish', 'fish', 'fish', 'fish'],      # Phase 1: 全鱼
             ['ppo', 'ppo', 'fish', 'fish', 'fish'],        # Phase 2: 混合
             ['ppo', 'ppo', 'ppo', 'fish', 'fish'],         # Phase 3: 自对弈（保留2鱼防坍缩）
         ]
-        # 初始为 Phase 1
-        self.opp_type_list = self._curriculum_opp_configs[0]
+        self.opp_type_list = self._curriculum_opp_configs[self._curriculum_phase]
         # Worker 侧对手类型固定为 PPO+Fish（始终发送推理请求）
         # Curriculum 通过主进程推理调度器实现：对鱼对手返回随机动作
         self._worker_opp_type_list = ['ppo', 'ppo', 'ppo', 'ppo', 'fish']
@@ -273,11 +274,11 @@ class SeedRLTrainer:
         run_hands = max(0, self.total_hands - self._curriculum_base_hands)
         progress = run_hands / self.num_hands_target
 
-        new_phase = 0
+        new_phase = self._curriculum_min_phase
         if progress >= self._curriculum_thresholds[1]:
-            new_phase = 2
+            new_phase = max(new_phase, 2)
         elif progress >= self._curriculum_thresholds[0]:
-            new_phase = 1
+            new_phase = max(new_phase, 1)
 
         if new_phase != self._curriculum_phase:
             old_phase = self._curriculum_phase
@@ -929,6 +930,7 @@ class SeedRLTrainer:
             f"[SEED RL] Curriculum Learning 已启用: "
             f"Phase1(0-20%全鱼) → Phase2(20-50%混合) → Phase3(50%+自对弈), "
             f"dynamic_opp_interval=[{_intervals_str}], "
+            f"min_phase=Phase{self._curriculum_min_phase + 1}, "
             f"历史对手池=开启(max_size={self._opponent_pool_max_size}), "
             f"archive_dir={self._archive_dir}"
         )
@@ -948,6 +950,9 @@ class SeedRLTrainer:
                 f"[SEED RL] 对手池已加载 {len(self._opponent_pool)} 个历史版本 "
                 f"(current_dir+{added_current}, loaded_dir+{added_loaded})"
             )
+            if self._curriculum_phase >= 1:
+                self._update_opponent_from_pool()
+                logger.info("[SEED RL] 启动阶段加载历史对手权重")
 
         # 模型预热（主模型 + 对手模型）
         self.model.warmup()

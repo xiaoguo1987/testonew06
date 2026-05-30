@@ -10,6 +10,7 @@ LEARNING_RATE="${LEARNING_RATE:-5e-5}"
 CHECKPOINT_INTERVAL="${CHECKPOINT_INTERVAL:-50000}"
 EVAL_INTERVAL="${EVAL_INTERVAL:-100000}"
 NUM_EVAL_GAMES="${NUM_EVAL_GAMES:-1000}"
+CURRICULUM_START_PHASE="${CURRICULUM_START_PHASE:-1}"
 
 mkdir -p "${RUN_DIR}/checkpoints"
 mkdir -p "${ROOT_DIR}/runs"
@@ -26,6 +27,7 @@ cd "${ROOT_DIR}"
   echo "BASE_MODEL=${BASE_MODEL}"
   echo "NUM_HANDS=${NUM_HANDS}"
   echo "LEARNING_RATE=${LEARNING_RATE}"
+  echo "CURRICULUM_START_PHASE=${CURRICULUM_START_PHASE}"
   echo "START_TS=$(date -Is)"
 } > "${RUN_DIR}/stage.env"
 
@@ -42,6 +44,7 @@ cd "${ROOT_DIR}"
   --checkpoint-interval "${CHECKPOINT_INTERVAL}" \
   --eval-interval "${EVAL_INTERVAL}" \
   --num-eval-games "${NUM_EVAL_GAMES}" \
+  --curriculum-start-phase "${CURRICULUM_START_PHASE}" \
   > "${RUN_DIR}/train.log" 2>&1
 
 code=$?
