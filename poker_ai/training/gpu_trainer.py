@@ -1273,6 +1273,8 @@ class SeedRLTrainer:
                 avg_profit=float(final_eval["avg_profit"]),
                 bb_per_100=float(final_eval.get("bb_per_100", 0.0)),
                 invalid_bet_rate=float(final_eval["invalid_bet_rate"]),
+                truncated_hand_rate=float(final_eval.get("truncated_hand_rate", 0.0)),
+                truncated_hands=int(final_eval.get("truncated_hands", 0)),
                 action_distribution=final_eval.get("action_distribution", {}),
                 evaluations=final_eval.get("evaluations", {}),
                 primary_opponent_policy=final_eval.get("primary_opponent_policy"),

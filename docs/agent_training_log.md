@@ -135,6 +135,22 @@ agent_training_log.md
   the opponent pool, avoid phase-switch mirror sync when history exists, and use
   low-temperature model-action sampling for opponent-model evaluation.
 
+### 2026-05-30 historical-pool evaluation smoke
+
+- Run: `/root/testo-seed-rl/runs/seed_eval_pool_smoke_20260530_172039`
+- Purpose: validate historical opponent pool loading and low-temperature
+  opponent-model evaluation.
+- Result:
+  - external checkpoint directory contributed 3 historical opponents
+  - truncation dropped to 0.00% in all evaluation events
+  - 510k eval vs selected historical opponent: +99.4 bb/100
+  - 520k eval after Phase3 loaded `seed_rl_hands_1500036`: -351.4 bb/100
+  - final eval: -349.5 bb/100
+- Takeaway: evaluation-loop truncation is fixed, but the 500k policy is weak
+  against later historical opponents.  Continue with longer historical-pool
+  training and select the best checkpoint by multi-opponent evaluation, not by
+  fish/random profit.
+
 ## Codex Notes
 
 - Do not optimize toward a fixed all-in frequency.  All-in should be
