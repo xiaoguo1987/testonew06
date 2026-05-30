@@ -412,13 +412,11 @@ class PPOModel:
             # 如果没有游戏信息，返回动作索引
             return action_idx, None
         else:
-            # 计算手牌强度
-            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             # 构建动作向量（独热编码）
             action_vector = np.zeros(self.output_dim)
             action_vector[action_idx] = 1
             # 使用state_representation解码动作
-            return self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            return self.state_rep.decode_action(action_vector, game, player, 0.0)
     
     def remember(self, state: np.ndarray, action: int, reward: float, next_state: np.ndarray, done: bool) -> None:
         """兼容DQN接口的经验存储方法
@@ -662,25 +660,25 @@ class PPOModel:
                 batch_kl = float(kl_val.numpy())
                 epoch_kl_sum += batch_kl
                 epoch_batches += 1
-                
-                # KL散度早停：平均KL超过阈值时提前终止该epoch
-                if self.kl_early_stop and epoch_batches > 1:
-                    avg_kl = epoch_kl_sum / epoch_batches
-                    if avg_kl > self.kl_target:
-                        logger.debug(
-                            f"KL早停 epoch {epoch}: avg_kl={avg_kl:.6f} > target={self.kl_target:.6f}"
-                        )
-                        early_stopped = True
-                        break
 
                 total_actor_loss += float(actor_loss.numpy())
                 total_critic_loss += float(critic_loss.numpy())
                 total_kl += batch_kl
                 num_batches_done += 1
-                
+
                 # 更新学习率
                 self.current_step += 1
                 self.update_lr(self.current_step)
+
+                # KL散度早停：平均KL超过阈值时提前终止该epoch
+                if self.kl_early_stop and epoch_batches > 1:
+                    avg_kl = epoch_kl_sum / epoch_batches
+                    if avg_kl > self.kl_target:
+                        logger.info(
+                            f"KL早停 epoch {epoch}: avg_kl={avg_kl:.6f} > target={self.kl_target:.6f}"
+                        )
+                        early_stopped = True
+                        break
             
             if early_stopped:
                 # KL早停后不再做后续epoch

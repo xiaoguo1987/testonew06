@@ -141,10 +141,9 @@ class PokerAIAgent:
             else:
                 masked_probs = masked_probs / prob_sum
             action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
-            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(len(action_probs))
             action_vector[action_idx] = 1
-            action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            action, amount = self.state_rep.decode_action(action_vector, game, player, 0.0)
             info = {
                 'state': state,
                 'action_idx': action_idx,
@@ -202,10 +201,9 @@ class PokerAIAgent:
             else:
                 masked_probs = masked_probs / prob_sum
             action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
-            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(len(action_probs), dtype=np.float32)
             action_vector[action_idx] = 1.0
-            action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            action, amount = self.state_rep.decode_action(action_vector, game, player, 0.0)
             info = {
                 'state': states[idx],
                 'action_idx': action_idx,
@@ -233,10 +231,9 @@ class PokerAIAgent:
             else:
                 masked_probs = masked_probs / prob_sum
             action_idx = int(np.random.choice(len(masked_probs), p=masked_probs))
-            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(len(action_probs), dtype=np.float32)
             action_vector[action_idx] = 1.0
-            action, amount = self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            action, amount = self.state_rep.decode_action(action_vector, game, player, 0.0)
             return action, amount, {
                 'state': state,
                 'action_idx': action_idx,

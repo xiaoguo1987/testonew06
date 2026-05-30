@@ -65,7 +65,7 @@ class SelfPlayTrainer:
                  optimizer: str = 'adam',
                  target_update_freq: int = 100,
                  ppo_clip_epsilon: float = 0.2,
-                 ppo_update_epochs: int = 10,
+                 ppo_update_epochs: int = 4,
                  ppo_entropy_coef: float = 0.02,
                  ppo_update_min_steps: int = 0,
                  train_rollouts_per_worker: int = 0,
@@ -163,6 +163,9 @@ class SelfPlayTrainer:
         self.allin_unlucky_trigger_count = 0
         self.allin_unlucky_bonus_total = 0.0
         self.allin_unlucky_equity_sum = 0.0
+        # PPO 训练热路径只让主 AI 走神经网络批量推理；对手用快速合法策略采样，
+        # 避免每手牌触发大量单条 TF predict，导致 GPU 空占显存、CPU 采样龟速。
+        self.fast_training_opponents = (self.model_type == 'ppo')
     
     def _create_agents(self) -> None:
         """创建AI代理（主代理+对手代理）"""
@@ -256,6 +259,39 @@ class SelfPlayTrainer:
             'raises': raises,
             'invalid_bets': invalid_bets
         }
+
+    def _select_fast_opponent_action(self, game: PokerGame, player: Player) -> Tuple[str, Optional[int]]:
+        """训练采样用的快速对手策略：只产生合法动作，不跑神经网络。"""
+        call_amount = max(0, game.current_bet - player.bet)
+        legal = []
+        weights = []
+
+        legal.append(('fold', None))
+        weights.append(0.15 if call_amount > 0 else 0.02)
+
+        if call_amount <= player.stack:
+            legal.append(('call', call_amount))
+            weights.append(0.60 if call_amount > 0 else 0.72)
+
+        current_bet = max(game.current_bet, game.big_blind)
+        min_raise_total = max(game.current_bet * 2, game.big_blind)
+        for total, weight in (
+            (int(current_bet * 2), 0.14),
+            (int(current_bet * 4), 0.07),
+            (int(player.bet + player.stack), 0.04),
+        ):
+            if (
+                total > game.current_bet
+                and total >= min_raise_total
+                and (total - player.bet) <= player.stack
+            ):
+                legal.append(('raise', total))
+                weights.append(weight)
+
+        probs = np.asarray(weights, dtype=np.float64)
+        probs = probs / probs.sum()
+        idx = int(np.random.choice(len(legal), p=probs))
+        return legal[idx]
     
     def _play_hand(self, game: PokerGame, players: List[Player], is_training: bool = True) -> Dict:
         """玩一手牌"""
@@ -342,18 +378,20 @@ class SelfPlayTrainer:
 
             # === 对手行动逻辑 ===
             else:
-                # 解析名字获取索引 "Opponent_X" -> index X-1
-                try:
-                    opp_idx = int(current_player.name.split('_')[-1]) - 1
-                    # 确保索引不越界
-                    if 0 <= opp_idx < len(self.opponent_agents):
-                        agent = self.opponent_agents[opp_idx]
-                    else:
-                        agent = self.opponent_agents[0] # Fallback
-                except:
-                    agent = self.opponent_agents[0]
-
-                action, amount = agent.select_action(game, current_player)
+                if is_training and self.fast_training_opponents:
+                    action, amount = self._select_fast_opponent_action(game, current_player)
+                else:
+                    # 解析名字获取索引 "Opponent_X" -> index X-1
+                    try:
+                        opp_idx = int(current_player.name.split('_')[-1]) - 1
+                        # 确保索引不越界
+                        if 0 <= opp_idx < len(self.opponent_agents):
+                            agent = self.opponent_agents[opp_idx]
+                        else:
+                            agent = self.opponent_agents[0] # Fallback
+                    except:
+                        agent = self.opponent_agents[0]
+                    action, amount = agent.select_action(game, current_player)
                 action_records[current_player.name].append((action, amount if amount else 0))
                 
                 if not game.handle_action(current_player, action, amount):
@@ -421,7 +459,7 @@ class SelfPlayTrainer:
                 players[0],
                 game,
                 action_records.get("Main_AI", []),
-                lightweight=False
+                lightweight=True
             )
         }
         return result
@@ -520,15 +558,18 @@ class SelfPlayTrainer:
                         trajectory['old_probs'].append(probs if probs is not None else old_prob)
                 last_step_info = (current_state, action_idx)
             else:
-                try:
-                    opp_idx = int(current_player.name.split('_')[-1]) - 1
-                    if 0 <= opp_idx < len(opp_agents):
-                        agent = opp_agents[opp_idx]
-                    else:
+                if self.fast_training_opponents:
+                    action, amount = self._select_fast_opponent_action(game, current_player)
+                else:
+                    try:
+                        opp_idx = int(current_player.name.split('_')[-1]) - 1
+                        if 0 <= opp_idx < len(opp_agents):
+                            agent = opp_agents[opp_idx]
+                        else:
+                            agent = opp_agents[0]
+                    except Exception:
                         agent = opp_agents[0]
-                except Exception:
-                    agent = opp_agents[0]
-                action, amount = agent.select_action(game, current_player)
+                    action, amount = agent.select_action(game, current_player)
                 action_records[current_player.name].append(
                     (action, amount if amount else 0)
                 )
@@ -590,7 +631,7 @@ class SelfPlayTrainer:
                 players[0],
                 game,
                 action_records.get("Main_AI", []),
-                lightweight=False
+                lightweight=True
             ),
         }
         return result, trajectory
@@ -698,7 +739,7 @@ class SelfPlayTrainer:
                     players[0],
                     game,
                     env['action_records'].get("Main_AI", []),
-                    lightweight=False,
+                    lightweight=True,
                 ),
             }
             outputs.append((result, env['trajectory']))
@@ -740,15 +781,18 @@ class SelfPlayTrainer:
                     main_states.append(current_state)
                     progress_made = True
                 else:
-                    try:
-                        opp_idx = int(current_player.name.split('_')[-1]) - 1
-                        if 0 <= opp_idx < len(opp_agents):
-                            agent = opp_agents[opp_idx]
-                        else:
+                    if self.fast_training_opponents:
+                        action, amount = self._select_fast_opponent_action(game, current_player)
+                    else:
+                        try:
+                            opp_idx = int(current_player.name.split('_')[-1]) - 1
+                            if 0 <= opp_idx < len(opp_agents):
+                                agent = opp_agents[opp_idx]
+                            else:
+                                agent = opp_agents[0]
+                        except Exception:
                             agent = opp_agents[0]
-                    except Exception:
-                        agent = opp_agents[0]
-                    action, amount = agent.select_action(game, current_player)
+                        action, amount = agent.select_action(game, current_player)
                     env['action_records'][current_player.name].append(
                         (action, amount if amount else 0)
                     )
@@ -871,7 +915,7 @@ class SelfPlayTrainer:
                     players[0],
                     game,
                     env['action_records'].get("Main_AI", []),
-                    lightweight=False,
+                    lightweight=True,
                 ),
             })
             env['done'] = True
@@ -1008,7 +1052,7 @@ class SelfPlayTrainer:
                 players[0],
                 game,
                 action_records.get("Main_AI", []),
-                lightweight=False
+                lightweight=True
             ),
         }
 
@@ -1412,6 +1456,7 @@ class SelfPlayTrainer:
         start_hand = self.total_hands
         t_env_total = 0.0
         t_train_total = 0.0
+        t_eval_total = 0.0
         if self.model_type == "ppo" and hasattr(self.main_agent, "agent") and hasattr(self.main_agent.agent, "warmup"):
             self.main_agent.agent.warmup()
 
@@ -1431,7 +1476,7 @@ class SelfPlayTrainer:
             self._sync_copies_from_main(agent_copies)
             # 在主线程预创建对手副本，避免在 worker 子线程中创建 TF 模型（TF 2.13+ 会报 shape 错乱）
             for w in range(self.train_workers):
-                worker_opp_copies[w] = self._clone_opponents_for_inference()
+                worker_opp_copies[w] = None if self.fast_training_opponents else self._clone_opponents_for_inference()
                 worker_opp_versions[w] = self._opponents_version
 
         hand_idx = 0
@@ -1516,7 +1561,7 @@ class SelfPlayTrainer:
                         te0 = datetime.now().timestamp()
                         eval_result = self.evaluate()
                         te1 = datetime.now().timestamp()
-                        t_train_total += (te1 - te0)
+                        t_eval_total += (te1 - te0)
                         current_score = (
                             float(eval_result['avg_profit']) +
                             20.0 * float(eval_result['win_rate']) -
@@ -1544,7 +1589,7 @@ class SelfPlayTrainer:
                     if (not self.tuning_mode) and self.total_hands % self.opponent_update_interval == 0:
                         logger.info(f"更新对手模型，当前手牌数: {self.total_hands}")
                         self.update_opponents()
-                        if use_parallel:
+                        if use_parallel and not self.fast_training_opponents:
                             for w in range(self.train_workers):
                                 worker_opp_copies[w] = self._clone_opponents_for_inference()
                                 worker_opp_versions[w] = self._opponents_version
@@ -1568,11 +1613,12 @@ class SelfPlayTrainer:
                 batch_counter += 1
 
                 # 每隔一段时间输出环境采样vs GPU训练的耗时比例
-                if batch_counter % 10 == 0 and (t_env_total + t_train_total) > 0:
-                    total_t = t_env_total + t_train_total
+                if batch_counter % 10 == 0 and (t_env_total + t_train_total + t_eval_total) > 0:
+                    total_t = t_env_total + t_train_total + t_eval_total
                     logger.info(
                         f"[GPU诊断] 耗时分布: 环境采样(CPU)={t_env_total:.2f}s({t_env_total/total_t*100:.1f}%), "
                         f"PPO训练(GPU)={t_train_total:.2f}s({t_train_total/total_t*100:.1f}%), "
+                        f"评估={t_eval_total:.2f}s({t_eval_total/total_t*100:.1f}%), "
                         f"总耗时={total_t:.2f}s"
                     )
         finally:

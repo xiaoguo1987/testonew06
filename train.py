@@ -170,7 +170,7 @@ def parse_arguments():
     parser.add_argument('--batch-size', type=int, default=64, help='批处理大小')
     # PPO 专用
     parser.add_argument('--ppo-clip', type=float, default=0.2, help='PPO clip_epsilon')
-    parser.add_argument('--ppo-epochs', type=int, default=10, help='PPO 每批轨迹更新轮次')
+    parser.add_argument('--ppo-epochs', type=int, default=4, help='PPO 每批轨迹更新轮次')
     parser.add_argument('--ppo-entropy-coef', type=float, default=0.02, help='PPO 熵正则系数，越大越鼓励探索')
     parser.add_argument('--ppo-update-min-steps', type=int, default=0,
                         help='PPO累计多少步再做一次更新（<=0 自动，能提升GPU吞吐）')
@@ -294,7 +294,10 @@ def setup_environment(args):
         if has_gpu and getattr(args, 'gpu_memory_growth', True):
             for gpu in gpus:
                 try:
-                    tf.config.set_memory_growth(gpu, True)
+                    set_memory_growth = getattr(tf.config, 'set_memory_growth', None)
+                    if set_memory_growth is None:
+                        set_memory_growth = tf.config.experimental.set_memory_growth
+                    set_memory_growth(gpu, True)
                 except Exception as _e:
                     logger.warning(f"设置GPU显存按需增长失败({gpu.name}): {_e}")
 
@@ -391,7 +394,7 @@ def train_model(args):
                 optimizer=args.optimizer,
                 target_update_freq=args.target_update,
                 ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
-                ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
+                ppo_update_epochs=getattr(args, 'ppo_epochs', 4),
                 ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
                 ppo_update_min_steps=ov.get('ppo_update_min_steps', getattr(args, 'ppo_update_min_steps', 0)),
                 train_rollouts_per_worker=ov.get('train_rollouts_per_worker', getattr(args, 'train_rollouts_per_worker', 0)),
@@ -572,7 +575,7 @@ def evaluate_model(args):
         batch_size=args.batch_size,
         optimizer=args.optimizer,
         ppo_clip_epsilon=getattr(args, 'ppo_clip', 0.2),
-        ppo_update_epochs=getattr(args, 'ppo_epochs', 10),
+        ppo_update_epochs=getattr(args, 'ppo_epochs', 4),
         ppo_entropy_coef=getattr(args, 'ppo_entropy_coef', 0.02),
         ppo_update_min_steps=getattr(args, 'ppo_update_min_steps', 0),
         train_rollouts_per_worker=getattr(args, 'train_rollouts_per_worker', 0),

@@ -136,10 +136,9 @@ class DQNAgent:
         if game is None or player is None:
             return action_idx, None
         else:
-            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
-            return self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            return self.state_rep.decode_action(action_vector, game, player, 0.0)
             
     def replay(self) -> None:
         if len(self.memory) < self.batch_size:
@@ -272,10 +271,9 @@ class PolicyGradientAgent:
         if game is None or player is None:
             return action_idx, None
         else:
-            hand_strength = self.state_rep.calculate_hand_strength(player, game)
             action_vector = np.zeros(self.action_dim)
             action_vector[action_idx] = 1
-            return self.state_rep.decode_action(action_vector, game, player, hand_strength)
+            return self.state_rep.decode_action(action_vector, game, player, 0.0)
 
     def discount_rewards(self, rewards: List[float]) -> np.ndarray:
         discounted = np.zeros_like(rewards, dtype=float)

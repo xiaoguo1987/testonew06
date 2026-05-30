@@ -35,7 +35,7 @@ class RewardCalculator:
         }
         
         # 蒙特卡洛模拟参数
-        self.monte_carlo_iterations = 1000  # 模拟次数
+        self.monte_carlo_iterations = 32  # 训练热路径默认小样本，避免 CPU 采样拖垮 GPU
         # 并行训练时多个 worker 都会出现同名玩家（如 Main_AI）。
         # 使用线程本地存储，避免不同 worker 之间互相覆盖/删除状态。
         self._thread_local = threading.local()
