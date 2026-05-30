@@ -41,7 +41,7 @@ except ImportError:
 # 探索保障：按动作类型设置很低的最低采样概率，防止早期策略完全坍缩。
 # 扩到 12 维后保底必须更克制，否则会人为推高加注/全下频率。
 _ACTION_MIN_PROBS = np.array(
-    [0.001, 0.001, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.001, 0.001],
+    [0.0002, 0.0002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.0002],
     dtype=np.float32,
 )
 
@@ -288,22 +288,6 @@ def env_worker_loop(
             action_amount=0, is_winner=iw, profit_loss=fp, done=True,
         )
         ma = arecs.get("Main_AI", [])
-
-        # ---- Anti-Fold-Bot 勇气奖励（降低版：避免奖励淹没真实胜负信号） ----
-        total_actions = len(ma)
-        fold_count = sum(1 for a, _ in ma if a == 'fold')
-        vpip_count = sum(1 for a, _ in ma if a in ('call', 'raise'))
-
-        if total_actions >= 1:
-            # 全弃牌且亏钱 → 轻微负反馈
-            if fold_count == total_actions and fp <= 0:
-                fr -= 0.3
-            # 勇气奖励：主动入池 +0.3（原 +2.0 太大，导致无脑 call 策略）
-            if vpip_count > 0:
-                fr += 0.3
-            # 翻牌前单手弃牌 → 微弱惩罚
-            if total_actions == 1 and ma[0][0] == 'fold':
-                fr -= 0.1
 
         # all-in 补偿
         ab = 0.0
@@ -594,24 +578,7 @@ def _env_worker_loop_cc(
         if iw:
             fr += 0.5
 
-        # ---- Anti-Fold-Bot 勇气奖励（降低版） ----
         ma = arecs.get(MAIN_IDX, [])
-        total_actions = len(ma)
-        fold_count = sum(1 for a, _ in ma if a == 'fold')
-        vpip_count = sum(1 for a, _ in ma if a in ('call', 'raise'))
-
-        if total_actions >= 1:
-            if fold_count == total_actions and fp <= 0:
-                fr -= 0.3
-            if vpip_count > 0:
-                fr += 0.3
-            if total_actions == 1 and ma[0][0] == 'fold':
-                fr -= 0.1
-
-        # 加注专项奖励：防止模型永远 call，鼓励探索 raise
-        raise_count = sum(1 for a, _ in ma if a == 'raise')
-        if raise_count > 0:
-            fr += 0.1  # 加注动作额外 +0.1（降低远 +0.2，避免初期 allin 爆炸）
 
         # all-in 补偿
         ab = 0.0

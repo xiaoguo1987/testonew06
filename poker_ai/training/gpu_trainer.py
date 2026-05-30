@@ -135,6 +135,7 @@ class SeedRLTrainer:
         os.makedirs(self._archive_dir, exist_ok=True)
 
         self._latest_win_rate = 0.5  # 最近一次评估胜率，用于安全阀判断
+        self._low_win_eval_streak = 0  # 连续低胜率评估次数，避免一次噪声评估触发长期降级
 
         # 推理与训练诊断计数器，写入 metrics.jsonl 供 agent 分析。
         self._inference_batches = 0
@@ -681,37 +682,37 @@ class SeedRLTrainer:
         """从历史对手池中随机抽取一个版本加载到对手模型。
 
         安全阀机制：
-        - win_rate < 0.2: 临时降级对手配置（增加鱼的比例）
-        - win_rate < 0.3: 冻结对手池更新（不换更强的对手）
+        - 连续 3 次 win_rate < 0.2: 临时降级对手配置（增加鱼的比例）
+        - 连续 2 次 win_rate < 0.25: 冻结对手池更新（不换更强的对手）
         抽取策略：70% 概率抽最近 3 个版本，30% 概率抽更早的版本。
         如果对手池为空或加载失败，回退到同步当前模型权重。
         """
         wr = self._latest_win_rate
+        low_streak = self._low_win_eval_streak
+        normal_config = self._curriculum_opp_configs[min(self._curriculum_phase, 2)]
 
-        # 安全阀 1: 胜率极低时，临时降级对手配置
-        if wr < 0.2 and self._curriculum_phase >= 2:
+        # 安全阀 1: 连续低胜率时才临时降级，避免单次评估噪声长期削弱对手池
+        if low_streak >= 3 and wr < 0.2 and self._curriculum_phase >= 2:
             degraded = ['ppo', 'fish', 'fish', 'fish', 'fish']
             if self.opp_type_list != degraded:
                 self.opp_type_list = degraded
                 logger.warning(
-                    f"[安全阀] 胜率过低({wr:.3f}<0.2)，Phase3临时降级为1PPO+4鱼"
+                    f"[安全阀] 连续低胜率({low_streak}次, 最新{wr:.3f}<0.2)，"
+                    "Phase3临时降级为1PPO+4鱼"
                 )
             return  # 降级后不更新对手权重
 
-        # 安全阀 2: 胜率偏低时，冻结对手池更新
-        if wr < 0.25:
+        # 安全阀 2: 连续偏低时冻结对手池更新，但不立刻削弱对手配置
+        if low_streak >= 2 and wr < 0.25:
             logger.info(
-                f"[安全阀] 胜率偏低({wr:.3f}<0.25)，冻结对手池更新"
+                f"[安全阀] 连续胜率偏低({low_streak}次, 最新{wr:.3f}<0.25)，冻结对手池更新"
             )
-            # 如果之前被降级过，恢复正常配置
-            normal_config = self._curriculum_opp_configs[min(self._curriculum_phase, 2)]
             if self.opp_type_list != normal_config:
                 self.opp_type_list = normal_config
-                logger.info(f"[安全阀] 胜率回升，恢复正常对手配置: {normal_config}")
+                logger.info(f"[安全阀] 保持正常对手配置，不因单次低分继续降级: {normal_config}")
             return  # 不更新对手权重
 
         # 胜率正常（>= 0.3），如果之前被降级过则恢复
-        normal_config = self._curriculum_opp_configs[min(self._curriculum_phase, 2)]
         if self.opp_type_list != normal_config:
             self.opp_type_list = normal_config
             logger.info(f"[安全阀] 胜率正常({wr:.3f})，恢复正常对手配置: {normal_config}")
@@ -1081,6 +1082,14 @@ class SeedRLTrainer:
                         best_score=float(self.best_score) if math.isfinite(self.best_score) else None,
                     )
                     self._latest_win_rate = eval_res['win_rate']
+                    if self._latest_win_rate < 0.25:
+                        self._low_win_eval_streak += 1
+                    elif self._latest_win_rate >= 0.30:
+                        self._low_win_eval_streak = 0
+                    logger.info(
+                        f"[安全阀] 低胜率评估连续次数={self._low_win_eval_streak}, "
+                        f"latest_win_rate={self._latest_win_rate:.3f}"
+                    )
                     if score > self.best_score and eval_res['invalid_bet_rate'] < 0.5:
                         self.best_score = score
                         self.save_checkpoint(is_best=True)
@@ -1122,7 +1131,7 @@ class SeedRLTrainer:
 
         # 训练结束后处理剩余 buffer（仅当数据足够多时才训练，避免小样本灾难性过拟合）
         remaining = len(traj_buffer.get('states', []))
-        min_remaining = max(256, self.model.batch_size)  # 至少要够一个完整 batch
+        min_remaining = max(8192, self.model.batch_size)  # 小尾批高方差，宁可丢弃
         if remaining >= min_remaining:
             logger.info(f"[SEED RL] 处理剩余 buffer: {remaining} steps")
             old_buf = self.ppo_buffer_size
