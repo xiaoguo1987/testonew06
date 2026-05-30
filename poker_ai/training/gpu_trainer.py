@@ -60,6 +60,8 @@ class SeedRLTrainer:
         metrics_output: Optional[str] = None,
         eval_seed: Optional[int] = 20260530,
         curriculum_start_phase: int = 1,
+        opponent_score_file: Optional[str] = None,
+        hard_opponent_temperature: float = 200.0,
     ):
         """
         Args:
@@ -91,6 +93,7 @@ class SeedRLTrainer:
         self.tables_per_worker = tables_per_worker
         self.metrics_output = metrics_output or os.path.join(checkpoint_dir, "metrics.jsonl")
         self.eval_seed = eval_seed
+        self.hard_opponent_temperature = max(float(hard_opponent_temperature), 1e-6)
 
         # 训练统计
         self.total_hands = 0
@@ -131,6 +134,7 @@ class SeedRLTrainer:
         # 历史对手池 (Fictitious Self-Play)
         # 保存历史 checkpoint 路径，对手更新时随机抽取（近期权重更高）
         self._opponent_pool: List[str] = []  # 可用的历史 checkpoint 路径列表
+        self._opponent_scores: Dict[str, float] = self._load_opponent_scores(opponent_score_file)
         self._opponent_pool_max_size = 20    # 对手池最大容量
         self._loaded_checkpoint_path: Optional[str] = None
         self._archive_dir = '/root/autodl-tmp/poker_checkpoints'  # 数据盘归档目录
@@ -742,6 +746,52 @@ class SeedRLTrainer:
             self._opponent_pool = self._opponent_pool[-self._opponent_pool_max_size:]
         return added
 
+    def _load_opponent_scores(self, path: Optional[str]) -> Dict[str, float]:
+        """Load opponent bb/100 scores from JSONL matrix evaluation output."""
+        if not path:
+            return {}
+        scores: Dict[str, float] = {}
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    row = json.loads(line)
+                    name = row.get("opponent_name")
+                    if not name and row.get("opponent"):
+                        name = os.path.basename(str(row["opponent"]))
+                    if name:
+                        scores[str(name)] = float(row.get("bb_per_100", 0.0))
+            logger.info(f"[SEED RL] 已加载 hard-opponent 评分 {len(scores)} 条: {path}")
+        except Exception as exc:
+            logger.warning(f"[SEED RL] 加载 hard-opponent 评分失败: {exc}")
+        return scores
+
+    def _sample_opponent_checkpoint(self, candidates: List[str]) -> str:
+        """Sample a checkpoint, preferring opponents with worse recent bb/100."""
+        if not self._opponent_scores:
+            pool_size = len(candidates)
+            if pool_size >= 3 and random.random() < 0.7:
+                return random.choice(candidates[-3:])
+            return random.choice(candidates)
+
+        weights = []
+        for path in candidates:
+            bb100 = self._opponent_scores.get(os.path.basename(path), 0.0)
+            # Negative bb/100 means this opponent beats the current candidate.
+            weights.append(math.exp(max(min(-bb100 / self.hard_opponent_temperature, 5.0), -5.0)))
+        total = sum(weights)
+        if total <= 0 or not math.isfinite(total):
+            return random.choice(candidates)
+        r = random.random() * total
+        acc = 0.0
+        for path, weight in zip(candidates, weights):
+            acc += weight
+            if acc >= r:
+                return path
+        return candidates[-1]
+
     def _update_opponent_from_pool(self):
         """从历史对手池中随机抽取一个版本加载到对手模型。
 
@@ -800,16 +850,16 @@ class SeedRLTrainer:
                 candidates = non_current
 
         pool_size = len(candidates)
-        if pool_size >= 3 and random.random() < 0.7:
-            # 70% 概率从最近 3 个中抽
-            chosen = random.choice(candidates[-3:])
-        else:
-            # 30% 概率从全池中抽
-            chosen = random.choice(candidates)
+        chosen = self._sample_opponent_checkpoint(candidates)
 
         try:
             self.opp_model.load_weights(chosen)
-            logger.info(f"[SEED RL] 对手池抽取: {os.path.basename(chosen)} (pool_size={pool_size})")
+            score = self._opponent_scores.get(os.path.basename(chosen))
+            score_text = "" if score is None else f", score_bb100={score:.1f}"
+            logger.info(
+                f"[SEED RL] 对手池抽取: {os.path.basename(chosen)} "
+                f"(pool_size={pool_size}{score_text})"
+            )
         except Exception as e:
             logger.warning(f"[SEED RL] 加载历史对手失败: {e}，回退到当前权重")
             self.opp_model.set_weights(self.model.get_weights())

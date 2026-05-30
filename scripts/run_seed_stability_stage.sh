@@ -11,6 +11,8 @@ CHECKPOINT_INTERVAL="${CHECKPOINT_INTERVAL:-50000}"
 EVAL_INTERVAL="${EVAL_INTERVAL:-100000}"
 NUM_EVAL_GAMES="${NUM_EVAL_GAMES:-1000}"
 CURRICULUM_START_PHASE="${CURRICULUM_START_PHASE:-1}"
+OPPONENT_SCORE_FILE="${OPPONENT_SCORE_FILE:-}"
+HARD_OPPONENT_TEMPERATURE="${HARD_OPPONENT_TEMPERATURE:-200}"
 
 mkdir -p "${RUN_DIR}/checkpoints"
 mkdir -p "${ROOT_DIR}/runs"
@@ -28,8 +30,16 @@ cd "${ROOT_DIR}"
   echo "NUM_HANDS=${NUM_HANDS}"
   echo "LEARNING_RATE=${LEARNING_RATE}"
   echo "CURRICULUM_START_PHASE=${CURRICULUM_START_PHASE}"
+  echo "OPPONENT_SCORE_FILE=${OPPONENT_SCORE_FILE}"
+  echo "HARD_OPPONENT_TEMPERATURE=${HARD_OPPONENT_TEMPERATURE}"
   echo "START_TS=$(date -Is)"
 } > "${RUN_DIR}/stage.env"
+
+score_args=()
+if [[ -n "${OPPONENT_SCORE_FILE}" ]]; then
+  score_args+=(--opponent-score-file "${OPPONENT_SCORE_FILE}")
+  score_args+=(--hard-opponent-temperature "${HARD_OPPONENT_TEMPERATURE}")
+fi
 
 /root/miniconda3/bin/python train.py \
   --mode train \
@@ -45,6 +55,7 @@ cd "${ROOT_DIR}"
   --eval-interval "${EVAL_INTERVAL}" \
   --num-eval-games "${NUM_EVAL_GAMES}" \
   --curriculum-start-phase "${CURRICULUM_START_PHASE}" \
+  "${score_args[@]}" \
   > "${RUN_DIR}/train.log" 2>&1
 
 code=$?

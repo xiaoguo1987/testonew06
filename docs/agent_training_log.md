@@ -256,11 +256,31 @@ agent_training_log.md
 - Added `scripts/evaluate_seed_pool.py` for explicit checkpoint-vs-checkpoint
   evaluation.
 
+### 2026-05-30 checkpoint matrix comparison
+
+- 900k matrix, 500 games/opponent:
+  - average approximately -150 bb/100
+  - large losses vs `seed_rl_hands_500016`, `seed_rl_hands_600040`,
+    `seed_rl_hands_700169`, and `seed_rl_hands_900236`
+  - conclusion: discard 900k as a base checkpoint for now
+- 500k matrix, 500 games/opponent:
+  - average approximately +15 bb/100
+  - large losses vs `seed_rl_hands_1000054` and `seed_rl_hands_700016`
+  - conclusion: 500k is the better restart base, but it needs targeted hard
+    opponent training
+- DeepSeek agrees: continue from 500k, reduce LR to about `2e-5`, evaluate
+  frequently, and accept a new base only if multi-opponent average bb/100 is
+  above +10 and worst opponent is no worse than roughly -200 bb/100.
+- Fix: hard-opponent weighted sampling added.  Training can now pass a matrix
+  JSONL file and sample opponents by softmax of recent negative bb/100.
+
 ## Next Work Queue
 
 - Restart a 1M historical-pool stage from the 500k checkpoint with
   `CURRICULUM_START_PHASE=2`, then extend only if evaluation remains stable.
 - Run the multi-opponent evaluation matrix before the next long training stage.
+- Start a short 100k hard-opponent stage from 500k with LR `2e-5`, then rerun
+  the matrix before extending.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.
