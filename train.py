@@ -308,6 +308,8 @@ def parse_arguments():
     parser.add_argument('--opponent-update-interval', type=int, default=10000, help='对手更新间隔（局数），过小会导致军备竞赛')
     parser.add_argument('--curriculum-start-phase', type=int, default=1, choices=[1, 2, 3],
                        help='SEED RL curriculum 最低起始阶段；恢复历史池训练时可设为2避免重新全鱼热身')
+    parser.add_argument('--curriculum-max-phase', type=int, default=3, choices=[1, 2, 3],
+                       help='SEED RL curriculum 最高阶段；短期修复训练可设为2避免提前进入Phase3')
     parser.add_argument('--opponent-score-file', type=str, default=None,
                        help='JSONL 多对手评估结果；用于 hard-opponent 加权采样')
     parser.add_argument('--hard-opponent-temperature', type=float, default=200.0,
@@ -495,6 +497,7 @@ def _train_seed_rl(args):
             tables_per_worker=getattr(args, 'tables_per_worker', 8),
             metrics_output=getattr(args, 'metrics_output', None),
             curriculum_start_phase=getattr(args, 'curriculum_start_phase', 1),
+            curriculum_max_phase=getattr(args, 'curriculum_max_phase', 3),
             opponent_score_file=getattr(args, 'opponent_score_file', None),
             hard_opponent_temperature=getattr(args, 'hard_opponent_temperature', 200.0),
         )

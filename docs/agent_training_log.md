@@ -274,13 +274,34 @@ agent_training_log.md
 - Fix: hard-opponent weighted sampling added.  Training can now pass a matrix
   JSONL file and sample opponents by softmax of recent negative bb/100.
 
+### 2026-05-30 hard-opponent 100k stage result
+
+- Run: `/root/testo-seed-rl/runs/seed_hardopp_100k_from500k_20260530_234418`
+- Setup: base 500k, LR `2e-5`, Phase2 start, hard-opponent score file from
+  the 500k matrix.
+- Startup sampled the hardest scored opponent:
+  `seed_rl_hands_1000054` with score -673.8 bb/100.
+- Training result:
+  - 550,077 eval vs current opponent: -365.3 bb/100
+  - 600,042 final eval vs current opponent: +42.3 bb/100
+  - KL median 0.1002, p95 0.1765, max 0.1833
+- Matrix result did not pass acceptance:
+  - `1000054` improved from about -674 to -258 bb/100
+  - but `700016`, `800200`, and self-adjacent checkpoints regressed heavily
+  - average moved negative, roughly -95 bb/100
+- Diagnosis: the hard-opponent focus helped one weak matchup but the short run
+  switched into Phase3 at 50k and caused broader drift.
+- Fix: add `curriculum_max_phase` so short repair stages can stay locked in
+  Phase2.
+
 ## Next Work Queue
 
 - Restart a 1M historical-pool stage from the 500k checkpoint with
   `CURRICULUM_START_PHASE=2`, then extend only if evaluation remains stable.
 - Run the multi-opponent evaluation matrix before the next long training stage.
-- Start a short 100k hard-opponent stage from 500k with LR `2e-5`, then rerun
-  the matrix before extending.
+- Restart a short hard-opponent repair stage from 500k with LR `2e-5`,
+  `CURRICULUM_START_PHASE=2`, `CURRICULUM_MAX_PHASE=2`, and a softer hard
+  opponent temperature, then rerun the matrix before extending.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.

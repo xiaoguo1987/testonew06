@@ -60,6 +60,7 @@ class SeedRLTrainer:
         metrics_output: Optional[str] = None,
         eval_seed: Optional[int] = 20260530,
         curriculum_start_phase: int = 1,
+        curriculum_max_phase: int = 3,
         opponent_score_file: Optional[str] = None,
         hard_opponent_temperature: float = 200.0,
     ):
@@ -107,6 +108,7 @@ class SeedRLTrainer:
         # Phase 2 (20-50%): 混合对手（3鱼+2旧版） → 过渡阶段
         # Phase 3 (50%+): 自对弈（3PPO+2鱼） → 防止策略坍缩
         self._curriculum_min_phase = max(0, min(2, int(curriculum_start_phase) - 1))
+        self._curriculum_max_phase = max(self._curriculum_min_phase, min(2, int(curriculum_max_phase) - 1))
         self._curriculum_phase = self._curriculum_min_phase  # 当前阶段
         self._curriculum_thresholds = (0.20, 0.50)  # 阶段切换阈值
         self._curriculum_opp_configs = [
@@ -284,6 +286,7 @@ class SeedRLTrainer:
             new_phase = max(new_phase, 2)
         elif progress >= self._curriculum_thresholds[0]:
             new_phase = max(new_phase, 1)
+        new_phase = min(new_phase, self._curriculum_max_phase)
 
         if new_phase != self._curriculum_phase:
             old_phase = self._curriculum_phase
@@ -994,6 +997,7 @@ class SeedRLTrainer:
             f"Phase1(0-20%全鱼) → Phase2(20-50%混合) → Phase3(50%+自对弈), "
             f"dynamic_opp_interval=[{_intervals_str}], "
             f"min_phase=Phase{self._curriculum_min_phase + 1}, "
+            f"max_phase=Phase{self._curriculum_max_phase + 1}, "
             f"历史对手池=开启(max_size={self._opponent_pool_max_size}), "
             f"archive_dir={self._archive_dir}"
         )
