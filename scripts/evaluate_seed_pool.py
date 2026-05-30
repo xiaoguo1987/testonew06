@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from poker_ai.model.large_ppo_model import LargePPOModel
+from poker_ai.config.ppo_config import PPOConfig
 from poker_ai.training.gpu_trainer import SeedRLTrainer
 
 
@@ -56,6 +57,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--games", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=20260530)
+    parser.add_argument(
+        "--hidden-dims",
+        default="2048,2048,1024,512",
+        help="Comma-separated LargePPO hidden dimensions",
+    )
     parser.add_argument("--out", default=None, help="Optional JSONL output path")
     return parser.parse_args()
 
@@ -78,7 +84,9 @@ def main() -> int:
     if not opponents:
         raise SystemExit("No opponent checkpoints found")
 
-    model = LargePPOModel()
+    hidden_dims = [int(part) for part in args.hidden_dims.split(",") if part.strip()]
+    cfg = PPOConfig(hidden_dims=hidden_dims)
+    model = LargePPOModel(hidden_dims=hidden_dims, config=cfg)
     trainer = SeedRLTrainer(
         model=model,
         checkpoint_dir=str(Path(model_path).parent),
