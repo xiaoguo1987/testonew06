@@ -8,6 +8,7 @@ from tensorflow.keras.mixed_precision import LossScaleOptimizer
 from ..game.poker_game import Player, PokerGame
 from .state_representation import StateRepresentation
 from ..config.ppo_config import PPOConfig, DEFAULT_PPO_CONFIG
+from ..action_space import ACTION_DIM
 
 
 def _ppo_base_path(path: str) -> str:
@@ -35,7 +36,7 @@ class PPOModel:
     def __init__(
         self,
         input_dim: Optional[int] = None,
-        output_dim: int = 7,
+        output_dim: Optional[int] = None,
         lr: Optional[float] = None,
         clip_epsilon: Optional[float] = None,
         gamma: Optional[float] = None,
@@ -47,7 +48,7 @@ class PPOModel:
     ):
         cfg = config or DEFAULT_PPO_CONFIG
         self.input_dim = input_dim if input_dim is not None else cfg.input_dim
-        self.output_dim = output_dim
+        self.output_dim = output_dim if output_dim is not None else getattr(cfg, "output_dim", ACTION_DIM)
         self.clip_epsilon = clip_epsilon if clip_epsilon is not None else cfg.clip_epsilon
         self.gamma = gamma if gamma is not None else cfg.gamma
         self.lambda_ = lambda_ if lambda_ is not None else cfg.lambda_

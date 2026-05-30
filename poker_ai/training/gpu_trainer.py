@@ -26,6 +26,8 @@ from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 from datetime import datetime
 
+from ..action_space import ACTION_DIM, ACTION_NAMES
+
 logger = logging.getLogger('SeedRLTrainer')
 
 
@@ -144,9 +146,14 @@ class SeedRLTrainer:
         self._last_ppo_seconds = 0.0
         self._last_ppo_steps = 0
         self._traj_overflow = []
-        self._action_names = ['fold', 'call', 'small_raise', 'mid_raise', 'large_raise', 'overbet', 'allin']
-        self._train_action_counts = np.zeros(7, dtype=np.int64)
-        self._last_metric_action_counts = np.zeros(7, dtype=np.int64)
+        self._action_names = ACTION_NAMES
+        self._train_action_counts = np.zeros(ACTION_DIM, dtype=np.int64)
+        self._last_metric_action_counts = np.zeros(ACTION_DIM, dtype=np.int64)
+        self._position_names = ['BTN', 'SB', 'BB', 'UTG', 'MP', 'CO']
+        self._position_profit_sum = np.zeros(6, dtype=np.float64)
+        self._position_hand_counts = np.zeros(6, dtype=np.int64)
+        self._last_metric_position_profit_sum = np.zeros(6, dtype=np.float64)
+        self._last_metric_position_hand_counts = np.zeros(6, dtype=np.int64)
 
         os.makedirs(checkpoint_dir, exist_ok=True)
         metrics_dir = os.path.dirname(self.metrics_output)
@@ -176,13 +183,41 @@ class SeedRLTrainer:
             for i, name in enumerate(self._action_names)
         }
 
+    def _record_result_stats(self, res: Dict) -> None:
+        """Aggregate per-hand diagnostics without retaining every hand result."""
+        pos_idx = res.get('hero_position_index')
+        try:
+            pos_idx = int(pos_idx)
+        except (TypeError, ValueError):
+            pos_idx = None
+        if pos_idx is None or not (0 <= pos_idx < len(self._position_names)):
+            return
+
+        profits = res.get('player_profits', {})
+        profit = profits.get('Main_AI', profits.get('Player_0', 0.0))
+        self._position_profit_sum[pos_idx] += float(profit)
+        self._position_hand_counts[pos_idx] += 1
+
+    def _position_profit_summary(self, profit_sum: np.ndarray, hand_counts: np.ndarray) -> Dict[str, Dict[str, float]]:
+        summary = {}
+        bb = max(float(self.big_blind), 1.0)
+        for i, name in enumerate(self._position_names):
+            hands = int(hand_counts[i])
+            profit = float(profit_sum[i])
+            summary[name] = {
+                "hands": hands,
+                "avg_profit": profit / max(hands, 1),
+                "bb_per_100": (profit / bb) * 100.0 / max(hands, 1),
+            }
+        return summary
+
     def _append_completed_trajectory(
         self, res: Dict, traj: Dict, traj_buffer: Dict, results_buffer: List
     ) -> bool:
         """Append a whole completed hand without splitting it across PPO updates."""
         n_steps = len(traj.get('states', []))
         if n_steps <= 0:
-            results_buffer.append(res)
+            self._record_result_stats(res)
             return True
 
         cur_steps = len(traj_buffer.get('states', []))
@@ -194,7 +229,7 @@ class SeedRLTrainer:
                 "将允许本轮超限以避免切断 episode"
             )
 
-        results_buffer.append(res)
+        self._record_result_stats(res)
         for k in ('states', 'actions', 'old_probs'):
             traj_buffer[k].extend(traj.get(k, []))
         dones = [0.0] * n_steps
@@ -487,8 +522,10 @@ class SeedRLTrainer:
         wins, total_profit = 0, 0.0
         invalid_bets = 0
         total_actions = 0
+        truncated_hands = 0
+        max_actions_per_hand = 256
         # 行动分布统计（用于诊断弃牌机器人）
-        action_counts = [0, 0, 0, 0, 0, 0, 0]  # fold, call, small_raise, mid_raise, large_raise, overbet, allin
+        action_counts = [0] * ACTION_DIM
 
         try:
             for _ in range(num_games):
@@ -499,7 +536,22 @@ class SeedRLTrainer:
                 game.dealer_pos = np.random.randint(6)
                 game.start_new_hand()
 
+                hand_actions = 0
                 while not game.is_hand_over():
+                    hand_actions += 1
+                    if hand_actions > max_actions_per_hand:
+                        truncated_hands += 1
+                        invalid_bets += 1
+                        players_e[0].is_active = False
+                        alive = [p for p in players_e if p.is_active]
+                        if alive and game.pot > 0:
+                            game._award_pot(alive[0])
+                        logger.warning(
+                            f"[评估:{opponent_policy}] 单手超过 {max_actions_per_hand} 次动作，"
+                            "已强制结束以避免评估卡死"
+                        )
+                        break
+
                     if game.is_round_over():
                         # proceed_to_next_round 返回 True = 手牌结束（摊牌或只剩1人）
                         # 返回 False = 仅进入下一轮（flop/turn/river），手牌继续
@@ -520,7 +572,7 @@ class SeedRLTrainer:
                         # 确定性策略：取概率最高的合法动作（argmax）
                         ai = int(np.argmax(mp_))
                         action_counts[ai] += 1
-                        av = np.zeros(7, dtype=np.float32)
+                        av = np.zeros(ACTION_DIM, dtype=np.float32)
                         av[ai] = 1.0
                         hs = sr.calculate_hand_strength(cp, game)
                         act, amt = sr.decode_action(av, game, cp, hs)
@@ -538,7 +590,7 @@ class SeedRLTrainer:
                         s = float(np.sum(mp_))
                         mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
                         ai = int(np.argmax(mp_))
-                        av = np.zeros(7, dtype=np.float32)
+                        av = np.zeros(ACTION_DIM, dtype=np.float32)
                         av[ai] = 1.0
                         hs = sr.calculate_hand_strength(cp, game)
                         act, amt = sr.decode_action(av, game, cp, hs)
@@ -548,8 +600,8 @@ class SeedRLTrainer:
                         # 对手随机
                         lm = _legal_mask(game, cp)
                         p = lm / (np.sum(lm) + 1e-8)
-                        ai = int(np.random.choice(7, p=p))
-                        av = np.zeros(7, dtype=np.float32)
+                        ai = int(np.random.choice(ACTION_DIM, p=p))
+                        av = np.zeros(ACTION_DIM, dtype=np.float32)
                         av[ai] = 1.0
                         hs = sr.calculate_hand_strength(cp, game)
                         act, amt = sr.decode_action(av, game, cp, hs)
@@ -572,12 +624,12 @@ class SeedRLTrainer:
                 np.random.set_state(np_state)
 
         # 行动分布日志：帮助诊断弃牌机器人问题
-        action_names = ['fold', 'call', 'small_raise', 'mid_raise', 'large_raise', 'overbet', 'allin']
+        action_names = ACTION_NAMES
         action_distribution = {}
         if total_actions > 0:
             action_distribution = {
                 action_names[i]: action_counts[i] / total_actions
-                for i in range(7)
+                for i in range(ACTION_DIM)
             }
             dist_str = ', '.join(
                 f"{name}={value:.1%}"
@@ -600,6 +652,8 @@ class SeedRLTrainer:
             'total_games': num_games,
             'opponent_policy': opponent_policy,
             'seed': seed,
+            'truncated_hands': truncated_hands,
+            'truncated_hand_rate': truncated_hands / max(num_games, 1),
         }
 
     def _run_evaluation_suite(self, num_games: int = 100, seed: Optional[int] = None) -> Dict:
@@ -788,8 +842,12 @@ class SeedRLTrainer:
 
         self.num_hands_target = num_hands
         self._traj_overflow = []
-        self._train_action_counts = np.zeros(7, dtype=np.int64)
-        self._last_metric_action_counts = np.zeros(7, dtype=np.int64)
+        self._train_action_counts = np.zeros(ACTION_DIM, dtype=np.int64)
+        self._last_metric_action_counts = np.zeros(ACTION_DIM, dtype=np.int64)
+        self._position_profit_sum = np.zeros(6, dtype=np.float64)
+        self._position_hand_counts = np.zeros(6, dtype=np.int64)
+        self._last_metric_position_profit_sum = np.zeros(6, dtype=np.float64)
+        self._last_metric_position_hand_counts = np.zeros(6, dtype=np.int64)
 
         logger.info(
             f"[SEED RL] 训练开始: num_hands={num_hands}, "
@@ -901,9 +959,20 @@ class SeedRLTrainer:
             cumulative_action_dist = self._action_distribution(self._train_action_counts)
             interval_action_counts = self._train_action_counts - self._last_metric_action_counts
             interval_action_dist = self._action_distribution(interval_action_counts)
+            cumulative_position_profit = self._position_profit_summary(
+                self._position_profit_sum, self._position_hand_counts
+            )
+            interval_position_profit = self._position_profit_summary(
+                self._position_profit_sum - self._last_metric_position_profit_sum,
+                self._position_hand_counts - self._last_metric_position_hand_counts,
+            )
             interval_action_summary = ", ".join(
                 f"{name}={interval_action_dist[name]:.1%}"
                 for name in self._action_names
+            )
+            interval_position_summary = ", ".join(
+                f"{name}={interval_position_profit[name]['bb_per_100']:.1f}bb/100"
+                for name in self._position_names
             )
             logger.info(
                 f"[SEED RL] hands={self.total_hands}/{num_hands}, "
@@ -911,7 +980,8 @@ class SeedRLTrainer:
                 f"速度={hps:.1f} hands/s, 区间速度={interval_hps:.1f} hands/s, "
                 f"推理batch均值={avg_batch:.1f}, PPO耗时={self._last_ppo_seconds:.3f}s, "
                 f"KL={getattr(self.model, 'last_kl', 0.0):.4f}, "
-                f"区间动作=[{interval_action_summary}]"
+                f"区间动作=[{interval_action_summary}], "
+                f"位置收益=[{interval_position_summary}]"
             )
             self._write_metric(
                 "ppo_update",
@@ -935,8 +1005,12 @@ class SeedRLTrainer:
                 opponent_types=list(self.opp_type_list),
                 train_action_distribution=cumulative_action_dist,
                 train_action_distribution_interval=interval_action_dist,
+                position_profit=cumulative_position_profit,
+                position_profit_interval=interval_position_profit,
             )
             self._last_metric_action_counts = self._train_action_counts.copy()
+            self._last_metric_position_profit_sum = self._position_profit_sum.copy()
+            self._last_metric_position_hand_counts = self._position_hand_counts.copy()
             last_metric_time = now
             last_metric_hands = self.total_hands
 
@@ -988,7 +1062,8 @@ class SeedRLTrainer:
                         f"胜率={eval_res['win_rate']:.3f}, "
                         f"平均收益={score:.2f}, "
                         f"bb/100={eval_res.get('bb_per_100', 0.0):.1f}, "
-                        f"无效下注率={eval_res['invalid_bet_rate']:.3f}"
+                        f"无效下注率={eval_res['invalid_bet_rate']:.3f}, "
+                        f"截断率={eval_res.get('truncated_hand_rate', 0.0):.3f}"
                     )
                     self._write_metric(
                         "evaluation",
@@ -997,6 +1072,8 @@ class SeedRLTrainer:
                         avg_profit=float(eval_res["avg_profit"]),
                         bb_per_100=float(eval_res.get("bb_per_100", 0.0)),
                         invalid_bet_rate=float(eval_res["invalid_bet_rate"]),
+                        truncated_hand_rate=float(eval_res.get("truncated_hand_rate", 0.0)),
+                        truncated_hands=int(eval_res.get("truncated_hands", 0)),
                         action_distribution=eval_res.get("action_distribution", {}),
                         evaluations=eval_res.get("evaluations", {}),
                         primary_opponent_policy=eval_res.get("primary_opponent_policy"),

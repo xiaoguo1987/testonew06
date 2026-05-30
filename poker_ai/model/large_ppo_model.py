@@ -17,6 +17,7 @@ from tensorflow.keras import layers, models
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.mixed_precision import LossScaleOptimizer
 from ..config.ppo_config import PPOConfig, DEFAULT_PPO_CONFIG
+from ..action_space import ACTION_DIM
 
 logger = logging.getLogger('LargePPOModel')
 
@@ -42,7 +43,7 @@ class LargePPOModel:
     def __init__(
         self,
         input_dim: Optional[int] = None,
-        output_dim: int = 7,
+        output_dim: Optional[int] = None,
         hidden_dims: Optional[List[int]] = None,
         residual_layer_idx: int = 1,
         lr: Optional[float] = None,
@@ -56,7 +57,7 @@ class LargePPOModel:
     ):
         cfg = config or DEFAULT_PPO_CONFIG
         self.input_dim = input_dim if input_dim is not None else cfg.input_dim
-        self.output_dim = output_dim
+        self.output_dim = output_dim if output_dim is not None else getattr(cfg, 'output_dim', ACTION_DIM)
         self.hidden_dims = hidden_dims or getattr(cfg, 'hidden_dims', [2048, 2048, 1024, 512])
         self.residual_layer_idx = residual_layer_idx
 

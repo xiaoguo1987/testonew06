@@ -16,6 +16,16 @@
 
 namespace py = pybind11;
 
+static constexpr int ACTION_DIM = 12;
+static constexpr int ALLIN_ACTION_INDEX = ACTION_DIM - 1;
+static constexpr int RAISE_ACTION_START = 2;
+static constexpr std::array<float, 9> PREFLOP_RAISE_MULTIPLIERS = {
+    2.25f, 2.5f, 3.0f, 3.5f, 4.0f, 5.0f, 6.0f, 8.0f, 10.0f
+};
+static constexpr std::array<float, 9> POSTFLOP_POT_FRACTIONS = {
+    0.25f, 0.33f, 0.50f, 0.66f, 0.75f, 1.00f, 1.25f, 1.50f, 2.00f
+};
+
 static thread_local std::mt19937 g_rng(std::random_device{}());
 
 // ================================================================
@@ -359,11 +369,11 @@ public:
         return out;
     }
 
-    // ---- legal mask (7 dims) ----
+    // ---- legal mask (12 dims) ----
     py::array_t<float> get_legal_mask(int pi) const {
-        auto out = py::array_t<float>(7);
+        auto out = py::array_t<float>(ACTION_DIM);
         float* m = out.mutable_data();
-        std::memset(m, 0, 7*sizeof(float));
+        std::memset(m, 0, ACTION_DIM*sizeof(float));
         if (!active_[pi]||allin_[pi]) { m[0]=1.f; return out; }
         int ca = std::max(0, cbet_-bets_[pi]);
         m[0]=1.f;
@@ -372,25 +382,21 @@ public:
         int mr=std::max(cbet_*2,bb_);
         int ai=bets_[pi]+stacks_[pi];
         if (bcnt_==0) { // preflop
-            int r25 = (int)(cb * 2.5f);
-            int r3  = cb * 3;
-            int r4  = cb * 4;
-            if (r25>cbet_&&r25>=mr&&(r25-bets_[pi])<=stacks_[pi]) m[2]=1.f;
-            if (r3 >cbet_&&r3 >=mr&&(r3 -bets_[pi])<=stacks_[pi]) m[3]=1.f;
-            if (r4 >cbet_&&r4 >=mr&&(r4 -bets_[pi])<=stacks_[pi]) m[4]=1.f;
-            m[5]=0.f; // overbet illegal preflop
+            for (size_t i=0; i<PREFLOP_RAISE_MULTIPLIERS.size(); i++) {
+                int bet = (int)(cb * PREFLOP_RAISE_MULTIPLIERS[i]);
+                int aidx = RAISE_ACTION_START + (int)i;
+                if (bet>cbet_&&bet>=mr&&(bet-bets_[pi])<=stacks_[pi]) m[aidx]=1.f;
+            }
         } else { // postflop
-            int r_s = cb + pot_/3;
-            int r_m = cb + pot_*2/3;
-            int r_l = cb + pot_;
-            int r_o = cb + (int)(pot_*1.5f);
-            if (r_s>cbet_&&r_s>=mr&&(r_s-bets_[pi])<=stacks_[pi]) m[2]=1.f;
-            if (r_m>cbet_&&r_m>=mr&&(r_m-bets_[pi])<=stacks_[pi]) m[3]=1.f;
-            if (r_l>cbet_&&r_l>=mr&&(r_l-bets_[pi])<=stacks_[pi]) m[4]=1.f;
-            if (r_o>cbet_&&r_o>=mr&&(r_o-bets_[pi])<=stacks_[pi]) m[5]=1.f;
+            int pot = std::max(pot_, bb_);
+            for (size_t i=0; i<POSTFLOP_POT_FRACTIONS.size(); i++) {
+                int bet = cb + (int)(pot * POSTFLOP_POT_FRACTIONS[i]);
+                int aidx = RAISE_ACTION_START + (int)i;
+                if (bet>cbet_&&bet>=mr&&(bet-bets_[pi])<=stacks_[pi]) m[aidx]=1.f;
+            }
         }
-        if (ai>cbet_&&ai>=mr&&stacks_[pi]>0) m[6]=1.f;
-        float s=0; for(int i=0;i<7;i++) s+=m[i];
+        if (ai>cbet_&&ai>=mr&&stacks_[pi]>0) m[ALLIN_ACTION_INDEX]=1.f;
+        float s=0; for(int i=0;i<ACTION_DIM;i++) s+=m[i];
         if (s<=0) { m[0]=1.f; if (ca<=stacks_[pi]) m[1]=1.f; }
         return out;
     }
@@ -503,18 +509,18 @@ static py::tuple decode_action_fn(int aidx, int cbet, int bb, int pbet, int psta
     if (aidx==1) { int ca=std::max(0,cbet-pbet); return py::make_tuple("call",ca); }
     int cb=std::max(cbet,bb);
     int max_amt = pbet + pstack;
-    if (round==1) { // preflop
-        if (aidx==2) { int a=std::min((int)(cb*2.5f), max_amt); return py::make_tuple("raise",a); }
-        if (aidx==3) { int a=std::min(cb*3, max_amt); return py::make_tuple("raise",a); }
-        if (aidx==4) { int a=std::min(cb*4, max_amt); return py::make_tuple("raise",a); }
-        if (aidx==5) return py::make_tuple("fold", 0); // defensive fallback
-    } else { // postflop
-        if (aidx==2) { int a=std::min(cb + pot/3, max_amt); return py::make_tuple("raise",a); }
-        if (aidx==3) { int a=std::min(cb + pot*2/3, max_amt); return py::make_tuple("raise",a); }
-        if (aidx==4) { int a=std::min(cb + pot, max_amt); return py::make_tuple("raise",a); }
-        if (aidx==5) { int a=std::min(cb + (int)(pot*1.5f), max_amt); return py::make_tuple("raise",a); }
+    if (aidx>=RAISE_ACTION_START && aidx<ALLIN_ACTION_INDEX) {
+        int bucket = aidx - RAISE_ACTION_START;
+        int a = 0;
+        if (round==1) {
+            a = (int)(cb * PREFLOP_RAISE_MULTIPLIERS[bucket]);
+        } else {
+            int pot_base = std::max(pot, bb);
+            a = cb + (int)(pot_base * POSTFLOP_POT_FRACTIONS[bucket]);
+        }
+        return py::make_tuple("raise", std::min(a, max_amt));
     }
-    if (aidx==6) return py::make_tuple("raise", max_amt); // allin
+    if (aidx==ALLIN_ACTION_INDEX) return py::make_tuple("raise", max_amt); // allin
     return py::make_tuple("fold", 0);
 }
 

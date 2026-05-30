@@ -7,6 +7,13 @@ from typing import List, Dict, Optional
 from ..game.cards import Card, RANK_VALUES
 from ..game.poker_game import Player, PokerGame
 from ..model.hand_evaluator import HandEvaluator
+from ..action_space import (
+    ACTION_DIM,
+    ALLIN_ACTION_INDEX,
+    POSTFLOP_POT_FRACTIONS,
+    PREFLOP_RAISE_MULTIPLIERS,
+    RAISE_ACTION_START,
+)
 
 # ---- 翻牌前胜率查找表 (LUT) 共享单例 ----
 _PREFLOP_LUT: Optional[Dict] = None
@@ -240,48 +247,52 @@ class StateRepresentation:
         return strength
 
     def encode_action(self, action: str, amount: Optional[int] = None, game: Optional[PokerGame] = None) -> np.ndarray:
-        action_vector = np.zeros(7)
+        action_vector = np.zeros(ACTION_DIM)
         if action == 'fold':
             action_vector[0] = 1
         elif action == 'call':
             action_vector[1] = 1
         elif action == 'raise' and game is not None:
+            if amount is not None and game is not None:
+                stacks = getattr(game, 'player_stacks', None)
+                try:
+                    current_player = game.players[game.current_player_idx]
+                    player_idx = game.players.index(current_player)
+                    player_bet = (
+                        int(game.player_bets[player_idx])
+                        if hasattr(game, 'player_bets')
+                        else current_player.bet
+                    )
+                    player_stack = (
+                        int(stacks[player_idx])
+                        if stacks is not None
+                        else current_player.stack
+                    )
+                    if amount >= player_bet + player_stack:
+                        action_vector[ALLIN_ACTION_INDEX] = 1
+                        return action_vector
+                except Exception:
+                    pass
+
             if game.round == 1:
                 # 翻牌前: 按 base 倍数分类
                 base = max(game.current_bet, game.big_blind)
                 if amount is None:
-                    action_vector[2] = 1
+                    action_vector[RAISE_ACTION_START] = 1
                     return action_vector
                 ratio = amount / base if base > 0 else 0
-                if ratio <= 2.75:
-                    action_vector[2] = 1
-                elif ratio <= 3.5:
-                    action_vector[3] = 1
-                elif ratio <= 5.0:
-                    action_vector[4] = 1
-                else:
-                    action_vector[6] = 1
+                idx = int(np.argmin(np.abs(np.asarray(PREFLOP_RAISE_MULTIPLIERS) - ratio)))
+                action_vector[RAISE_ACTION_START + idx] = 1
             else:
                 # 翻牌后: 按 pot 比例分类
                 cb = max(game.current_bet, game.big_blind)
-                pot = game.pot
+                pot = max(game.pot, game.big_blind)
                 if amount is None:
-                    action_vector[2] = 1
+                    action_vector[RAISE_ACTION_START] = 1
                     return action_vector
-                threshold_2 = cb + pot / 3
-                threshold_3 = cb + pot * 2 / 3
-                threshold_4 = cb + pot
-                threshold_5 = cb + pot * 1.5
-                if amount <= threshold_2 * 1.1:
-                    action_vector[2] = 1
-                elif amount <= threshold_3 * 1.1:
-                    action_vector[3] = 1
-                elif amount <= threshold_4 * 1.1:
-                    action_vector[4] = 1
-                elif amount <= threshold_5 * 1.1:
-                    action_vector[5] = 1
-                else:
-                    action_vector[6] = 1
+                ratio = max(0.0, (amount - cb) / pot)
+                idx = int(np.argmin(np.abs(np.asarray(POSTFLOP_POT_FRACTIONS) - ratio)))
+                action_vector[RAISE_ACTION_START + idx] = 1
         return action_vector
 
     def decode_action(self, action_vector: np.ndarray, game: PokerGame, player: Player, hand_strength: float = 0.0) -> tuple:
@@ -292,44 +303,20 @@ class StateRepresentation:
         elif action_idx == 1:
             call_amount = max(0, game.current_bet - player.bet)
             return ('call', call_amount)
-        elif action_idx == 2:
+        elif RAISE_ACTION_START <= action_idx < ALLIN_ACTION_INDEX:
             cb = max(game.current_bet, game.big_blind)
+            bucket_idx = action_idx - RAISE_ACTION_START
             if game.round == 1:
-                amt = min(int(cb * 2.5), player.bet + player.stack)
+                amt = int(cb * PREFLOP_RAISE_MULTIPLIERS[bucket_idx])
             else:
-                amt = min(int(cb + game.pot / 3), player.bet + player.stack)
-            if amt < game.current_bet:
+                pot = max(game.pot, game.big_blind)
+                amt = int(cb + pot * POSTFLOP_POT_FRACTIONS[bucket_idx])
+            amt = min(amt, player.bet + player.stack)
+            min_raise = max(game.current_bet * 2, game.big_blind)
+            if amt <= game.current_bet or amt < min_raise:
                 return ('call', max(0, game.current_bet - player.bet))
             return ('raise', int(amt))
-        elif action_idx == 3:
-            cb = max(game.current_bet, game.big_blind)
-            if game.round == 1:
-                amt = min(int(cb * 3), player.bet + player.stack)
-            else:
-                amt = min(int(cb + game.pot * 2 / 3), player.bet + player.stack)
-            if amt < game.current_bet:
-                return ('call', max(0, game.current_bet - player.bet))
-            return ('raise', int(amt))
-        elif action_idx == 4:
-            cb = max(game.current_bet, game.big_blind)
-            if game.round == 1:
-                amt = min(int(cb * 4), player.bet + player.stack)
-            else:
-                amt = min(int(cb + game.pot), player.bet + player.stack)
-            if amt < game.current_bet:
-                return ('call', max(0, game.current_bet - player.bet))
-            return ('raise', int(amt))
-        elif action_idx == 5:
-            cb = max(game.current_bet, game.big_blind)
-            if game.round == 1:
-                # 翻牌前理论上被 mask 掉不会走到，防御处理返回 allin
-                amt = player.bet + player.stack
-            else:
-                amt = min(int(cb + game.pot * 1.5), player.bet + player.stack)
-            if amt < game.current_bet:
-                return ('call', max(0, game.current_bet - player.bet))
-            return ('raise', int(amt))
-        elif action_idx == 6:
+        elif action_idx == ALLIN_ACTION_INDEX:
             amt = player.bet + player.stack
             if amt < game.current_bet:
                 return ('call', max(0, game.current_bet - player.bet))
