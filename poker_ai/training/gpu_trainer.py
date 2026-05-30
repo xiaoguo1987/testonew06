@@ -138,6 +138,7 @@ class SeedRLTrainer:
         os.makedirs(self._archive_dir, exist_ok=True)
 
         self._latest_win_rate = 0.5  # 最近一次评估胜率，用于安全阀判断
+        self._latest_eval_bb_per_100 = 0.0  # 德扑收益比单纯胜率更重要
         self._low_win_eval_streak = 0  # 连续低胜率评估次数，避免一次噪声评估触发长期降级
 
         # 推理与训练诊断计数器，写入 metrics.jsonl 供 agent 分析。
@@ -751,11 +752,12 @@ class SeedRLTrainer:
         如果对手池为空或加载失败，回退到同步当前模型权重。
         """
         wr = self._latest_win_rate
+        bb100 = self._latest_eval_bb_per_100
         low_streak = self._low_win_eval_streak
         normal_config = self._curriculum_opp_configs[min(self._curriculum_phase, 2)]
 
         # 安全阀 1: 连续低胜率时才临时降级，避免单次评估噪声长期削弱对手池
-        if low_streak >= 3 and wr < 0.2 and self._curriculum_phase >= 2:
+        if low_streak >= 3 and wr < 0.2 and bb100 < 0.0 and self._curriculum_phase >= 2:
             degraded = ['ppo', 'fish', 'fish', 'fish', 'fish']
             if self.opp_type_list != degraded:
                 self.opp_type_list = degraded
@@ -766,7 +768,7 @@ class SeedRLTrainer:
             return  # 降级后不更新对手权重
 
         # 安全阀 2: 连续偏低时冻结对手池更新，但不立刻削弱对手配置
-        if low_streak >= 2 and wr < 0.25:
+        if low_streak >= 2 and wr < 0.25 and bb100 < 0.0:
             logger.info(
                 f"[安全阀] 连续胜率偏低({low_streak}次, 最新{wr:.3f}<0.25)，冻结对手池更新"
             )
@@ -1162,13 +1164,15 @@ class SeedRLTrainer:
                         best_score=float(self.best_score) if math.isfinite(self.best_score) else None,
                     )
                     self._latest_win_rate = eval_res['win_rate']
-                    if self._latest_win_rate < 0.25:
+                    self._latest_eval_bb_per_100 = float(eval_res.get("bb_per_100", 0.0))
+                    if self._latest_win_rate < 0.25 and self._latest_eval_bb_per_100 < 0.0:
                         self._low_win_eval_streak += 1
-                    elif self._latest_win_rate >= 0.30:
+                    elif self._latest_win_rate >= 0.30 or self._latest_eval_bb_per_100 >= 0.0:
                         self._low_win_eval_streak = 0
                     logger.info(
                         f"[安全阀] 低胜率评估连续次数={self._low_win_eval_streak}, "
-                        f"latest_win_rate={self._latest_win_rate:.3f}"
+                        f"latest_win_rate={self._latest_win_rate:.3f}, "
+                        f"latest_bb_per_100={self._latest_eval_bb_per_100:.1f}"
                     )
                     if score > self.best_score and eval_res['invalid_bet_rate'] < 0.5:
                         self.best_score = score

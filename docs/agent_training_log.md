@@ -218,6 +218,25 @@ agent_training_log.md
 - Fix: add a minimum curriculum start phase.  Historical-pool continuation can
   now start at Phase2 and immediately load an opponent from the historical pool.
 
+### 2026-05-30 Phase2 historical-pool restart checkpoint
+
+- Run: `/root/testo-seed-rl/runs/seed_histpool_phase2_1m_from500k_20260530_231522`
+- Startup confirmed:
+  - `curriculum_start_phase=2`
+  - `min_phase=Phase2`
+  - historical opponent loaded at startup: `seed_rl_hands_1000054`
+- First evaluation improved materially over the Phase1-biased run:
+  - 700,016 hands: win rate 19.2%, bb/100 -101.6, invalid 0.05%,
+    truncated 0.10%
+- Second evaluation was profitable but had low hand win rate:
+  - 900,022 hands: win rate 18.7%, bb/100 +460.1, invalid 0.00%,
+    truncated 0.00%
+- Diagnosis: the old safety valve only tracked win rate, so it froze opponent
+  updates even when bb/100 was positive.  For poker training this is wrong
+  because a strategy can lose more hands than it wins while still winning chips.
+- Fix: safety-valve low-win streak now requires both low win rate and negative
+  bb/100; positive bb/100 clears the streak.
+
 ## Next Work Queue
 
 - Restart a 1M historical-pool stage from the 500k checkpoint with
