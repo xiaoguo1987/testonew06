@@ -326,6 +326,18 @@ agent_training_log.md
   directory.
 - Fix: score-file opponent paths are now inserted into `_opponent_pool` during
   training startup, and startup logs report `score_file+N`.
+- Validation run:
+  `/root/testo-seed-rl/runs/seed_hardopp_poolfix_50k_from600k_20260531_001222`
+  loaded `score_file+10` and sampled matrix opponent `seed_rl_hands_700016`,
+  confirming the pool loading fix works.
+- Validation matrix:
+  `/root/testo-seed-rl/runs/seed_pool_eval_650k_poolfix_20260531_001445`
+  did not pass acceptance.  It improved `seed_rl_hands_1000054` to positive,
+  but regressed `seed_rl_hands_1500036` and `seed_rl_hands_1000262`; average was
+  roughly -11 bb/100.
+- Current best candidate remains `seed_rl_hands_600047` from
+  `/root/testo-seed-rl/runs/seed_hardopp_phase2_100k_from500k_20260530_235204`.
+  Do not continue from 650k without a better multi-target weighting scheme.
 
 ## Next Work Queue
 
