@@ -787,14 +787,25 @@ class SeedRLTrainer:
             self.opp_model.set_weights(self.model.get_weights())
             return
 
-        # 加权抽取：最近的版本被抽中概率更高
-        pool_size = len(self._opponent_pool)
+        # 加权抽取：最近的版本被抽中概率更高。恢复训练时优先排除
+        # 当前 base checkpoint，避免把历史池训练退化为镜像自对弈。
+        candidates = list(self._opponent_pool)
+        if self._loaded_checkpoint_path and len(candidates) > 1:
+            loaded_abs = os.path.abspath(self._loaded_checkpoint_path)
+            non_current = [
+                p for p in candidates
+                if os.path.abspath(p) != loaded_abs
+            ]
+            if non_current:
+                candidates = non_current
+
+        pool_size = len(candidates)
         if pool_size >= 3 and random.random() < 0.7:
             # 70% 概率从最近 3 个中抽
-            chosen = random.choice(self._opponent_pool[-3:])
+            chosen = random.choice(candidates[-3:])
         else:
             # 30% 概率从全池中抽
-            chosen = random.choice(self._opponent_pool)
+            chosen = random.choice(candidates)
 
         try:
             self.opp_model.load_weights(chosen)

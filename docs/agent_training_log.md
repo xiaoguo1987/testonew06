@@ -236,6 +236,8 @@ agent_training_log.md
   because a strategy can lose more hands than it wins while still winning chips.
 - Fix: safety-valve low-win streak now requires both low win rate and negative
   bb/100; positive bb/100 clears the streak.
+- Follow-up fix: opponent-pool sampling now avoids selecting the exact base
+  checkpoint being resumed from when other historical checkpoints are available.
 
 ## Next Work Queue
 
