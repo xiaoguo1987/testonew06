@@ -117,6 +117,24 @@ agent_training_log.md
   stage, initialize interval cursors from the resumed hand count, and calculate
   curriculum progress from this stage's newly generated hands.
 
+### 2026-05-30 stopped fixed resume stability run
+
+- Run: `/root/testo-seed-rl/runs/seed_stability_200k_from500k_fixed_20260530_171425`
+- Stopped at the first evaluation:
+  - hands 600,291
+  - opponent-model bb/100 -47.3
+  - invalid bet rate 0.58%
+  - truncated hand rate 1.10%
+  - KL median 0.0945, p95 0.1816, max 0.2235
+  - cumulative action mix: call 51.86%, all-in 10.87%
+- Takeaway: resume accounting is fixed and PPO stability is acceptable, but
+  opponent-model evaluation is still too brittle.  The likely cause is
+  deterministic argmax evaluation against a mirrored/stale model, which can
+  create repeated low-pressure check/call states.
+- Fix in progress: load historical checkpoints from the external source run into
+  the opponent pool, avoid phase-switch mirror sync when history exists, and use
+  low-temperature model-action sampling for opponent-model evaluation.
+
 ## Codex Notes
 
 - Do not optimize toward a fixed all-in frequency.  All-in should be

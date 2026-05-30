@@ -131,6 +131,7 @@ class SeedRLTrainer:
         # 保存历史 checkpoint 路径，对手更新时随机抽取（近期权重更高）
         self._opponent_pool: List[str] = []  # 可用的历史 checkpoint 路径列表
         self._opponent_pool_max_size = 20    # 对手池最大容量
+        self._loaded_checkpoint_path: Optional[str] = None
         self._archive_dir = '/root/autodl-tmp/poker_checkpoints'  # 数据盘归档目录
         self._max_keep_local = 30  # 本地保留最近30个 checkpoint
         os.makedirs(self._archive_dir, exist_ok=True)
@@ -288,10 +289,14 @@ class SeedRLTrainer:
                 f"hands={self.total_hands}, run_hands={run_hands}, progress={progress:.1%}, "
                 f"opp_types={self.opp_type_list}, opp_interval={self._get_dynamic_opp_interval()}"
             )
-            # 阶段切换时立刻同步一次对手权重（如果新阶段包含 PPO 对手）
+            # 阶段切换时引入历史对手；没有历史池时才退回镜像同步。
             if new_phase >= 1:
-                self.opp_model.set_weights(self.model.get_weights())
-                logger.info(f"[SEED RL] 阶段切换时同步对手权重")
+                if self._opponent_pool:
+                    self._update_opponent_from_pool()
+                    logger.info("[SEED RL] 阶段切换时加载历史对手权重")
+                else:
+                    self.opp_model.set_weights(self.model.get_weights())
+                    logger.info("[SEED RL] 阶段切换时同步对手权重（无历史池回退）")
 
     # ------------------------------------------------------------------
     #  推理调度
@@ -497,6 +502,38 @@ class SeedRLTrainer:
     #  评估
     # ------------------------------------------------------------------
 
+    def _select_eval_action(
+        self,
+        probs: np.ndarray,
+        legal_mask: np.ndarray,
+        stochastic: bool,
+        temperature: float = 0.5,
+        epsilon: float = 0.02,
+    ) -> int:
+        masked = np.asarray(probs, dtype=np.float64) * np.asarray(legal_mask, dtype=np.float64)
+        legal = np.asarray(legal_mask, dtype=np.float64) > 0
+        if not np.any(legal):
+            return 0
+        total = float(masked.sum())
+        if total <= 1e-8:
+            masked = legal.astype(np.float64)
+            total = float(masked.sum())
+        dist = masked / max(total, 1e-8)
+        if not stochastic:
+            return int(np.argmax(dist))
+
+        temp = max(float(temperature), 1e-3)
+        logits = np.full_like(dist, -1e9, dtype=np.float64)
+        logits[legal] = np.log(np.clip(dist[legal], 1e-8, 1.0)) / temp
+        logits -= np.max(logits[legal])
+        sampled = np.zeros_like(dist, dtype=np.float64)
+        sampled[legal] = np.exp(logits[legal])
+        sampled /= max(float(sampled.sum()), 1e-8)
+        legal_uniform = legal.astype(np.float64) / max(float(np.sum(legal)), 1.0)
+        sampled = (1.0 - epsilon) * sampled + epsilon * legal_uniform
+        sampled /= max(float(sampled.sum()), 1e-8)
+        return int(np.random.choice(ACTION_DIM, p=sampled))
+
     def _run_evaluation(
         self,
         num_games: int = 100,
@@ -507,7 +544,8 @@ class SeedRLTrainer:
 
         修复说明：
         1. 移除 _preflop_filter：评估应反映模型真实输出，不叠加翻牌前过滤偏差
-        2. 改用 argmax（确定性策略）：评估时取概率最高的动作，而非随机采样
+        2. 随机对手评估使用主模型 argmax；模型对手评估使用低温采样，
+           避免双方确定性镜像导致 check/call 循环。
         3. 支持固定 seed 与 opponent_model 对手，降低随机鱼对手造成的乐观偏差
         4. 新增行动分布日志：打印 fold/call/raise 比例，便于诊断弃牌机器人问题
         注意：评估在主进程中串行执行（非多进程），保持简洁。
@@ -529,6 +567,7 @@ class SeedRLTrainer:
         max_actions_per_hand = 256
         # 行动分布统计（用于诊断弃牌机器人）
         action_counts = [0] * ACTION_DIM
+        stochastic_model_eval = opponent_policy == "opponent_model"
 
         try:
             for _ in range(num_games):
@@ -573,8 +612,7 @@ class SeedRLTrainer:
                         s = float(np.sum(mp_))
                         # 归一化（不加 _preflop_filter，评估看真实策略）
                         mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
-                        # 确定性策略：取概率最高的合法动作（argmax）
-                        ai = int(np.argmax(mp_))
+                        ai = self._select_eval_action(mp_, lm, stochastic=stochastic_model_eval)
                         action_counts[ai] += 1
                         av = np.zeros(ACTION_DIM, dtype=np.float32)
                         av[ai] = 1.0
@@ -593,7 +631,7 @@ class SeedRLTrainer:
                         mp_ = ap * lm
                         s = float(np.sum(mp_))
                         mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
-                        ai = int(np.argmax(mp_))
+                        ai = self._select_eval_action(mp_, lm, stochastic=True)
                         av = np.zeros(ACTION_DIM, dtype=np.float32)
                         av[ai] = 1.0
                         hs = sr.calculate_hand_strength(cp, game)
@@ -660,6 +698,7 @@ class SeedRLTrainer:
             'wins': wins,
             'total_games': num_games,
             'opponent_policy': opponent_policy,
+            'selection_policy': "low_temp_sample" if stochastic_model_eval else "main_argmax",
             'seed': seed,
             'truncated_hands': truncated_hands,
             'truncated_hand_rate': truncated_hands / max(num_games, 1),
@@ -685,6 +724,21 @@ class SeedRLTrainer:
     # ------------------------------------------------------------------
     #  Checkpoint
     # ------------------------------------------------------------------
+
+    def _add_checkpoints_to_opponent_pool(self, checkpoint_dir: str) -> int:
+        """Add seed_rl_hands checkpoints from a directory to the opponent pool."""
+        if not checkpoint_dir:
+            return 0
+        pattern = os.path.join(checkpoint_dir, "seed_rl_hands_*.actor.weights.h5")
+        added = 0
+        for idx_file in sorted(glob.glob(pattern))[-self._opponent_pool_max_size:]:
+            base = idx_file.replace(".actor.weights.h5", "")
+            if base not in self._opponent_pool:
+                self._opponent_pool.append(base)
+                added += 1
+        if len(self._opponent_pool) > self._opponent_pool_max_size:
+            self._opponent_pool = self._opponent_pool[-self._opponent_pool_max_size:]
+        return added
 
     def _update_opponent_from_pool(self):
         """从历史对手池中随机抽取一个版本加载到对手模型。
@@ -812,6 +866,7 @@ class SeedRLTrainer:
                 path = os.path.join(self.checkpoint_dir, "seed_rl_best")
         try:
             self.model.load_weights(path)
+            self._loaded_checkpoint_path = path
             logger.info(f"Checkpoint 加载: {path}")
 
             # 从文件名解析 total_hands
@@ -881,14 +936,18 @@ class SeedRLTrainer:
         # 初始化对手模型权重并预热
         self.opp_model.set_weights(self.model.get_weights())
 
-        # 初始化对手池：扫描现有 checkpoint 加入池
-        existing_ckpts = sorted(glob.glob(
-            os.path.join(self.checkpoint_dir, "seed_rl_hands_*.actor.weights.h5")
-        ))
-        for idx_file in existing_ckpts[-self._opponent_pool_max_size:]:
-            self._opponent_pool.append(idx_file.replace(".actor.weights.h5", ""))
+        # 初始化对手池：扫描当前 run 与外部加载 checkpoint 的目录。
+        added_current = self._add_checkpoints_to_opponent_pool(self.checkpoint_dir)
+        added_loaded = 0
+        if self._loaded_checkpoint_path:
+            loaded_dir = os.path.dirname(self._loaded_checkpoint_path)
+            if os.path.abspath(loaded_dir) != os.path.abspath(self.checkpoint_dir):
+                added_loaded = self._add_checkpoints_to_opponent_pool(loaded_dir)
         if self._opponent_pool:
-            logger.info(f"[SEED RL] 对手池已加载 {len(self._opponent_pool)} 个历史版本")
+            logger.info(
+                f"[SEED RL] 对手池已加载 {len(self._opponent_pool)} 个历史版本 "
+                f"(current_dir+{added_current}, loaded_dir+{added_loaded})"
+            )
 
         # 模型预热（主模型 + 对手模型）
         self.model.warmup()
@@ -1093,6 +1152,7 @@ class SeedRLTrainer:
                         action_distribution=eval_res.get("action_distribution", {}),
                         evaluations=eval_res.get("evaluations", {}),
                         primary_opponent_policy=eval_res.get("primary_opponent_policy"),
+                        selection_policy=eval_res.get("selection_policy"),
                         eval_seed=eval_seed,
                         best_score=float(self.best_score) if math.isfinite(self.best_score) else None,
                     )
@@ -1216,5 +1276,6 @@ class SeedRLTrainer:
                 action_distribution=final_eval.get("action_distribution", {}),
                 evaluations=final_eval.get("evaluations", {}),
                 primary_opponent_policy=final_eval.get("primary_opponent_policy"),
+                selection_policy=final_eval.get("selection_policy"),
                 eval_seed=final_seed,
             )
