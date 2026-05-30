@@ -294,6 +294,29 @@ agent_training_log.md
 - Fix: add `curriculum_max_phase` so short repair stages can stay locked in
   Phase2.
 
+### 2026-05-31 Phase2-locked repair comparison
+
+- Run: `/root/testo-seed-rl/runs/seed_hardopp_phase2_100k_from500k_20260530_235204`
+- Setup: base 500k, LR `2e-5`, `CURRICULUM_START_PHASE=2`,
+  `CURRICULUM_MAX_PHASE=2`, hard-opponent temperature 500.
+- Result:
+  - 550,046 eval: +201.7 bb/100
+  - 600,047 eval: +185.4 bb/100
+  - matrix average: about +71 bb/100
+  - worst opponent: `seed_rl_hands_1000054`, about -635 bb/100
+- Takeaway: this is the best candidate so far by matrix average, but it still
+  fails the acceptance rule because the worst matchup remains below -200.
+
+- Follow-up run: `/root/testo-seed-rl/runs/seed_hardopp_phase2_100k_from600k_20260530_235757`
+- Setup: base 600,047, LR `1e-5`, Phase2 locked, score file refreshed from
+  the 600k matrix.
+- Result:
+  - 650,056 eval: -45.7 bb/100
+  - 700,057 eval: -27.1 bb/100
+  - matrix average: about -46 bb/100
+- Takeaway: do not use 700,057 as a base.  Keep 600,047 as the current best
+  candidate while continuing targeted fixes for `seed_rl_hands_1000054`.
+
 ## Next Work Queue
 
 - Restart a 1M historical-pool stage from the 500k checkpoint with
@@ -302,6 +325,8 @@ agent_training_log.md
 - Restart a short hard-opponent repair stage from 500k with LR `2e-5`,
   `CURRICULUM_START_PHASE=2`, `CURRICULUM_MAX_PHASE=2`, and a softer hard
   opponent temperature, then rerun the matrix before extending.
+- Current best candidate: `seed_rl_hands_600047`, but it is not acceptable for
+  delivery until the worst matchup improves.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.
