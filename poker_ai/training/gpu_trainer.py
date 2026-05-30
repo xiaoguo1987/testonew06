@@ -54,8 +54,8 @@ class SeedRLTrainer:
         inference_timeout_s: float = 0.002,  # 推理批量积攒超时（从1ms提升到2ms：给批量更多积攒时间，提高GPU吞吐）
         ppo_buffer_size: int = 4096,
         skip_final_eval: bool = False,
-        allin_eq_threshold: float = 0.65,
-        allin_bonus_cap: float = 0.80,
+        allin_eq_threshold: float = 0.72,
+        allin_bonus_cap: float = 0.25,
         tables_per_worker: int = 8,
         metrics_output: Optional[str] = None,
         eval_seed: Optional[int] = 20260530,
@@ -547,10 +547,11 @@ class SeedRLTrainer:
                         alive = [p for p in players_e if p.is_active]
                         if alive and game.pot > 0:
                             game._award_pot(alive[0])
-                        logger.warning(
-                            f"[评估:{opponent_policy}] 单手超过 {max_actions_per_hand} 次动作，"
-                            "已强制结束以避免评估卡死"
-                        )
+                        if truncated_hands <= 5:
+                            logger.warning(
+                                f"[评估:{opponent_policy}] 单手超过 {max_actions_per_hand} 次动作，"
+                                "已强制结束以避免评估卡死"
+                            )
                         break
 
                     if game.is_round_over():
@@ -639,6 +640,11 @@ class SeedRLTrainer:
             logger.info(f"[评估:{opponent_policy}] 行动分布 (总{total_actions}次): {dist_str}")
         else:
             logger.warning(f"[评估:{opponent_policy}] Main_AI 未执行任何行动，可能存在游戏逻辑问题")
+        if truncated_hands > 0:
+            logger.warning(
+                f"[评估:{opponent_policy}] 共截断 {truncated_hands}/{num_games} 手牌 "
+                f"({truncated_hands / max(num_games, 1):.1%})"
+            )
 
         avg_profit = total_profit / max(num_games, 1)
         bb_per_100 = (avg_profit / max(float(self.big_blind), 1.0)) * 100.0

@@ -253,9 +253,9 @@ def parse_arguments():
     parser.add_argument('--eval-workers', type=int, default=0, help='评估并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--train-workers', type=int, default=0, help='训练采样并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--skip-final-eval', action='store_true', help='训练结束后跳过最终评估（加速）')
-    parser.add_argument('--allin-unlucky-eq-threshold', type=float, default=0.65,
+    parser.add_argument('--allin-unlucky-eq-threshold', type=float, default=0.72,
                         help='all-in 不走运补偿触发阈值（翻牌前/翻牌，若估计胜率高于该值但输掉则补偿）')
-    parser.add_argument('--allin-unlucky-bonus-cap', type=float, default=0.80,
+    parser.add_argument('--allin-unlucky-bonus-cap', type=float, default=0.25,
                         help='all-in 不走运补偿上限')
     parser.add_argument('--cpu-threads', type=int, default=0, help='TensorFlow intra-op 线程数（<=0 自动按CPU核数）')
     parser.add_argument('--tf-inter-op-threads', type=int, default=0, help='TensorFlow inter-op 线程数（<=0 自动）')
@@ -484,8 +484,8 @@ def _train_seed_rl(args):
             inference_max_batch=getattr(args, 'inference_max_batch', 512),
             ppo_buffer_size=getattr(args, 'ppo_buffer_size', 4096),
             skip_final_eval=getattr(args, 'skip_final_eval', False),
-            allin_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
-            allin_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
+            allin_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.72),
+            allin_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.25),
             tables_per_worker=getattr(args, 'tables_per_worker', 8),
             metrics_output=getattr(args, 'metrics_output', None),
         )
@@ -552,8 +552,8 @@ def train_model(args):
                 dqn_replay_updates_per_hand=ov.get('dqn_replay_updates_per_hand', getattr(args, 'dqn_replay_updates_per_hand', 0)),
                 tuning_mode=tuning_mode,
                 skip_final_eval=getattr(args, 'skip_final_eval', False),
-                allin_unlucky_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.65),
-                allin_unlucky_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.80),
+                allin_unlucky_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.72),
+                allin_unlucky_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.25),
                 eval_workers=ov.get('eval_workers', getattr(args, 'eval_workers', 1)),
                 train_workers=ov.get('train_workers', getattr(args, 'train_workers', 1)),
             )

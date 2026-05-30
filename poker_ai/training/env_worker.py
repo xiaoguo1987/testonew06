@@ -28,6 +28,7 @@ from ..action_space import (
     POSTFLOP_POT_FRACTIONS,
     PREFLOP_RAISE_MULTIPLIERS,
     RAISE_ACTION_START,
+    is_allin_bucket_allowed,
 )
 
 # ---- C++ 引擎 (可选) ----
@@ -41,7 +42,7 @@ except ImportError:
 # 探索保障：按动作类型设置很低的最低采样概率，防止早期策略完全坍缩。
 # 扩到 12 维后保底必须更克制，否则会人为推高加注/全下频率。
 _ACTION_MIN_PROBS = np.array(
-    [0.0002, 0.0002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.0002],
+    [0.0002, 0.0002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.002, 0.00005],
     dtype=np.float32,
 )
 
@@ -113,7 +114,15 @@ def _legal_mask(game: PokerGame, player: Player) -> np.ndarray:
         for i, bet in enumerate(bets, start=2):
             if bet > game.current_bet and bet >= min_raise and (bet - player.bet) <= player.stack:
                 mask[i] = 1.0
-    if ai > game.current_bet and player.stack > 0:
+    if (
+        ai > game.current_bet
+        and ai >= min_raise
+        and player.stack > 0
+        and is_allin_bucket_allowed(
+            game.round, game.pot, game.current_bet,
+            game.big_blind, player.bet, player.stack,
+        )
+    ):
         mask[ALLIN_ACTION_INDEX] = 1.0
     if np.sum(mask) <= 0:
         mask[0] = 1.0
@@ -234,8 +243,8 @@ def env_worker_loop(
     sb = game_cfg['small_blind']
     bb = game_cfg['big_blind']
     stack = game_cfg['initial_stack']
-    eq_thr = game_cfg.get('allin_eq_threshold', 0.65)
-    bonus_cap = game_cfg.get('allin_bonus_cap', 0.80)
+    eq_thr = game_cfg.get('allin_eq_threshold', 0.72)
+    bonus_cap = game_cfg.get('allin_bonus_cap', 0.25)
     tables_per_worker = game_cfg.get('tables_per_worker', 8)
 
     hands_done = 0
@@ -294,7 +303,7 @@ def env_worker_loop(
         if not iw and allin['happened'] and allin['round'] in (1, 2):
             eq = allin['equity']
             if eq >= eq_thr:
-                ub = min(bonus_cap, 0.20 + (eq - eq_thr) * 2.0)
+                ub = min(bonus_cap, 0.05 + (eq - eq_thr) * 0.7)
                 fr += ub
                 ab = ub
 
@@ -585,7 +594,7 @@ def _env_worker_loop_cc(
         if not iw and allin['happened'] and allin['round'] in (1, 2):
             eq = allin['equity']
             if eq >= eq_thr:
-                ub = min(bonus_cap, 0.20 + (eq - eq_thr) * 2.0)
+                ub = min(bonus_cap, 0.05 + (eq - eq_thr) * 0.7)
                 fr += ub
                 ab = ub
 

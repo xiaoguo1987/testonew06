@@ -25,8 +25,32 @@ static constexpr std::array<float, 9> PREFLOP_RAISE_MULTIPLIERS = {
 static constexpr std::array<float, 9> POSTFLOP_POT_FRACTIONS = {
     0.25f, 0.33f, 0.50f, 0.66f, 0.75f, 1.00f, 1.25f, 1.50f, 2.00f
 };
+static constexpr float ALLIN_SHORT_STACK_BB = 25.0f;
+static constexpr float ALLIN_POSTFLOP_MAX_SPR = 1.5f;
+static constexpr float ALLIN_COMMIT_STACK_FRACTION = 0.35f;
+static constexpr float ALLIN_COMMIT_TOTAL_FRACTION = 0.25f;
 
 static thread_local std::mt19937 g_rng(std::random_device{}());
+
+static inline bool allin_bucket_allowed(
+    int round, int pot, int current_bet, int bb, int player_bet, int player_stack
+) {
+    float bbv = std::max((float)bb, 1.0f);
+    float stack = std::max((float)player_stack, 0.0f);
+    if (stack <= 0.0f) return false;
+
+    float total_stack = std::max((float)(player_bet + player_stack), bbv);
+    float call_amount = std::max(0.0f, (float)(current_bet - player_bet));
+    float pot_after_call = std::max((float)pot + call_amount, bbv);
+    float stack_bb = stack / bbv;
+    float pressure = call_amount / stack;
+    float committed = (float)current_bet / total_stack;
+
+    if (stack_bb <= ALLIN_SHORT_STACK_BB) return true;
+    if (pressure >= ALLIN_COMMIT_STACK_FRACTION || committed >= ALLIN_COMMIT_TOTAL_FRACTION) return true;
+    if (round > 1 && (stack / pot_after_call) <= ALLIN_POSTFLOP_MAX_SPR) return true;
+    return false;
+}
 
 // ================================================================
 //  Card encoding:  code = rank_idx * 4 + suit_idx
@@ -395,7 +419,10 @@ public:
                 if (bet>cbet_&&bet>=mr&&(bet-bets_[pi])<=stacks_[pi]) m[aidx]=1.f;
             }
         }
-        if (ai>cbet_&&ai>=mr&&stacks_[pi]>0) m[ALLIN_ACTION_INDEX]=1.f;
+        if (
+            ai>cbet_&&ai>=mr&&stacks_[pi]>0&&
+            allin_bucket_allowed(round_, pot_, cbet_, bb_, bets_[pi], stacks_[pi])
+        ) m[ALLIN_ACTION_INDEX]=1.f;
         float s=0; for(int i=0;i<ACTION_DIM;i++) s+=m[i];
         if (s<=0) { m[0]=1.f; if (ca<=stacks_[pi]) m[1]=1.f; }
         return out;
