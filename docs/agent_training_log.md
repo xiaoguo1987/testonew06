@@ -239,10 +239,28 @@ agent_training_log.md
 - Follow-up fix: opponent-pool sampling now avoids selecting the exact base
   checkpoint being resumed from when other historical checkpoints are available.
 
+### 2026-05-30 non-self continuation stopped
+
+- Run: `/root/testo-seed-rl/runs/seed_histpool_nonself_600k_from900k_20260530_232606`
+- Startup confirmed the non-self opponent-pool fix:
+  - base checkpoint: `seed_rl_hands_900022`
+  - startup opponent: `seed_rl_hands_700169`
+- Stopped after the first evaluation:
+  - 1,100,057 hands: win rate 16.7%, bb/100 -309.0, invalid 0.00%,
+    truncated 0.00%
+  - KL median 0.1246, p95 0.2057, max 0.2702
+- Diagnosis: the 900k checkpoint is not uniformly robust across historical
+  opponents.  Continue only after running a multi-opponent evaluation matrix to
+  identify which checkpoints are genuine improvements and which opponents are
+  causing collapse.
+- Added `scripts/evaluate_seed_pool.py` for explicit checkpoint-vs-checkpoint
+  evaluation.
+
 ## Next Work Queue
 
 - Restart a 1M historical-pool stage from the 500k checkpoint with
   `CURRICULUM_START_PHASE=2`, then extend only if evaluation remains stable.
+- Run the multi-opponent evaluation matrix before the next long training stage.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.
