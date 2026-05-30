@@ -178,9 +178,29 @@ agent_training_log.md
   exceeds 20%, call interval falls below 30%, truncation exceeds 1%, invalid
   bet rate exceeds 1%, or KL tail keeps growing.
 
+### 2026-05-30 historical-pool long-run review
+
+- After the historical-pool smoke test, Codex and DeepSeek agree the immediate
+  blocker is not raw speed or all-in gating; it is robustness against stronger
+  historical checkpoints.
+- Resume from the 500k checkpoint rather than the 1.5M terminal checkpoint,
+  because 500k was the most stable known policy and the 1.5M policy is already
+  a hard opponent in the pool.
+- Run historical-pool training in stages.  First extend by roughly 1M hands with
+  low learning rate and 100k checkpoints, then expand toward 10M+ only if
+  multi-opponent evaluation improves.
+- Continue if truncation stays below 1%, invalid bet rate stays below 1%, no
+  NaN/infinite losses appear, all-in stays roughly below 18-20%, and historical
+  opponent bb/100 improves or does not degrade across two evaluation windows.
+- Roll back to the prior good checkpoint and reduce learning rate further if
+  strong-history bb/100 remains worse than about -100 after another 400k hands,
+  or if all-in spikes above 20%.
+- Next code gap: add independent per-historical-opponent evaluation instead of
+  relying on one selected opponent-model evaluation.
+
 ## Next Work Queue
 
-- Start a 200k stability run from the 500k checkpoint, then extend only if
+- Start a 1M historical-pool stage from the 500k checkpoint, then extend only if
   evaluation remains stable.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
