@@ -317,6 +317,16 @@ agent_training_log.md
 - Takeaway: do not use 700,057 as a base.  Keep 600,047 as the current best
   candidate while continuing targeted fixes for `seed_rl_hands_1000054`.
 
+### 2026-05-31 hard-opponent pool loading fix
+
+- Heartbeat check found that hard-opponent weighted sampling loaded scores but
+  did not automatically add the scored checkpoint paths to the training pool.
+- Impact: several matrix opponents could be weighted in theory but never sampled
+  in practice unless they happened to live in the current or base checkpoint
+  directory.
+- Fix: score-file opponent paths are now inserted into `_opponent_pool` during
+  training startup, and startup logs report `score_file+N`.
+
 ## Next Work Queue
 
 - Restart a 1M historical-pool stage from the 500k checkpoint with

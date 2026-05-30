@@ -136,6 +136,7 @@ class SeedRLTrainer:
         # 历史对手池 (Fictitious Self-Play)
         # 保存历史 checkpoint 路径，对手更新时随机抽取（近期权重更高）
         self._opponent_pool: List[str] = []  # 可用的历史 checkpoint 路径列表
+        self._opponent_score_paths: List[str] = []
         self._opponent_scores: Dict[str, float] = self._load_opponent_scores(opponent_score_file)
         self._opponent_pool_max_size = 20    # 对手池最大容量
         self._loaded_checkpoint_path: Optional[str] = None
@@ -761,15 +762,31 @@ class SeedRLTrainer:
                     if not line:
                         continue
                     row = json.loads(line)
+                    opponent_path = row.get("opponent")
+                    if opponent_path:
+                        opponent_path = str(opponent_path)
+                        if os.path.exists(opponent_path + ".actor.weights.h5"):
+                            self._opponent_score_paths.append(opponent_path)
                     name = row.get("opponent_name")
-                    if not name and row.get("opponent"):
-                        name = os.path.basename(str(row["opponent"]))
+                    if not name and opponent_path:
+                        name = os.path.basename(opponent_path)
                     if name:
                         scores[str(name)] = float(row.get("bb_per_100", 0.0))
             logger.info(f"[SEED RL] 已加载 hard-opponent 评分 {len(scores)} 条: {path}")
         except Exception as exc:
             logger.warning(f"[SEED RL] 加载 hard-opponent 评分失败: {exc}")
         return scores
+
+    def _add_scored_opponents_to_pool(self) -> int:
+        """Add explicit opponent checkpoint paths from the matrix score file."""
+        added = 0
+        for base in self._opponent_score_paths:
+            if base not in self._opponent_pool:
+                self._opponent_pool.append(base)
+                added += 1
+        if len(self._opponent_pool) > self._opponent_pool_max_size:
+            self._opponent_pool = self._opponent_pool[-self._opponent_pool_max_size:]
+        return added
 
     def _sample_opponent_checkpoint(self, candidates: List[str]) -> str:
         """Sample a checkpoint, preferring opponents with worse recent bb/100."""
@@ -1012,10 +1029,12 @@ class SeedRLTrainer:
             loaded_dir = os.path.dirname(self._loaded_checkpoint_path)
             if os.path.abspath(loaded_dir) != os.path.abspath(self.checkpoint_dir):
                 added_loaded = self._add_checkpoints_to_opponent_pool(loaded_dir)
+        added_scored = self._add_scored_opponents_to_pool()
         if self._opponent_pool:
             logger.info(
                 f"[SEED RL] 对手池已加载 {len(self._opponent_pool)} 个历史版本 "
-                f"(current_dir+{added_current}, loaded_dir+{added_loaded})"
+                f"(current_dir+{added_current}, loaded_dir+{added_loaded}, "
+                f"score_file+{added_scored})"
             )
             if self._curriculum_phase >= 1:
                 self._update_opponent_from_pool()
