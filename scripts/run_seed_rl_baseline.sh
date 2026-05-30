@@ -17,5 +17,6 @@ python train.py \
   --eval-output "${RUN_DIR}/eval_results.json" \
   --checkpoint-interval "${CHECKPOINT_INTERVAL:-50000}" \
   --eval-interval "${EVAL_INTERVAL:-50000}" \
-  --num-eval-games "${NUM_EVAL_GAMES:-100}" \
+  --num-eval-games "${NUM_EVAL_GAMES:-1000}" \
+  --eval-seed "${EVAL_SEED:-20260530}" \
   --skip-final-eval

@@ -56,6 +56,7 @@ class SeedRLTrainer:
         allin_bonus_cap: float = 0.80,
         tables_per_worker: int = 8,
         metrics_output: Optional[str] = None,
+        eval_seed: Optional[int] = 20260530,
     ):
         """
         Args:
@@ -86,6 +87,7 @@ class SeedRLTrainer:
         self.allin_bonus_cap = allin_bonus_cap
         self.tables_per_worker = tables_per_worker
         self.metrics_output = metrics_output or os.path.join(checkpoint_dir, "metrics.jsonl")
+        self.eval_seed = eval_seed
 
         # 训练统计
         self.total_hands = 0
@@ -141,6 +143,10 @@ class SeedRLTrainer:
         self._inference_seconds = 0.0
         self._last_ppo_seconds = 0.0
         self._last_ppo_steps = 0
+        self._traj_overflow = []
+        self._action_names = ['fold', 'call', 'small_raise', 'mid_raise', 'large_raise', 'overbet', 'allin']
+        self._train_action_counts = np.zeros(7, dtype=np.int64)
+        self._last_metric_action_counts = np.zeros(7, dtype=np.int64)
 
         os.makedirs(checkpoint_dir, exist_ok=True)
         metrics_dir = os.path.dirname(self.metrics_output)
@@ -160,6 +166,49 @@ class SeedRLTrainer:
                 fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
         except Exception as exc:
             logger.warning(f"写入 metrics 失败({self.metrics_output}): {exc}")
+
+    def _action_distribution(self, counts: np.ndarray) -> Dict[str, float]:
+        total = int(np.sum(counts))
+        if total <= 0:
+            return {name: 0.0 for name in self._action_names}
+        return {
+            name: float(counts[i] / total)
+            for i, name in enumerate(self._action_names)
+        }
+
+    def _append_completed_trajectory(
+        self, res: Dict, traj: Dict, traj_buffer: Dict, results_buffer: List
+    ) -> bool:
+        """Append a whole completed hand without splitting it across PPO updates."""
+        n_steps = len(traj.get('states', []))
+        if n_steps <= 0:
+            results_buffer.append(res)
+            return True
+
+        cur_steps = len(traj_buffer.get('states', []))
+        if cur_steps > 0 and (cur_steps + n_steps) > self.ppo_buffer_size:
+            return False
+        if cur_steps == 0 and n_steps > self.ppo_buffer_size:
+            logger.warning(
+                f"单手轨迹长度({n_steps})超过 ppo_buffer_size({self.ppo_buffer_size})，"
+                "将允许本轮超限以避免切断 episode"
+            )
+
+        results_buffer.append(res)
+        for k in ('states', 'actions', 'old_probs'):
+            traj_buffer[k].extend(traj.get(k, []))
+        dones = [0.0] * n_steps
+        rewards = [0.0] * n_steps
+        dones[-1] = 1.0
+        rewards[-1] = traj.get('final_reward', 0.0)
+        traj_buffer['dones'].extend(dones)
+        traj_buffer['rewards'].extend(rewards)
+
+        for action_idx in traj.get('actions', []):
+            ai = int(action_idx)
+            if 0 <= ai < len(self._train_action_counts):
+                self._train_action_counts[ai] += 1
+        return True
 
     # ------------------------------------------------------------------
     #  Curriculum Learning
@@ -339,6 +388,16 @@ class SeedRLTrainer:
         防止在高并发下一口气吸入几万条轨迹撑爆内存。
         """
         new_hands = 0
+
+        while self._traj_overflow:
+            if len(traj_buffer.get('states', [])) >= self.ppo_buffer_size:
+                break
+            res, traj = self._traj_overflow[0]
+            if not self._append_completed_trajectory(res, traj, traj_buffer, results_buffer):
+                break
+            self._traj_overflow.pop(0)
+            new_hands += 1
+
         while not traj_queue.empty():
             # 【背压拦截】buffer 已满，立刻停止吸取，留给训练消化
             if len(traj_buffer.get('states', [])) >= self.ppo_buffer_size:
@@ -351,20 +410,11 @@ class SeedRLTrainer:
 
             if msg[0] == 'traj':
                 _, res, traj = msg
-                results_buffer.append(res)
-                # 轨迹写入 PPO buffer
-                n_steps = len(traj.get('states', []))
-                if n_steps > 0:
-                    for k in ('states', 'actions', 'old_probs'):
-                        traj_buffer[k].extend(traj.get(k, []))
-                    # 构建 dones 和 rewards
-                    dones = [0.0] * n_steps
-                    rewards = [0.0] * n_steps
-                    dones[-1] = 1.0
-                    rewards[-1] = traj.get('final_reward', 0.0)
-                    traj_buffer['dones'].extend(dones)
-                    traj_buffer['rewards'].extend(rewards)
-                new_hands += 1
+                if self._append_completed_trajectory(res, traj, traj_buffer, results_buffer):
+                    new_hands += 1
+                else:
+                    self._traj_overflow.append((res, traj))
+                    break
 
             elif msg[0] == 'done':
                 wid = msg[1]
@@ -380,10 +430,12 @@ class SeedRLTrainer:
     #  PPO 训练
     # ------------------------------------------------------------------
 
-    def _do_ppo_train(self, traj_buffer: Dict) -> Optional[float]:
+    def _do_ppo_train(self, traj_buffer: Dict, force: bool = False) -> Optional[float]:
         """如果 buffer 积累了足够数据，执行一次 PPO 训练并清空 buffer。"""
         n = len(traj_buffer['states'])
-        if n < self.ppo_buffer_size:
+        if n < self.ppo_buffer_size and not force:
+            return None
+        if n <= 0:
             return None
 
         states = np.array(traj_buffer['states'], dtype=np.float32)
@@ -407,18 +459,29 @@ class SeedRLTrainer:
     #  评估
     # ------------------------------------------------------------------
 
-    def _run_evaluation(self, num_games: int = 100) -> Dict:
+    def _run_evaluation(
+        self,
+        num_games: int = 100,
+        opponent_policy: str = "random",
+        seed: Optional[int] = None,
+    ) -> Dict:
         """简易评估：用当前模型 vs 随机对手打 num_games 手。
 
         修复说明：
         1. 移除 _preflop_filter：评估应反映模型真实输出，不叠加翻牌前过滤偏差
         2. 改用 argmax（确定性策略）：评估时取概率最高的动作，而非随机采样
-        3. 新增行动分布日志：打印 fold/call/raise 比例，便于诊断弃牌机器人问题
+        3. 支持固定 seed 与 opponent_model 对手，降低随机鱼对手造成的乐观偏差
+        4. 新增行动分布日志：打印 fold/call/raise 比例，便于诊断弃牌机器人问题
         注意：评估在主进程中串行执行（非多进程），保持简洁。
         """
         from ..model.state_representation import StateRepresentation
         from ..game.poker_game import PokerGame, Player
         from .env_worker import _legal_mask
+
+        np_state = None
+        if seed is not None:
+            np_state = np.random.get_state()
+            np.random.seed(int(seed))
 
         sr = StateRepresentation()
         wins, total_profit = 0, 0.0
@@ -427,68 +490,86 @@ class SeedRLTrainer:
         # 行动分布统计（用于诊断弃牌机器人）
         action_counts = [0, 0, 0, 0, 0, 0, 0]  # fold, call, small_raise, mid_raise, large_raise, overbet, allin
 
-        for _ in range(num_games):
-            players_e = [Player("Main_AI", self.initial_stack, True)]
-            for i in range(5):
-                players_e.append(Player(f"Opponent_{i + 1}", self.initial_stack, True))
-            game = PokerGame(self.small_blind, self.big_blind, players_e)
-            game.dealer_pos = np.random.randint(6)
-            game.start_new_hand()
+        try:
+            for _ in range(num_games):
+                players_e = [Player("Main_AI", self.initial_stack, True)]
+                for i in range(5):
+                    players_e.append(Player(f"Opponent_{i + 1}", self.initial_stack, True))
+                game = PokerGame(self.small_blind, self.big_blind, players_e)
+                game.dealer_pos = np.random.randint(6)
+                game.start_new_hand()
 
-            while not game.is_hand_over():
-                if game.is_round_over():
-                    # proceed_to_next_round 返回 True = 手牌结束（摊牌或只剩1人）
-                    # 返回 False = 仅进入下一轮（flop/turn/river），手牌继续
-                    if game.proceed_to_next_round():
-                        break
-                cp = game.next_player()
-                if not cp or not cp.is_active:
-                    continue
+                while not game.is_hand_over():
+                    if game.is_round_over():
+                        # proceed_to_next_round 返回 True = 手牌结束（摊牌或只剩1人）
+                        # 返回 False = 仅进入下一轮（flop/turn/river），手牌继续
+                        if game.proceed_to_next_round():
+                            break
+                    cp = game.next_player()
+                    if not cp or not cp.is_active:
+                        continue
 
-                if cp.name == "Main_AI":
-                    state = sr.get_state(game, cp)
-                    ap, v = self.model.predict(state)
-                    lm = _legal_mask(game, cp)
-                    mp_ = ap * lm
-                    s = float(np.sum(mp_))
-                    # 归一化（不加 _preflop_filter，评估看真实策略）
-                    mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
-                    # 确定性策略：取概率最高的合法动作（argmax）
-                    ai = int(np.argmax(mp_))
-                    action_counts[ai] += 1
-                    av = np.zeros(7, dtype=np.float32)
-                    av[ai] = 1.0
-                    hs = sr.calculate_hand_strength(cp, game)
-                    act, amt = sr.decode_action(av, game, cp, hs)
-                    total_actions += 1
-                    if not game.handle_action(cp, act, amt):
-                        invalid_bets += 1
-                        action_counts[0] += 1  # 无效动作降级为弃牌
-                        action_counts[ai] -= 1
-                        game.handle_action(cp, 'fold', None)
-                else:
-                    # 对手随机
-                    lm = _legal_mask(game, cp)
-                    p = lm / (np.sum(lm) + 1e-8)
-                    ai = int(np.random.choice(7, p=p))
-                    av = np.zeros(7, dtype=np.float32)
-                    av[ai] = 1.0
-                    hs = sr.calculate_hand_strength(cp, game)
-                    act, amt = sr.decode_action(av, game, cp, hs)
-                    if not game.handle_action(cp, act, amt):
-                        game.handle_action(cp, 'fold', None)
+                    if cp.name == "Main_AI":
+                        state = sr.get_state(game, cp)
+                        ap, v = self.model.predict(state)
+                        lm = _legal_mask(game, cp)
+                        mp_ = ap * lm
+                        s = float(np.sum(mp_))
+                        # 归一化（不加 _preflop_filter，评估看真实策略）
+                        mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
+                        # 确定性策略：取概率最高的合法动作（argmax）
+                        ai = int(np.argmax(mp_))
+                        action_counts[ai] += 1
+                        av = np.zeros(7, dtype=np.float32)
+                        av[ai] = 1.0
+                        hs = sr.calculate_hand_strength(cp, game)
+                        act, amt = sr.decode_action(av, game, cp, hs)
+                        total_actions += 1
+                        if not game.handle_action(cp, act, amt):
+                            invalid_bets += 1
+                            action_counts[0] += 1  # 无效动作降级为弃牌
+                            action_counts[ai] -= 1
+                            game.handle_action(cp, 'fold', None)
+                    elif opponent_policy == "opponent_model":
+                        state = sr.get_state(game, cp)
+                        ap, _ = self.opp_model.predict(state)
+                        lm = _legal_mask(game, cp)
+                        mp_ = ap * lm
+                        s = float(np.sum(mp_))
+                        mp_ = mp_ / s if s > 1e-8 else lm / (np.sum(lm) + 1e-8)
+                        ai = int(np.argmax(mp_))
+                        av = np.zeros(7, dtype=np.float32)
+                        av[ai] = 1.0
+                        hs = sr.calculate_hand_strength(cp, game)
+                        act, amt = sr.decode_action(av, game, cp, hs)
+                        if not game.handle_action(cp, act, amt):
+                            game.handle_action(cp, 'fold', None)
+                    else:
+                        # 对手随机
+                        lm = _legal_mask(game, cp)
+                        p = lm / (np.sum(lm) + 1e-8)
+                        ai = int(np.random.choice(7, p=p))
+                        av = np.zeros(7, dtype=np.float32)
+                        av[ai] = 1.0
+                        hs = sr.calculate_hand_strength(cp, game)
+                        act, amt = sr.decode_action(av, game, cp, hs)
+                        if not game.handle_action(cp, act, amt):
+                            game.handle_action(cp, 'fold', None)
 
-            alive = [p for p in players_e if p.is_active]
-            if len(alive) == 1 and game.pot > 0:
-                game._award_pot(alive[0])
+                alive = [p for p in players_e if p.is_active]
+                if len(alive) == 1 and game.pot > 0:
+                    game._award_pot(alive[0])
 
-            profit = players_e[0].stack - self.initial_stack
-            total_profit += profit
-            ws = [p.name for p in getattr(game, 'winners', [])]
-            if not ws and hasattr(game, 'winner') and game.winner:
-                ws = [game.winner.name]
-            if "Main_AI" in ws:
-                wins += 1
+                profit = players_e[0].stack - self.initial_stack
+                total_profit += profit
+                ws = [p.name for p in getattr(game, 'winners', [])]
+                if not ws and hasattr(game, 'winner') and game.winner:
+                    ws = [game.winner.name]
+                if "Main_AI" in ws:
+                    wins += 1
+        finally:
+            if np_state is not None:
+                np.random.set_state(np_state)
 
         # 行动分布日志：帮助诊断弃牌机器人问题
         action_names = ['fold', 'call', 'small_raise', 'mid_raise', 'large_raise', 'overbet', 'allin']
@@ -502,9 +583,9 @@ class SeedRLTrainer:
                 f"{name}={value:.1%}"
                 for name, value in action_distribution.items()
             )
-            logger.info(f"[评估] 行动分布 (总{total_actions}次): {dist_str}")
+            logger.info(f"[评估:{opponent_policy}] 行动分布 (总{total_actions}次): {dist_str}")
         else:
-            logger.warning("[评估] Main_AI 未执行任何行动，可能存在游戏逻辑问题")
+            logger.warning(f"[评估:{opponent_policy}] Main_AI 未执行任何行动，可能存在游戏逻辑问题")
 
         avg_profit = total_profit / max(num_games, 1)
         bb_per_100 = (avg_profit / max(float(self.big_blind), 1.0)) * 100.0
@@ -517,7 +598,26 @@ class SeedRLTrainer:
             'total_profit': total_profit,
             'wins': wins,
             'total_games': num_games,
+            'opponent_policy': opponent_policy,
+            'seed': seed,
         }
+
+    def _run_evaluation_suite(self, num_games: int = 100, seed: Optional[int] = None) -> Dict:
+        """Evaluate against weak random opponents and current opponent-model opponents."""
+        random_eval = self._run_evaluation(num_games, opponent_policy="random", seed=seed)
+        opponent_seed = None if seed is None else int(seed) + 1
+        opponent_eval = self._run_evaluation(
+            num_games,
+            opponent_policy="opponent_model",
+            seed=opponent_seed,
+        )
+        result = dict(opponent_eval)
+        result["primary_opponent_policy"] = "opponent_model"
+        result["evaluations"] = {
+            "random": random_eval,
+            "opponent_model": opponent_eval,
+        }
+        return result
 
     # ------------------------------------------------------------------
     #  Checkpoint
@@ -687,6 +787,9 @@ class SeedRLTrainer:
         from .env_worker import env_worker_loop
 
         self.num_hands_target = num_hands
+        self._traj_overflow = []
+        self._train_action_counts = np.zeros(7, dtype=np.int64)
+        self._last_metric_action_counts = np.zeros(7, dtype=np.int64)
 
         logger.info(
             f"[SEED RL] 训练开始: num_hands={num_hands}, "
@@ -710,10 +813,10 @@ class SeedRLTrainer:
 
         # 初始化对手池：扫描现有 checkpoint 加入池
         existing_ckpts = sorted(glob.glob(
-            os.path.join(self.checkpoint_dir, "seed_rl_hands_*.index")
+            os.path.join(self.checkpoint_dir, "seed_rl_hands_*.actor.weights.h5")
         ))
         for idx_file in existing_ckpts[-self._opponent_pool_max_size:]:
-            self._opponent_pool.append(idx_file.replace(".index", ""))
+            self._opponent_pool.append(idx_file.replace(".actor.weights.h5", ""))
         if self._opponent_pool:
             logger.info(f"[SEED RL] 对手池已加载 {len(self._opponent_pool)} 个历史版本")
 
@@ -795,12 +898,20 @@ class SeedRLTrainer:
             hps = (self.total_hands - training_start_hands) / max(elapsed, 1e-6)
             interval_hps = (self.total_hands - last_metric_hands) / max(now - last_metric_time, 1e-6)
             avg_batch = self._inference_items / max(self._inference_batches, 1)
+            cumulative_action_dist = self._action_distribution(self._train_action_counts)
+            interval_action_counts = self._train_action_counts - self._last_metric_action_counts
+            interval_action_dist = self._action_distribution(interval_action_counts)
+            interval_action_summary = ", ".join(
+                f"{name}={interval_action_dist[name]:.1%}"
+                for name in self._action_names
+            )
             logger.info(
                 f"[SEED RL] hands={self.total_hands}/{num_hands}, "
                 f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
                 f"速度={hps:.1f} hands/s, 区间速度={interval_hps:.1f} hands/s, "
                 f"推理batch均值={avg_batch:.1f}, PPO耗时={self._last_ppo_seconds:.3f}s, "
-                f"KL={getattr(self.model, 'last_kl', 0.0):.4f}"
+                f"KL={getattr(self.model, 'last_kl', 0.0):.4f}, "
+                f"区间动作=[{interval_action_summary}]"
             )
             self._write_metric(
                 "ppo_update",
@@ -822,12 +933,15 @@ class SeedRLTrainer:
                 avg_inference_batch=float(avg_batch),
                 curriculum_phase=int(self._curriculum_phase + 1),
                 opponent_types=list(self.opp_type_list),
+                train_action_distribution=cumulative_action_dist,
+                train_action_distribution_interval=interval_action_dist,
             )
+            self._last_metric_action_counts = self._train_action_counts.copy()
             last_metric_time = now
             last_metric_hands = self.total_hands
 
         try:
-            while alive_workers or not traj_queue.empty():
+            while alive_workers or not traj_queue.empty() or self._traj_overflow:
                 # === 背压机制：buffer 超过阈值时优先训练，暂停推理 ===
                 buf_size = len(traj_buffer.get('states', []))
                 if buf_size >= self.ppo_buffer_size:
@@ -853,20 +967,24 @@ class SeedRLTrainer:
 
                 # 3. PPO 训练（常规路径）
                 buf_size = len(traj_buffer.get('states', []))
-                if buf_size >= self.ppo_buffer_size:
-                    loss = self._do_ppo_train(traj_buffer)
+                overflow_boundary = bool(self._traj_overflow) and buf_size > 0
+                if buf_size >= self.ppo_buffer_size or overflow_boundary:
+                    loss = self._do_ppo_train(traj_buffer, force=overflow_boundary)
                     if loss is not None:
-                        log_ppo_update(loss, reason="regular")
+                        log_ppo_update(loss, reason="overflow_boundary" if overflow_boundary else "regular")
 
                 # 4. 定期评估（与 checkpoint 间隔对齐，避免阻塞训练流水线）
                 # 评估在主线程串行执行，会阻塞推理调度导致所有 worker 停滞
                 eval_interval_actual = max(self.eval_interval, self.checkpoint_interval)
                 if (self.total_hands - last_eval_hand) >= eval_interval_actual and self.total_hands > 0:
                     last_eval_hand = self.total_hands
-                    eval_res = self._run_evaluation(self.num_eval_games)
+                    eval_seed = None
+                    if self.eval_seed is not None:
+                        eval_seed = int(self.eval_seed) + int(self.total_hands)
+                    eval_res = self._run_evaluation_suite(self.num_eval_games, seed=eval_seed)
                     score = eval_res['avg_profit']
                     logger.info(
-                        f"[SEED RL] 评估@{self.total_hands}: "
+                        f"[SEED RL] 评估@{self.total_hands}({eval_res.get('primary_opponent_policy')}): "
                         f"胜率={eval_res['win_rate']:.3f}, "
                         f"平均收益={score:.2f}, "
                         f"bb/100={eval_res.get('bb_per_100', 0.0):.1f}, "
@@ -880,6 +998,9 @@ class SeedRLTrainer:
                         bb_per_100=float(eval_res.get("bb_per_100", 0.0)),
                         invalid_bet_rate=float(eval_res["invalid_bet_rate"]),
                         action_distribution=eval_res.get("action_distribution", {}),
+                        evaluations=eval_res.get("evaluations", {}),
+                        primary_opponent_policy=eval_res.get("primary_opponent_policy"),
+                        eval_seed=eval_seed,
                         best_score=float(self.best_score) if math.isfinite(self.best_score) else None,
                     )
                     self._latest_win_rate = eval_res['win_rate']
@@ -929,7 +1050,7 @@ class SeedRLTrainer:
             logger.info(f"[SEED RL] 处理剩余 buffer: {remaining} steps")
             old_buf = self.ppo_buffer_size
             self.ppo_buffer_size = 1
-            loss = self._do_ppo_train(traj_buffer)
+            loss = self._do_ppo_train(traj_buffer, force=True)
             if loss is not None:
                 self._write_metric(
                     "ppo_update",
@@ -969,9 +1090,13 @@ class SeedRLTrainer:
         # 最终评估
         if not self.skip_final_eval:
             logger.info("[SEED RL] 最终评估...")
-            final_eval = self._run_evaluation(self.num_eval_games)
+            final_seed = None
+            if self.eval_seed is not None:
+                final_seed = int(self.eval_seed) + int(self.total_hands) + 999
+            final_eval = self._run_evaluation_suite(self.num_eval_games, seed=final_seed)
             logger.info(
                 f"[SEED RL] 最终评估结果: "
+                f"primary={final_eval.get('primary_opponent_policy')}, "
                 f"胜率={final_eval['win_rate']:.3f}, "
                 f"平均收益={final_eval['avg_profit']:.2f}, "
                 f"bb/100={final_eval.get('bb_per_100', 0.0):.1f}, "
@@ -985,4 +1110,7 @@ class SeedRLTrainer:
                 bb_per_100=float(final_eval.get("bb_per_100", 0.0)),
                 invalid_bet_rate=float(final_eval["invalid_bet_rate"]),
                 action_distribution=final_eval.get("action_distribution", {}),
+                evaluations=final_eval.get("evaluations", {}),
+                primary_opponent_policy=final_eval.get("primary_opponent_policy"),
+                eval_seed=final_seed,
             )

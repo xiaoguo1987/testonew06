@@ -248,6 +248,8 @@ def parse_arguments():
     parser.add_argument('--eval-interval', type=int, default=5000, help='评估间隔（局数）')
     parser.add_argument('--checkpoint-interval', type=int, default=50000, help='保存检查点间隔（局数）')
     parser.add_argument('--num-eval-games', type=int, default=100, help='每次评估的游戏局数')
+    parser.add_argument('--eval-seed', type=int, default=20260530,
+                        help='评估随机种子；每次评估会叠加当前手数以保持可复现且不完全重复')
     parser.add_argument('--eval-workers', type=int, default=0, help='评估并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--train-workers', type=int, default=0, help='训练采样并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--skip-final-eval', action='store_true', help='训练结束后跳过最终评估（加速）')
@@ -476,6 +478,7 @@ def _train_seed_rl(args):
             eval_interval=args.eval_interval,
             checkpoint_interval=args.checkpoint_interval,
             num_eval_games=args.num_eval_games,
+            eval_seed=getattr(args, 'eval_seed', 20260530),
             opponent_update_interval=args.opponent_update_interval,
             inference_min_batch=getattr(args, 'inference_min_batch', 32),
             inference_max_batch=getattr(args, 'inference_max_batch', 512),
