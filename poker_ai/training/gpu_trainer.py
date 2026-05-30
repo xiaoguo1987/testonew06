@@ -96,6 +96,7 @@ class SeedRLTrainer:
         self.total_ppo_updates = 0
         self.best_score = -float('inf')
         self.num_hands_target = 0  # 训练目标手牌数，在 train() 中设置
+        self._curriculum_base_hands = 0  # resume 后按本轮新增手数计算 curriculum
 
         # Curriculum Learning 阶段定义
         # Phase 1 (0-20%): 全鱼对手 → 学习基本策略（别乱弃牌、基本下注）
@@ -268,7 +269,8 @@ class SeedRLTrainer:
         """
         if self.num_hands_target <= 0:
             return
-        progress = self.total_hands / self.num_hands_target
+        run_hands = max(0, self.total_hands - self._curriculum_base_hands)
+        progress = run_hands / self.num_hands_target
 
         new_phase = 0
         if progress >= self._curriculum_thresholds[1]:
@@ -283,7 +285,7 @@ class SeedRLTrainer:
             phase_names = ['Phase1(全鱼)', 'Phase2(混合)', 'Phase3(自对弈)']
             logger.info(
                 f"[SEED RL] Curriculum 阶段切换: {phase_names[old_phase]} → {phase_names[new_phase]}, "
-                f"hands={self.total_hands}, progress={progress:.1%}, "
+                f"hands={self.total_hands}, run_hands={run_hands}, progress={progress:.1%}, "
                 f"opp_types={self.opp_type_list}, opp_interval={self._get_dynamic_opp_interval()}"
             )
             # 阶段切换时立刻同步一次对手权重（如果新阶段包含 PPO 对手）
@@ -848,6 +850,7 @@ class SeedRLTrainer:
         from .env_worker import env_worker_loop
 
         self.num_hands_target = num_hands
+        self._curriculum_base_hands = int(self.total_hands)
         self._traj_overflow = []
         self._train_action_counts = np.zeros(ACTION_DIM, dtype=np.int64)
         self._last_metric_action_counts = np.zeros(ACTION_DIM, dtype=np.int64)
@@ -856,8 +859,10 @@ class SeedRLTrainer:
         self._last_metric_position_profit_sum = np.zeros(6, dtype=np.float64)
         self._last_metric_position_hand_counts = np.zeros(6, dtype=np.int64)
 
+        run_target_hands = int(self.total_hands + num_hands)
         logger.info(
             f"[SEED RL] 训练开始: num_hands={num_hands}, "
+            f"start_hands={self.total_hands}, target_total_hands={run_target_hands}, "
             f"workers={self.num_workers}, tables_per_worker={self.tables_per_worker}, "
             f"并发牌桌={self.num_workers * self.tables_per_worker}, "
             f"ppo_buffer={self.ppo_buffer_size}, "
@@ -934,17 +939,19 @@ class SeedRLTrainer:
         results_buffer = []
         pending = defaultdict(list)  # wid -> [(pname, state_vec), ...]
 
-        last_eval_hand = 0
-        last_ckpt_hand = 0
-        last_opp_update_hand = 0
         training_start = time.time()
         training_start_hands = self.total_hands  # 记录 resume 后的起始手数
+        last_eval_hand = training_start_hands
+        last_ckpt_hand = training_start_hands
+        last_opp_update_hand = training_start_hands
         last_metric_time = training_start
         last_metric_hands = training_start_hands
 
         self._write_metric(
             "train_start",
             target_hands=int(num_hands),
+            start_hands=int(training_start_hands),
+            target_total_hands=int(training_start_hands + num_hands),
             workers=int(self.num_workers),
             tables_per_worker=int(self.tables_per_worker),
             concurrent_tables=int(self.num_workers * self.tables_per_worker),
@@ -982,7 +989,7 @@ class SeedRLTrainer:
                 for name in self._position_names
             )
             logger.info(
-                f"[SEED RL] hands={self.total_hands}/{num_hands}, "
+                f"[SEED RL] hands={self.total_hands}/{run_target_hands}, "
                 f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
                 f"速度={hps:.1f} hands/s, 区间速度={interval_hps:.1f} hands/s, "
                 f"推理batch均值={avg_batch:.1f}, PPO耗时={self._last_ppo_seconds:.3f}s, "
@@ -994,6 +1001,8 @@ class SeedRLTrainer:
                 "ppo_update",
                 reason=reason,
                 target_hands=int(num_hands),
+                start_hands=int(training_start_hands),
+                target_total_hands=int(run_target_hands),
                 ppo_updates=int(self.total_ppo_updates),
                 loss=float(loss),
                 hps=float(hps),
@@ -1167,6 +1176,9 @@ class SeedRLTrainer:
         )
         self._write_metric(
             "train_complete",
+            start_hands=int(training_start_hands),
+            target_hands=int(num_hands),
+            target_total_hands=int(run_target_hands),
             ppo_updates=int(self.total_ppo_updates),
             elapsed_seconds=float(elapsed),
             hps=float(hps),

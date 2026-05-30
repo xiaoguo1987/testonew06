@@ -103,6 +103,20 @@ agent_training_log.md
 - Takeaway: explicit all-in gate reduced deep-stack shove shortcuts, but
   opponent-model evaluation remains unstable and KL tail risk is too high.
 
+### 2026-05-30 aborted resume stability run
+
+- Run: `/root/testo-seed-rl/runs/seed_stability_200k_from500k_20260530_171036`
+- Intended plan: resume from the 500k checkpoint and run 200k stability hands.
+- Stopped after the startup diagnostics revealed a resume bookkeeping bug:
+  `total_hands` restored to 500,016 while the new run target was 200,000, so
+  curriculum progress was computed as 250% and immediately jumped to Phase3.
+- Startup evaluation/checkpoint/opponent update also fired immediately because
+  the last-eval and last-checkpoint cursors started at 0 instead of the resumed
+  hand count.
+- Fix: resume runs now treat `num_hands` as additional hands for the current
+  stage, initialize interval cursors from the resumed hand count, and calculate
+  curriculum progress from this stage's newly generated hands.
+
 ## Codex Notes
 
 - Do not optimize toward a fixed all-in frequency.  All-in should be
