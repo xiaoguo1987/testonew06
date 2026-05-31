@@ -498,6 +498,10 @@ agent_training_log.md
   `/root/testo-seed-rl/runs/seed_retention_gate_20260531_1530/gate_report.md`.
   No previous repair candidate passed; `3903168` was closest by average but
   failed on `600040` by a -894.5 bb/100 baseline-relative regression.
+- Added `scripts/evaluate_seed_candidates.py` as the acceptance workflow:
+  evaluate one or more checkpoints with row-level fail-fast gates, write each
+  matrix JSONL, then run `scripts/seed_matrix_gate.py` and produce
+  `gate_report.md` plus `candidate_status.json`.
 
 ## Next Work Queue
 
