@@ -377,11 +377,50 @@ agent_training_log.md
   from `3503107`, LR `1e-6`, Phase2 locked, score-file from the `3503107`
   matrix, hard-opponent temperature 1000, opponent rotation every 10k.
 
+### 2026-05-31 hard-negative repair sampling
+
+- The first 100k robust repair from `3503107` did not pass matrix validation:
+  - Run:
+    `/root/testo-seed-rl/runs/seed_robust_repair_100k_from3503k_20260531_105520`
+  - Matrix:
+    `/root/testo-seed-rl/runs/seed_pool_eval_robust_repair_20260531_110128`
+  - `3555609`: avg -146.2, worst `1000054` -639.4.
+  - `3603149`: avg -154.0, worst `800200` -566.2.
+- Diagnosis: `hard_opponent_temperature=1000` made score-file softmax too flat,
+  so repair sampling was not reliably focused on opponents that beat the current
+  model.  DeepSeek review agreed that the next test should explicitly bias
+  sampling toward negative bb/100 opponents and use a lower temperature.
+- Code change: added `--hard-opponent-negative-ratio`.  When active, each
+  hard-opponent refresh samples from score-file opponents with negative bb/100
+  with the configured probability, then falls back to the full scored pool for
+  the remaining probability.  Default is 0, so previous behavior is unchanged.
+- Focused repair validation:
+  `/root/testo-seed-rl/runs/seed_focused_repair_100k_from3503k_20260531_111209`
+  from `3503107`, LR `1e-6`, Phase2 locked, temperature 200,
+  negative-ratio 0.85.
+  - Training speed: overall 952.9 hands/s, median interval 1522.5 hands/s.
+  - KL median/p95/max: 0.0684 / 0.0878 / 0.0905.
+  - Sampling logs confirmed focus on `600049`, `600047`, `1000054`, and
+    `900022`.
+  - Matrix:
+    `/root/testo-seed-rl/runs/seed_pool_eval_focused_repair_20260531_111530`
+  - `3553125`: avg -78.0, worst `500016` -708.4.
+  - `3603118`: avg +56.3, worst `600047` -521.4.
+- Takeaway: `3603118` is a small improvement over `3503107` by matrix average
+  and worst-case, but not enough for delivery.  The 50k checkpoint shows that
+  over-focusing hard negatives can damage retention versus other historical
+  opponents, so the next run should use a lower negative ratio and a slightly
+  softer temperature.
+- Started follow-up balanced repair:
+  `/root/testo-seed-rl/runs/seed_balanced_repair_200k_from3603k_20260531_112308`
+  from `3603118`, LR `8e-7`, Phase2 locked, score-file from the `3603118`
+  matrix, temperature 250, negative-ratio 0.65.
+
 ## Next Work Queue
 
-- Monitor `seed_robust_repair_100k_from3503k_20260531_105520`; after it
+- Monitor `seed_balanced_repair_200k_from3603k_20260531_112308`; after it
   completes, run the same 13-opponent matrix before any extension.
-- Current best research candidate: `seed_rl_hands_3503107`, but it is not
+- Current best research candidate: `seed_rl_hands_3603118`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
