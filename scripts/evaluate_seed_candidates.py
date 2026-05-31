@@ -36,12 +36,37 @@ def _expand_patterns(patterns: Iterable[str]) -> list[str]:
     return sorted(checkpoints)
 
 
+def _read_opponents_from_jsonl(paths: Iterable[Path]) -> list[str]:
+    opponents: list[str] = []
+    for path in paths:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                opponent = row.get("opponent")
+                if not opponent:
+                    continue
+                base = _checkpoint_base(str(opponent))
+                if base not in opponents:
+                    opponents.append(base)
+    return opponents
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", action="append", default=[])
     parser.add_argument("--candidate-glob", action="append", default=[])
     parser.add_argument("--opponent", action="append", default=[])
     parser.add_argument("--opponent-glob", action="append", default=[])
+    parser.add_argument(
+        "--opponent-file",
+        action="append",
+        type=Path,
+        default=[],
+        help="Matrix JSONL file(s) whose opponent paths should form the opponent pool",
+    )
     parser.add_argument("--baseline", type=Path, help="Baseline matrix JSONL")
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--games", type=int, default=500)
@@ -96,6 +121,9 @@ def main() -> int:
     opponent_patterns = list(args.opponent_glob) + list(args.opponent)
     candidates = _expand_patterns(candidate_patterns)
     opponents = _expand_patterns(opponent_patterns)
+    for opponent in _read_opponents_from_jsonl(args.opponent_file):
+        if opponent not in opponents:
+            opponents.append(opponent)
     if not candidates:
         raise SystemExit("No candidate checkpoints found")
     if not opponents:

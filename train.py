@@ -318,6 +318,14 @@ def parse_arguments():
                        help='hard-opponent 训练中只从负 bb/100 对手采样的概率；0 表示不过滤')
     parser.add_argument('--hard-opponent-scored-only-ratio', type=float, default=0.0,
                        help='hard-opponent 训练中只从 score-file 已评分对手采样的概率；0 表示允许未评分历史池')
+    parser.add_argument('--anchor-policy-path', type=str, default=None,
+                       help='冻结参考策略 base 路径；repair 训练时用于 anchor KL 防止遗忘')
+    parser.add_argument('--anchor-kl-coef', type=float, default=0.0,
+                       help='anchor policy KL 正则系数；0 表示关闭')
+    parser.add_argument('--max-anchor-kl', type=float, default=0.0,
+                       help='anchor_kl 连续超过该值时触发训练保护；<=0 表示关闭')
+    parser.add_argument('--anchor-kl-patience', type=int, default=10,
+                       help='anchor_kl 超阈值多少次 PPO 更新后停止训练')
     parser.add_argument('--checkpoint-validation-command', type=str, default=None,
                        help='每次保存 checkpoint 后运行的外部验证命令；会注入 SEED_RL_CHECKPOINT 等环境变量')
     parser.add_argument('--stop-on-validation-failure', action='store_true',
@@ -485,6 +493,10 @@ def _train_seed_rl(args):
             update_epochs=getattr(args, 'ppo_epochs', 10),
             config=cfg,
         )
+        model.set_anchor_policy(
+            getattr(args, 'anchor_policy_path', None),
+            getattr(args, 'anchor_kl_coef', 0.0),
+        )
 
         trainer = SeedRLTrainer(
             model=model,
@@ -515,6 +527,8 @@ def _train_seed_rl(args):
             checkpoint_validation_command=getattr(args, 'checkpoint_validation_command', None),
             stop_on_validation_failure=getattr(args, 'stop_on_validation_failure', False),
             validation_start_hands=getattr(args, 'validation_start_hands', 0),
+            max_anchor_kl=getattr(args, 'max_anchor_kl', 0.0),
+            anchor_kl_patience=getattr(args, 'anchor_kl_patience', 10),
         )
 
         # 加载 checkpoint

@@ -501,18 +501,30 @@ agent_training_log.md
 - Added `scripts/evaluate_seed_candidates.py` as the acceptance workflow:
   evaluate one or more checkpoints with row-level fail-fast gates, write each
   matrix JSONL, then run `scripts/seed_matrix_gate.py` and produce
-  `gate_report.md` plus `candidate_status.json`.
+  `gate_report.md` plus `candidate_status.json`.  It also supports
+  `--opponent-file` to reuse the opponent paths from an existing matrix JSONL.
 - Added optional training-side checkpoint validation hooks:
   `--checkpoint-validation-command`, `--stop-on-validation-failure`, and
   `--validation-start-hands`.  The trainer injects `SEED_RL_CHECKPOINT`,
   `SEED_RL_CHECKPOINT_DIR`, `SEED_RL_TOTAL_HANDS`, and
   `SEED_RL_METRICS_OUTPUT`, writes `checkpoint_validation` metrics, and can
   stop a run when the external gate fails.
+- Added anchor-policy KL regularization for non-sampling-only repair training.
+  `--anchor-policy-path` loads a frozen reference actor and `--anchor-kl-coef`
+  adds an anchor KL term to PPO actor loss.  This is intended for repair stages
+  from `3803147`, so hard-opponent learning is constrained against drifting too
+  far from the current best policy.  PPO metrics now include `anchor_kl` and
+  `anchor_kl_coef`.
+- DeepSeek reviewed anchor-KL repair and suggested a cautious starting coef
+  range of `0.01-0.10`, targeting `anchor_kl` roughly `0.1-0.5`.  Added
+  `--max-anchor-kl` and `--anchor-kl-patience` so training stops if policy drift
+  remains too high across consecutive PPO updates.
 
 ## Next Work Queue
 
 - Do not start another sampling-only repair from `3803147` unless the proposed
-  change includes a different training mechanism.  Every candidate must pass
+  change includes a different training mechanism.  Anchor-KL repair is now the
+  next candidate mechanism, and every candidate must pass
   `scripts/seed_matrix_gate.py` before replacing the current best.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.

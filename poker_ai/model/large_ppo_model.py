@@ -93,6 +93,9 @@ class LargePPOModel:
         self.kl_target = getattr(cfg, 'kl_target', 0.5)
         self.kl_early_stop = getattr(cfg, 'kl_early_stop', True)
         self.last_kl = 0.0
+        self.anchor_actor = None
+        self.anchor_kl_coef = 0.0
+        self.last_anchor_kl = 0.0
 
         # Critic 学习率倍率：Critic 需要更快收敛以提供准确价值估计
         self.critic_lr_multiplier = getattr(cfg, 'critic_lr_multiplier', 3.0)
@@ -270,6 +273,17 @@ class LargePPOModel:
             entropy = -tf.reduce_sum(probs * tf.math.log(probs), axis=1)
             entropy_loss = -tf.reduce_sum(entropy * msk) / (tf.reduce_sum(msk) + 1e-8)
             actor_loss = policy_loss + self.entropy_coef * entropy_loss
+            anchor_kl = tf.constant(0.0, dtype=tf.float32)
+            if self.anchor_actor is not None and self.anchor_kl_coef > 0.0:
+                anchor_raw = tf.cast(self.anchor_actor(batch_states, training=False), tf.float32)
+                anchor_probs = tf.clip_by_value(anchor_raw, 1e-6, 1.0)
+                anchor_probs = anchor_probs / (tf.reduce_sum(anchor_probs, axis=1, keepdims=True) + 1e-8)
+                per_state_anchor_kl = tf.reduce_sum(
+                    anchor_probs * (tf.math.log(anchor_probs) - tf.math.log(probs)),
+                    axis=1,
+                )
+                anchor_kl = tf.reduce_sum(per_state_anchor_kl * msk) / (tf.reduce_sum(msk) + 1e-8)
+                actor_loss = actor_loss + tf.cast(self.anchor_kl_coef, tf.float32) * anchor_kl
 
         a_grads = actor_tape.gradient(actor_loss, self.actor.trainable_variables)
         a_grads, _ = tf.clip_by_global_norm(a_grads, self.max_grad_norm)
@@ -299,7 +313,29 @@ class LargePPOModel:
             [(g, v) for g, v in zip(c_grads, self.critic.trainable_variables) if g is not None]
         )
 
-        return actor_loss, critic_loss, mean_kl
+        return actor_loss, critic_loss, mean_kl, anchor_kl
+
+    def set_anchor_policy(self, path: Optional[str], coef: float = 0.0) -> None:
+        """Load a frozen actor used as a retention regularizer during PPO repair."""
+        self.anchor_actor = None
+        self.anchor_kl_coef = max(0.0, float(coef))
+        self.last_anchor_kl = 0.0
+        if not path or self.anchor_kl_coef <= 0.0:
+            return
+
+        base = _ppo_base_path(path)
+        actor_path = base + ".actor.weights.h5"
+        if not os.path.exists(actor_path):
+            raise FileNotFoundError(f"Anchor actor weights not found: {actor_path}")
+        anchor = self._build_network(softmax_output=True)
+        anchor.load_weights(actor_path)
+        anchor.trainable = False
+        self.anchor_actor = anchor
+        logger.info(
+            "[LargePPO] Anchor policy loaded: %s, anchor_kl_coef=%.4f",
+            base,
+            self.anchor_kl_coef,
+        )
 
     def _predict_critic_batch(self, states: np.ndarray, chunk_size: int = 256) -> np.ndarray:
         n = len(states)
@@ -344,7 +380,7 @@ class LargePPOModel:
         returns = advantages + values
         old_values = values.copy()
 
-        total_a, total_c, total_kl = 0.0, 0.0, 0.0
+        total_a, total_c, total_kl, total_anchor_kl = 0.0, 0.0, 0.0, 0.0
         done_batches = 0
         sdim = states.shape[1]
 
@@ -379,7 +415,7 @@ class LargePPOModel:
                     ad_np = advantages[bi]; r_np = returns[bi]; ov_np = old_values[bi]
                     m_np = np.ones(bs, dtype=np.float32)
 
-                al, cl, kl = self._ppo_update_step(
+                al, cl, kl, anchor_kl = self._ppo_update_step(
                     tf.convert_to_tensor(s_np, tf.float32),
                     tf.convert_to_tensor(a_np, tf.int32),
                     tf.convert_to_tensor(op_np, tf.float32),
@@ -392,11 +428,13 @@ class LargePPOModel:
                 bkl = float(kl.numpy())
                 bal = float(al.numpy())
                 bcl = float(cl.numpy())
+                bakl = float(anchor_kl.numpy())
 
                 # 先记录指标，再判断 KL 早停（修复原先 break 后指标丢失的 bug）
                 total_a += bal
                 total_c += bcl
                 total_kl += bkl
+                total_anchor_kl += bakl
                 done_batches += 1
 
                 epoch_kl += bkl
@@ -422,11 +460,13 @@ class LargePPOModel:
         avg_c = total_c / done_batches
         self.last_loss = (avg_a + avg_c) / 2
         self.last_kl = total_kl / done_batches
+        self.last_anchor_kl = total_anchor_kl / done_batches
 
         elapsed = _time.time() - t0
         logger.info(
             f"[LargePPO] train() 完成: {elapsed:.3f}s, batches={done_batches}, "
-            f"actor_loss={avg_a:.6f}, critic_loss={avg_c:.6f}, KL={self.last_kl:.6f}"
+            f"actor_loss={avg_a:.6f}, critic_loss={avg_c:.6f}, "
+            f"KL={self.last_kl:.6f}, anchor_KL={self.last_anchor_kl:.6f}"
         )
         return self.last_loss
 

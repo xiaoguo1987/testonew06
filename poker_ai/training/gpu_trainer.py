@@ -69,6 +69,8 @@ class SeedRLTrainer:
         checkpoint_validation_command: Optional[str] = None,
         stop_on_validation_failure: bool = False,
         validation_start_hands: int = 0,
+        max_anchor_kl: float = 0.0,
+        anchor_kl_patience: int = 10,
     ):
         """
         Args:
@@ -106,6 +108,9 @@ class SeedRLTrainer:
         self.checkpoint_validation_command = checkpoint_validation_command
         self.stop_on_validation_failure = bool(stop_on_validation_failure)
         self.validation_start_hands = max(0, int(validation_start_hands))
+        self.max_anchor_kl = float(max_anchor_kl) if float(max_anchor_kl) > 0.0 else None
+        self.anchor_kl_patience = max(1, int(anchor_kl_patience))
+        self._anchor_kl_high_streak = 0
 
         # 训练统计
         self.total_hands = 0
@@ -1005,6 +1010,35 @@ class SeedRLTrainer:
             )
         return ok
 
+    def _anchor_kl_guard_failed(self) -> bool:
+        if self.max_anchor_kl is None:
+            return False
+        anchor_kl = float(getattr(self.model, "last_anchor_kl", 0.0))
+        if anchor_kl > self.max_anchor_kl:
+            self._anchor_kl_high_streak += 1
+        else:
+            self._anchor_kl_high_streak = 0
+        if self._anchor_kl_high_streak <= 0:
+            return False
+
+        self._write_metric(
+            "anchor_kl_guard",
+            anchor_kl=anchor_kl,
+            max_anchor_kl=float(self.max_anchor_kl),
+            high_streak=int(self._anchor_kl_high_streak),
+            patience=int(self.anchor_kl_patience),
+        )
+        if self._anchor_kl_high_streak >= self.anchor_kl_patience:
+            logger.warning(
+                "[SEED RL] anchor KL 连续过高: %.4f > %.4f, streak=%s/%s",
+                anchor_kl,
+                self.max_anchor_kl,
+                self._anchor_kl_high_streak,
+                self.anchor_kl_patience,
+            )
+            return True
+        return False
+
     def _find_latest_checkpoint(self) -> Optional[str]:
         """查找最新的 SEED RL checkpoint（按文件名中的手数排序）。"""
         import re
@@ -1184,6 +1218,7 @@ class SeedRLTrainer:
         last_metric_hands = training_start_hands
         last_saved_checkpoint_path: Optional[str] = None
         stopped_by_validation = False
+        stopped_by_anchor_guard = False
 
         self._write_metric(
             "train_start",
@@ -1199,6 +1234,9 @@ class SeedRLTrainer:
             small_blind=int(self.small_blind),
             big_blind=int(self.big_blind),
             initial_stack=int(self.initial_stack),
+            anchor_kl_coef=float(getattr(self.model, "anchor_kl_coef", 0.0)),
+            max_anchor_kl=float(self.max_anchor_kl) if self.max_anchor_kl is not None else None,
+            anchor_kl_patience=int(self.anchor_kl_patience),
         )
 
         def log_ppo_update(loss: float, reason: str) -> None:
@@ -1248,6 +1286,8 @@ class SeedRLTrainer:
                 ppo_seconds=float(self._last_ppo_seconds),
                 ppo_steps=int(self._last_ppo_steps),
                 last_kl=float(getattr(self.model, "last_kl", 0.0)),
+                anchor_kl=float(getattr(self.model, "last_anchor_kl", 0.0)),
+                anchor_kl_coef=float(getattr(self.model, "anchor_kl_coef", 0.0)),
                 inference_batches=int(self._inference_batches),
                 inference_items=int(self._inference_items),
                 inference_main_items=int(self._inference_main_items),
@@ -1282,6 +1322,11 @@ class SeedRLTrainer:
                         loss = self._do_ppo_train(traj_buffer)
                         if loss is not None:
                             log_ppo_update(loss, reason="backpressure")
+                            if self._anchor_kl_guard_failed():
+                                stopped_by_anchor_guard = True
+                                break
+                    if stopped_by_anchor_guard:
+                        break
                     # 训练完毕，继续正常循环
 
                 # 1. 推理调度
@@ -1300,6 +1345,10 @@ class SeedRLTrainer:
                     loss = self._do_ppo_train(traj_buffer, force=overflow_boundary)
                     if loss is not None:
                         log_ppo_update(loss, reason="overflow_boundary" if overflow_boundary else "regular")
+                        if self._anchor_kl_guard_failed():
+                            stopped_by_anchor_guard = True
+                            logger.warning("[SEED RL] anchor KL guard 触发，停止训练")
+                            break
 
                 # 4. 定期评估（与 checkpoint 间隔对齐，避免阻塞训练流水线）
                 # 评估在主线程串行执行，会阻塞推理调度导致所有 worker 停滞
@@ -1377,6 +1426,9 @@ class SeedRLTrainer:
                 if inferred == 0 and new_hands == 0:
                     time.sleep(0.0001)
 
+                if stopped_by_anchor_guard:
+                    break
+
         except KeyboardInterrupt:
             logger.info("[SEED RL] 收到中断信号，正在清理...")
         finally:
@@ -1409,6 +1461,8 @@ class SeedRLTrainer:
                     ppo_seconds=float(self._last_ppo_seconds),
                     ppo_steps=int(self._last_ppo_steps),
                     last_kl=float(getattr(self.model, "last_kl", 0.0)),
+                    anchor_kl=float(getattr(self.model, "last_anchor_kl", 0.0)),
+                    anchor_kl_coef=float(getattr(self.model, "anchor_kl_coef", 0.0)),
                 )
             self.ppo_buffer_size = old_buf
         elif remaining > 0:
