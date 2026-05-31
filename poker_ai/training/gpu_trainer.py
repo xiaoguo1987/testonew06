@@ -268,7 +268,10 @@ class SeedRLTrainer:
         Phase 2: 500000（自对弈阶段，防止军备竞赛）
         """
         phase_intervals = [50000, 100000, 500000]  # Phase0/1/2 对应的间隔
-        return phase_intervals[min(self._curriculum_phase, 2)]
+        interval = phase_intervals[min(self._curriculum_phase, 2)]
+        if self._opponent_scores and self.opponent_update_interval > 0:
+            interval = min(interval, int(self.opponent_update_interval))
+        return interval
 
     def _update_curriculum_phase(self):
         """根据训练进度自动切换对手难度阶段。

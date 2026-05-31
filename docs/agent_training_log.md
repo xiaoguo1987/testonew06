@@ -335,6 +335,10 @@ agent_training_log.md
   did not pass acceptance.  It improved `seed_rl_hands_1000054` to positive,
   but regressed `seed_rl_hands_1500036` and `seed_rl_hands_1000262`; average was
   roughly -11 bb/100.
+- Follow-up fix: when `OPPONENT_SCORE_FILE` is active, the dynamic opponent
+  interval is now capped by `OPPONENT_UPDATE_INTERVAL`.  Short repair stages can
+  rotate through multiple scored hard opponents instead of staying on one
+  sampled opponent for the whole Phase2 stage.
 - Current best candidate remains `seed_rl_hands_600047` from
   `/root/testo-seed-rl/runs/seed_hardopp_phase2_100k_from500k_20260530_235204`.
   Do not continue from 650k without a better multi-target weighting scheme.

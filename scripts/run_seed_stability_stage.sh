@@ -14,6 +14,7 @@ CURRICULUM_START_PHASE="${CURRICULUM_START_PHASE:-1}"
 CURRICULUM_MAX_PHASE="${CURRICULUM_MAX_PHASE:-3}"
 OPPONENT_SCORE_FILE="${OPPONENT_SCORE_FILE:-}"
 HARD_OPPONENT_TEMPERATURE="${HARD_OPPONENT_TEMPERATURE:-200}"
+OPPONENT_UPDATE_INTERVAL="${OPPONENT_UPDATE_INTERVAL:-10000}"
 
 mkdir -p "${RUN_DIR}/checkpoints"
 mkdir -p "${ROOT_DIR}/runs"
@@ -34,6 +35,7 @@ cd "${ROOT_DIR}"
   echo "CURRICULUM_MAX_PHASE=${CURRICULUM_MAX_PHASE}"
   echo "OPPONENT_SCORE_FILE=${OPPONENT_SCORE_FILE}"
   echo "HARD_OPPONENT_TEMPERATURE=${HARD_OPPONENT_TEMPERATURE}"
+  echo "OPPONENT_UPDATE_INTERVAL=${OPPONENT_UPDATE_INTERVAL}"
   echo "START_TS=$(date -Is)"
 } > "${RUN_DIR}/stage.env"
 
@@ -56,6 +58,7 @@ fi
   --checkpoint-interval "${CHECKPOINT_INTERVAL}" \
   --eval-interval "${EVAL_INTERVAL}" \
   --num-eval-games "${NUM_EVAL_GAMES}" \
+  --opponent-update-interval "${OPPONENT_UPDATE_INTERVAL}" \
   --curriculum-start-phase "${CURRICULUM_START_PHASE}" \
   --curriculum-max-phase "${CURRICULUM_MAX_PHASE}" \
   "${score_args[@]}" \
