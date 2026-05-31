@@ -647,6 +647,14 @@ agent_training_log.md
   is the preferred promotion workflow for any candidate that looks promising in
   a single matrix.  DeepSeek also recommended treating the repeat/multi-seed
   confirmation as mandatory before changing the research baseline.
+- Evaluation legality diagnostics were split so the next confirmation run can
+  tell apart real illegal Main_AI actions from hand-loop truncation.  New
+  fields include `invalid_action_count`, `invalid_action_rate`,
+  `invalid_or_truncated_rate`, `truncation_penalty_count`,
+  `truncation_penalty_rate`, `max_hand_actions_observed`, and
+  `truncated_hand_action_avg`.  The existing `invalid_bet_rate` now represents
+  actual invalid Main_AI actions, while truncation remains separately gated by
+  `truncated_hand_rate`.
 
 ## Next Work Queue
 
@@ -667,6 +675,7 @@ agent_training_log.md
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.
-- Add evaluation stability gates before accepting `seed_rl_best`.
+- Run repeat evaluation with the richer legality/truncation fields before
+  accepting `seed_rl_best`.
 - Reduce KL tail risk with PPO clipping/entropy/buffer tuning if instability
   repeats.

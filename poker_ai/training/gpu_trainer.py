@@ -615,11 +615,17 @@ class SeedRLTrainer:
         sr = StateRepresentation()
         wins, total_profit = 0, 0.0
         invalid_bets = 0
+        invalid_actions = 0
         total_actions = 0
         truncated_hands = 0
+        truncation_penalty_count = 0
+        max_hand_actions_observed = 0
         max_actions_per_hand = 256
         # 行动分布统计（用于诊断弃牌机器人）
+        action_names = ACTION_NAMES
         action_counts = [0] * ACTION_DIM
+        invalid_action_counts = defaultdict(int)
+        truncated_action_counts = []
         stochastic_model_eval = opponent_policy == "opponent_model"
 
         try:
@@ -634,9 +640,12 @@ class SeedRLTrainer:
                 hand_actions = 0
                 while not game.is_hand_over():
                     hand_actions += 1
+                    max_hand_actions_observed = max(max_hand_actions_observed, hand_actions)
                     if hand_actions > max_actions_per_hand:
                         truncated_hands += 1
                         invalid_bets += 1
+                        truncation_penalty_count += 1
+                        truncated_action_counts.append(hand_actions)
                         players_e[0].is_active = False
                         alive = [p for p in players_e if p.is_active]
                         if alive and game.pot > 0:
@@ -673,7 +682,9 @@ class SeedRLTrainer:
                         act, amt = sr.decode_action(av, game, cp, hs)
                         total_actions += 1
                         if not game.handle_action(cp, act, amt):
+                            invalid_actions += 1
                             invalid_bets += 1
+                            invalid_action_counts[action_names[ai]] += 1
                             action_counts[0] += 1  # 无效动作降级为弃牌
                             action_counts[ai] -= 1
                             game.handle_action(cp, 'fold', None)
@@ -719,7 +730,6 @@ class SeedRLTrainer:
                 np.random.set_state(np_state)
 
         # 行动分布日志：帮助诊断弃牌机器人问题
-        action_names = ACTION_NAMES
         action_distribution = {}
         if total_actions > 0:
             action_distribution = {
@@ -738,14 +748,42 @@ class SeedRLTrainer:
                 f"[评估:{opponent_policy}] 共截断 {truncated_hands}/{num_games} 手牌 "
                 f"({truncated_hands / max(num_games, 1):.1%})"
             )
+        if invalid_actions > 0:
+            invalid_dist = ', '.join(
+                f"{name}={count}"
+                for name, count in sorted(invalid_action_counts.items())
+            )
+            logger.warning(
+                f"[评估:{opponent_policy}] Main_AI 实际非法动作 {invalid_actions} 次: {invalid_dist}"
+            )
 
         avg_profit = total_profit / max(num_games, 1)
         bb_per_100 = (avg_profit / max(float(self.big_blind), 1.0)) * 100.0
+        invalid_action_rate = invalid_actions / max(total_actions, 1)
+        truncation_penalty_rate = truncation_penalty_count / max(total_actions, 1)
+        invalid_or_truncated_rate = invalid_bets / max(total_actions, 1)
+        invalid_action_distribution = {
+            name: count / max(invalid_actions, 1)
+            for name, count in sorted(invalid_action_counts.items())
+        }
+        truncated_action_avg = (
+            sum(truncated_action_counts) / len(truncated_action_counts)
+            if truncated_action_counts else 0.0
+        )
         return {
             'win_rate': wins / max(num_games, 1),
             'avg_profit': avg_profit,
             'bb_per_100': bb_per_100,
-            'invalid_bet_rate': invalid_bets / max(total_actions, 1),
+            'invalid_bet_rate': invalid_action_rate,
+            'invalid_action_count': invalid_actions,
+            'invalid_action_rate': invalid_action_rate,
+            'invalid_action_distribution': invalid_action_distribution,
+            'invalid_or_truncated_rate': invalid_or_truncated_rate,
+            'truncation_penalty_count': truncation_penalty_count,
+            'truncation_penalty_rate': truncation_penalty_rate,
+            'max_actions_per_hand': max_actions_per_hand,
+            'max_hand_actions_observed': max_hand_actions_observed,
+            'truncated_hand_action_avg': truncated_action_avg,
             'action_distribution': action_distribution,
             'total_profit': total_profit,
             'wins': wins,
