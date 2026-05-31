@@ -19,6 +19,7 @@ import threading
 import shutil
 import random
 import glob
+import subprocess
 import numpy as np
 import multiprocessing as mp
 from multiprocessing import Queue, Process, Pipe
@@ -65,6 +66,9 @@ class SeedRLTrainer:
         hard_opponent_temperature: float = 200.0,
         hard_opponent_negative_ratio: float = 0.0,
         hard_opponent_scored_only_ratio: float = 0.0,
+        checkpoint_validation_command: Optional[str] = None,
+        stop_on_validation_failure: bool = False,
+        validation_start_hands: int = 0,
     ):
         """
         Args:
@@ -99,6 +103,9 @@ class SeedRLTrainer:
         self.hard_opponent_temperature = max(float(hard_opponent_temperature), 1e-6)
         self.hard_opponent_negative_ratio = min(max(float(hard_opponent_negative_ratio), 0.0), 1.0)
         self.hard_opponent_scored_only_ratio = min(max(float(hard_opponent_scored_only_ratio), 0.0), 1.0)
+        self.checkpoint_validation_command = checkpoint_validation_command
+        self.stop_on_validation_failure = bool(stop_on_validation_failure)
+        self.validation_start_hands = max(0, int(validation_start_hands))
 
         # 训练统计
         self.total_hands = 0
@@ -914,7 +921,7 @@ class SeedRLTrainer:
             logger.warning(f"[SEED RL] 加载历史对手失败: {e}，回退到当前权重")
             self.opp_model.set_weights(self.model.get_weights())
 
-    def save_checkpoint(self, is_best: bool = False, max_keep: int = 30):
+    def save_checkpoint(self, is_best: bool = False, max_keep: int = 30) -> str:
         path = os.path.join(self.checkpoint_dir, f"seed_rl_hands_{self.total_hands}")
         self.model.save_weights(path)
         logger.info(f"Checkpoint 保存: {path}")
@@ -951,6 +958,52 @@ class SeedRLTrainer:
                     logger.info(f"归档旧 checkpoint 到数据盘: {base_name}")
         except Exception as e:
             logger.warning(f"归档 checkpoint 时出错: {e}")
+        return path
+
+    def _run_checkpoint_validation(self, checkpoint_path: str) -> bool:
+        if not self.checkpoint_validation_command:
+            return True
+        if self.total_hands < self.validation_start_hands:
+            return True
+
+        env = os.environ.copy()
+        env.update({
+            "SEED_RL_CHECKPOINT": checkpoint_path,
+            "SEED_RL_CHECKPOINT_DIR": self.checkpoint_dir,
+            "SEED_RL_TOTAL_HANDS": str(int(self.total_hands)),
+            "SEED_RL_METRICS_OUTPUT": self.metrics_output,
+        })
+        start = time.time()
+        logger.info(
+            "[SEED RL] 运行 checkpoint validation @%s: %s",
+            self.total_hands,
+            self.checkpoint_validation_command,
+        )
+        result = subprocess.run(
+            self.checkpoint_validation_command,
+            shell=True,
+            cwd=os.getcwd(),
+            env=env,
+        )
+        elapsed = time.time() - start
+        ok = result.returncode == 0
+        self._write_metric(
+            "checkpoint_validation",
+            checkpoint=checkpoint_path,
+            command=self.checkpoint_validation_command,
+            return_code=int(result.returncode),
+            ok=bool(ok),
+            elapsed_seconds=float(elapsed),
+        )
+        if ok:
+            logger.info("[SEED RL] checkpoint validation 通过: %s", checkpoint_path)
+        else:
+            logger.warning(
+                "[SEED RL] checkpoint validation 失败(return_code=%s): %s",
+                result.returncode,
+                checkpoint_path,
+            )
+        return ok
 
     def _find_latest_checkpoint(self) -> Optional[str]:
         """查找最新的 SEED RL checkpoint（按文件名中的手数排序）。"""
@@ -1129,6 +1182,8 @@ class SeedRLTrainer:
         last_opp_update_hand = training_start_hands
         last_metric_time = training_start
         last_metric_hands = training_start_hands
+        last_saved_checkpoint_path: Optional[str] = None
+        stopped_by_validation = False
 
         self._write_metric(
             "train_start",
@@ -1298,7 +1353,13 @@ class SeedRLTrainer:
                 # 5. 定期保存 checkpoint
                 if (self.total_hands - last_ckpt_hand) >= self.checkpoint_interval and self.total_hands > 0:
                     last_ckpt_hand = self.total_hands
-                    self.save_checkpoint(is_best=False)
+                    checkpoint_path = self.save_checkpoint(is_best=False)
+                    last_saved_checkpoint_path = checkpoint_path
+                    validation_ok = self._run_checkpoint_validation(checkpoint_path)
+                    if not validation_ok and self.stop_on_validation_failure:
+                        stopped_by_validation = True
+                        logger.warning("[SEED RL] validation 失败，按配置停止训练")
+                        break
 
                 # 6. Curriculum Learning 阶段检查 + 对手权重更新
                 self._update_curriculum_phase()
@@ -1375,7 +1436,12 @@ class SeedRLTrainer:
         )
 
         # 最终 checkpoint
-        self.save_checkpoint(is_best=False)
+        if last_saved_checkpoint_path and self.total_hands == last_ckpt_hand:
+            final_checkpoint_path = last_saved_checkpoint_path
+        else:
+            final_checkpoint_path = self.save_checkpoint(is_best=False)
+        if not stopped_by_validation:
+            self._run_checkpoint_validation(final_checkpoint_path)
 
         # 最终评估
         if not self.skip_final_eval:

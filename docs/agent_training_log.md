@@ -502,6 +502,12 @@ agent_training_log.md
   evaluate one or more checkpoints with row-level fail-fast gates, write each
   matrix JSONL, then run `scripts/seed_matrix_gate.py` and produce
   `gate_report.md` plus `candidate_status.json`.
+- Added optional training-side checkpoint validation hooks:
+  `--checkpoint-validation-command`, `--stop-on-validation-failure`, and
+  `--validation-start-hands`.  The trainer injects `SEED_RL_CHECKPOINT`,
+  `SEED_RL_CHECKPOINT_DIR`, `SEED_RL_TOTAL_HANDS`, and
+  `SEED_RL_METRICS_OUTPUT`, writes `checkpoint_validation` metrics, and can
+  stop a run when the external gate fails.
 
 ## Next Work Queue
 

@@ -318,6 +318,12 @@ def parse_arguments():
                        help='hard-opponent 训练中只从负 bb/100 对手采样的概率；0 表示不过滤')
     parser.add_argument('--hard-opponent-scored-only-ratio', type=float, default=0.0,
                        help='hard-opponent 训练中只从 score-file 已评分对手采样的概率；0 表示允许未评分历史池')
+    parser.add_argument('--checkpoint-validation-command', type=str, default=None,
+                       help='每次保存 checkpoint 后运行的外部验证命令；会注入 SEED_RL_CHECKPOINT 等环境变量')
+    parser.add_argument('--stop-on-validation-failure', action='store_true',
+                       help='checkpoint-validation-command 返回非零时停止本轮训练')
+    parser.add_argument('--validation-start-hands', type=int, default=0,
+                       help='累计手数达到该值后才运行 checkpoint validation')
     
     # 探索参数
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
@@ -506,6 +512,9 @@ def _train_seed_rl(args):
             hard_opponent_temperature=getattr(args, 'hard_opponent_temperature', 200.0),
             hard_opponent_negative_ratio=getattr(args, 'hard_opponent_negative_ratio', 0.0),
             hard_opponent_scored_only_ratio=getattr(args, 'hard_opponent_scored_only_ratio', 0.0),
+            checkpoint_validation_command=getattr(args, 'checkpoint_validation_command', None),
+            stop_on_validation_failure=getattr(args, 'stop_on_validation_failure', False),
+            validation_start_hands=getattr(args, 'validation_start_hands', 0),
         )
 
         # 加载 checkpoint
