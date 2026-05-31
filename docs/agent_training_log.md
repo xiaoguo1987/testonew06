@@ -475,13 +475,21 @@ agent_training_log.md
     but is not enough by itself.  New repair stages can still create a large
     single-opponent regression, so acceptance needs an explicit retention gate
     before more training is launched.
+- Added `scripts/seed_matrix_gate.py` to turn matrix JSONL files into explicit
+  PASS/FAIL reports.  Default gates are tuned to the current best model:
+  avg >= +103.9 bb/100, worst >= -360.1 bb/100, no fail-fast opponent below
+  -500 bb/100, invalid <= 0.1%, trunc <= 0.5%, and 13 evaluated opponents.
+- Validation gate report:
+  `/root/testo-seed-rl/runs/seed_retention_gate_20260531_143519/gate_report.md`
+  compared all worstcase, mild, and scored-only repair checkpoints against
+  `3803147`; no candidate passed.  This confirms `3803147` should remain the
+  current best until a different training method clears the gate.
 
 ## Next Work Queue
 
-- Do not start another sampling-only repair from `3803147` until a retention
-  gate is added.  Candidate must beat current avg +103.9 and worst -360.1, and
-  should fail fast if any opponent drops below roughly -500 bb/100 during matrix
-  evaluation.
+- Do not start another sampling-only repair from `3803147` unless the proposed
+  change includes a different training mechanism.  Every candidate must pass
+  `scripts/seed_matrix_gate.py` before replacing the current best.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
 - Periodically summarize metrics into this file.
