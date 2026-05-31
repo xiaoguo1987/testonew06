@@ -519,6 +519,18 @@ agent_training_log.md
   range of `0.01-0.10`, targeting `anchor_kl` roughly `0.1-0.5`.  Added
   `--max-anchor-kl` and `--anchor-kl-patience` so training stops if policy drift
   remains too high across consecutive PPO updates.
+- Anchor-KL 50k smoke from `3803147`:
+  `/root/testo-seed-rl/runs/seed_anchor_kl_smoke_50k_from3803k_20260531_151954`.
+  Training mechanics were healthy: median interval speed about 1,746 hand/s,
+  KL median 0.0766, max 0.1190, all-in about 9%, and anchor KL stayed very low
+  around 0.0007-0.003.  However the validation gate failed fast:
+  `/root/testo-seed-rl/runs/seed_anchor_kl_smoke_eval_3853151/gate_report.md`
+  stopped at 12/13 opponents because `seed_rl_hands_900022` scored
+  -1371.3 bb/100, a -1838.6 bb/100 regression versus baseline.  Do not use
+  `seed_rl_hands_3853151` as a base.
+- Fix after smoke: when validation or anchor guard stops a run, skip remaining
+  PPO buffer training so the model cannot mutate after the failing checkpoint
+  has already been validated.
 
 ## Next Work Queue
 

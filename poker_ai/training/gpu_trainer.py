@@ -1448,7 +1448,15 @@ class SeedRLTrainer:
         # 训练结束后处理剩余 buffer（仅当数据足够多时才训练，避免小样本灾难性过拟合）
         remaining = len(traj_buffer.get('states', []))
         min_remaining = max(8192, self.model.batch_size)  # 小尾批高方差，宁可丢弃
-        if remaining >= min_remaining:
+        if stopped_by_validation or stopped_by_anchor_guard:
+            if remaining > 0:
+                logger.info(
+                    f"[SEED RL] 跳过剩余 buffer: {remaining} steps，"
+                    "因为训练已被 validation/anchor guard 停止"
+                )
+                for k in traj_buffer:
+                    traj_buffer[k] = []
+        elif remaining >= min_remaining:
             logger.info(f"[SEED RL] 处理剩余 buffer: {remaining} steps")
             old_buf = self.ppo_buffer_size
             self.ppo_buffer_size = 1
