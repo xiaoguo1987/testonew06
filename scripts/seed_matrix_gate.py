@@ -31,6 +31,7 @@ class MatrixSummary:
     best_opponent: str
     invalid_rate: float
     truncated_rate: float
+    opponent_scores: dict[str, float]
 
 
 def _read_rows(path: Path) -> list[dict[str, Any]]:
@@ -49,6 +50,11 @@ def _label_from_rows(path: Path, rows: list[dict[str, Any]]) -> str:
     return path.stem
 
 
+def _opponent_key(row: dict[str, Any]) -> str:
+    raw = row.get("opponent_name") or row.get("opponent") or "unknown"
+    return os.path.basename(str(raw))
+
+
 def summarize(path: Path) -> MatrixSummary:
     rows = _read_rows(path)
     if not rows:
@@ -63,6 +69,10 @@ def summarize(path: Path) -> MatrixSummary:
     avg = sum(float(row["bb_per_100"]) for row in rows) / len(rows)
     invalid = sum(float(row.get("invalid_bet_rate", 0.0)) for row in rows) / len(rows)
     truncated = sum(float(row.get("truncated_hand_rate", 0.0)) for row in rows) / len(rows)
+    opponent_scores = {
+        _opponent_key(row): float(row["bb_per_100"])
+        for row in rows
+    }
     return MatrixSummary(
         label=_label_from_rows(path, rows),
         path=path,
@@ -74,6 +84,7 @@ def summarize(path: Path) -> MatrixSummary:
         best_opponent=str(best.get("opponent_name") or os.path.basename(str(best.get("opponent", "")))),
         invalid_rate=invalid,
         truncated_rate=truncated,
+        opponent_scores=opponent_scores,
     )
 
 
@@ -117,6 +128,25 @@ def _check_summary(
             failures.append(
                 f"worst delta {_fmt(worst_delta)} < required {_fmt(args.min_worst_delta)}"
             )
+    if baseline and args.max_opponent_regression is not None:
+        regressions: list[tuple[str, float]] = []
+        for opponent, baseline_score in baseline.opponent_scores.items():
+            if opponent not in summary.opponent_scores:
+                continue
+            delta = summary.opponent_scores[opponent] - baseline_score
+            if delta < -args.max_opponent_regression:
+                regressions.append((opponent, delta))
+        if regressions:
+            regressions.sort(key=lambda item: item[1])
+            shown = ", ".join(
+                f"{opponent} delta {_fmt(delta)}"
+                for opponent, delta in regressions[:3]
+            )
+            if len(regressions) > 3:
+                shown += f", and {len(regressions) - 3} more"
+            failures.append(
+                f"per-opponent regression > {_fmt(args.max_opponent_regression)}: {shown}"
+            )
     return failures
 
 
@@ -126,6 +156,11 @@ def build_report(
     baseline: MatrixSummary | None,
 ) -> tuple[str, bool]:
     ranked = sorted(candidates, key=lambda item: (item.avg_bb100, item.worst_bb100), reverse=True)
+    regression_threshold = (
+        _fmt(args.max_opponent_regression)
+        if args.max_opponent_regression is not None
+        else "disabled"
+    )
     any_pass = False
     lines = [
         "# SEED RL Matrix Gate",
@@ -152,6 +187,7 @@ def build_report(
         f"- fail_fast_worst={_fmt(args.fail_fast_worst)}",
         f"- max_invalid={_pct(args.max_invalid)}",
         f"- max_truncated={_pct(args.max_truncated)}",
+        f"- max_opponent_regression={regression_threshold}",
         f"- expected_count={args.expected_count or 'disabled'}",
         "",
         "## Candidates",
@@ -223,6 +259,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fail-fast-worst", type=float, default=-500.0)
     parser.add_argument("--max-invalid", type=float, default=0.001)
     parser.add_argument("--max-truncated", type=float, default=0.005)
+    parser.add_argument(
+        "--max-opponent-regression",
+        type=float,
+        default=None,
+        help="With --baseline, fail if any matched opponent drops by more than this bb/100",
+    )
     parser.add_argument("--require-baseline-improvement", action="store_true")
     parser.add_argument("--min-avg-delta", type=float, default=0.0)
     parser.add_argument("--min-worst-delta", type=float, default=0.0)

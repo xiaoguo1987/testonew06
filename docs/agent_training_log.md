@@ -484,6 +484,20 @@ agent_training_log.md
   compared all worstcase, mild, and scored-only repair checkpoints against
   `3803147`; no candidate passed.  This confirms `3803147` should remain the
   current best until a different training method clears the gate.
+- Added fail-fast row gates to `scripts/evaluate_seed_pool.py`.  Matrix sweeps
+  can now stop early on a severe per-opponent loss or invalid/truncation spike,
+  while still writing the failing row into the JSONL for later inspection.
+  Suggested current command flags:
+  `--fail-fast-worst-bb100 -500 --max-invalid-rate 0.001 --max-truncated-rate 0.005`.
+- DeepSeek reviewed the gate direction and agreed it is the right guardrail
+  before more training, but recommended also checking per-opponent retention
+  versus the baseline.  Added `--max-opponent-regression` to
+  `scripts/seed_matrix_gate.py` so a candidate can fail even if its global
+  average looks good but one matched historical opponent regresses too far.
+- Refreshed gate report with per-opponent regression enabled:
+  `/root/testo-seed-rl/runs/seed_retention_gate_20260531_1530/gate_report.md`.
+  No previous repair candidate passed; `3903168` was closest by average but
+  failed on `600040` by a -894.5 bb/100 baseline-relative regression.
 
 ## Next Work Queue
 

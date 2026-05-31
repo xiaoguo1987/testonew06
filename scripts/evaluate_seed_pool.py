@@ -16,10 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from poker_ai.model.large_ppo_model import LargePPOModel
-from poker_ai.config.ppo_config import PPOConfig
-from poker_ai.training.gpu_trainer import SeedRLTrainer
-
 
 def _checkpoint_base(path: str) -> str:
     if path.endswith(".actor.weights.h5"):
@@ -63,11 +59,68 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated LargePPO hidden dimensions",
     )
     parser.add_argument("--out", default=None, help="Optional JSONL output path")
+    parser.add_argument(
+        "--fail-fast-worst-bb100",
+        type=float,
+        default=None,
+        help="Stop evaluation if any opponent result drops below this bb/100",
+    )
+    parser.add_argument(
+        "--max-invalid-rate",
+        type=float,
+        default=None,
+        help="Stop evaluation if any opponent result exceeds this invalid bet rate",
+    )
+    parser.add_argument(
+        "--max-truncated-rate",
+        type=float,
+        default=None,
+        help="Stop evaluation if any opponent result exceeds this truncated hand rate",
+    )
+    parser.add_argument(
+        "--continue-on-gate-fail",
+        action="store_true",
+        help="Tag gate failures but continue evaluating the remaining opponents",
+    )
+    parser.add_argument(
+        "--fail-exit-code",
+        type=int,
+        default=3,
+        help="Exit code when a fail-fast evaluation gate is triggered",
+    )
     return parser.parse_args()
+
+
+def _result_gate_failures(row: dict, args: argparse.Namespace) -> list[str]:
+    failures: list[str] = []
+    bb100 = float(row.get("bb_per_100", 0.0))
+    invalid = float(row.get("invalid_bet_rate", 0.0))
+    truncated = float(row.get("truncated_hand_rate", 0.0))
+
+    if (
+        args.fail_fast_worst_bb100 is not None
+        and bb100 < args.fail_fast_worst_bb100
+    ):
+        failures.append(
+            f"bb_per_100 {bb100:.1f} < {args.fail_fast_worst_bb100:.1f}"
+        )
+    if args.max_invalid_rate is not None and invalid > args.max_invalid_rate:
+        failures.append(
+            f"invalid_bet_rate {invalid:.4f} > {args.max_invalid_rate:.4f}"
+        )
+    if args.max_truncated_rate is not None and truncated > args.max_truncated_rate:
+        failures.append(
+            f"truncated_hand_rate {truncated:.4f} > {args.max_truncated_rate:.4f}"
+        )
+    return failures
 
 
 def main() -> int:
     args = parse_args()
+    from poker_ai.config.ppo_config import PPOConfig
+    from poker_ai.model.large_ppo_model import LargePPOModel
+    from poker_ai.training.gpu_trainer import SeedRLTrainer
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -97,6 +150,7 @@ def main() -> int:
         raise SystemExit(f"Failed to load model checkpoint: {model_path}")
 
     out_fh = open(args.out, "w", encoding="utf-8") if args.out else None
+    exit_code = 0
     try:
         for idx, opponent in enumerate(opponents):
             trainer.opp_model.load_weights(opponent)
@@ -111,15 +165,27 @@ def main() -> int:
                 "opponent_name": os.path.basename(opponent),
                 **result,
             }
+            failures = _result_gate_failures(row, args)
+            row["gate_status"] = "FAIL" if failures else "OK"
+            if failures:
+                row["gate_failures"] = failures
             text = json.dumps(row, ensure_ascii=False, sort_keys=True)
             print(text, flush=True)
             if out_fh:
                 out_fh.write(text + "\n")
                 out_fh.flush()
+            if failures and not args.continue_on_gate_fail:
+                logging.error(
+                    "Evaluation gate failed for %s: %s",
+                    row["opponent_name"],
+                    "; ".join(failures),
+                )
+                exit_code = args.fail_exit_code
+                break
     finally:
         if out_fh:
             out_fh.close()
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
