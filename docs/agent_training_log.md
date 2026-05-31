@@ -343,16 +343,46 @@ agent_training_log.md
   `/root/testo-seed-rl/runs/seed_hardopp_phase2_100k_from500k_20260530_235204`.
   Do not continue from 650k without a better multi-target weighting scheme.
 
+### 2026-05-31 3M self-play sweep from 600k
+
+- Run: `/root/testo-seed-rl/runs/seed_selfplay_3m_from600k_20260531_093252`
+- Setup: base `seed_rl_hands_600047`, 3M additional hands, LR `2e-6`,
+  checkpoint/eval every 100k, Phase2 start and Phase3 allowed.
+- Training completed at `seed_rl_hands_3600064`.
+  - Overall speed: 973.4 hands/s including startup, checkpoints, and eval.
+  - Median interval speed: 1424.2 hands/s.
+  - KL median/p95/max: 0.1290 / 0.2417 / 0.3464.
+  - Final cumulative actions: fold 21.9%, call 57.8%, all-in 8.0%.
+  - Phase3 online evals were noisy: `2702798` +420.5 bb/100,
+    `2902893` +360.2 bb/100, `3202958` -521.4 bb/100, final `3600064`
+    +152.8 bb/100.
+- Candidate sweep:
+  `/root/testo-seed-rl/runs/seed_pool_sweep_3m_candidates_20260531_102722`
+  against the 13-opponent historical pool, 500 games/opponent.
+  - `600047`: avg +24.8, worst `600049` -1080.1.
+  - `800093`: avg -88.0, worst `1000262` -650.8.
+  - `1400635`: avg +22.7, worst `1000054` -919.6.
+  - `1902135`: avg -172.7, worst `600049` -603.1.
+  - `2702798`: avg -146.0, worst `1500036` -1035.6.
+  - `2902893`: avg -215.7, worst `700169` -867.4.
+  - `3503107`: avg +49.8, worst `600049` -559.2, then
+    `600047` -524.0 and `1000054` -369.8.
+  - `3600064`: avg -143.6, worst `600040` -567.0.
+- Takeaway: use `3503107` as the next research base because it has the best
+  matrix average and improves the worst-case relative to `600047`, but it is
+  not acceptable for delivery.  The next stage should target worst-matchup
+  robustness, not raw online eval.
+- Started follow-up run:
+  `/root/testo-seed-rl/runs/seed_robust_repair_100k_from3503k_20260531_105520`
+  from `3503107`, LR `1e-6`, Phase2 locked, score-file from the `3503107`
+  matrix, hard-opponent temperature 1000, opponent rotation every 10k.
+
 ## Next Work Queue
 
-- Restart a 1M historical-pool stage from the 500k checkpoint with
-  `CURRICULUM_START_PHASE=2`, then extend only if evaluation remains stable.
-- Run the multi-opponent evaluation matrix before the next long training stage.
-- Restart a short hard-opponent repair stage from 500k with LR `2e-5`,
-  `CURRICULUM_START_PHASE=2`, `CURRICULUM_MAX_PHASE=2`, and a softer hard
-  opponent temperature, then rerun the matrix before extending.
-- Current best candidate: `seed_rl_hands_600047`, but it is not acceptable for
-  delivery until the worst matchup improves.
+- Monitor `seed_robust_repair_100k_from3503k_20260531_105520`; after it
+  completes, run the same 13-opponent matrix before any extension.
+- Current best research candidate: `seed_rl_hands_3503107`, but it is not
+  acceptable for delivery until worst matchup improves toward -200 bb/100.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.
