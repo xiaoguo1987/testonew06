@@ -1,0 +1,30 @@
+{
+  "buckets": [
+    {
+      "name": "hard_negatives",
+      "opponents": [
+        "seed_rl_hands_1000262",
+        "seed_rl_hands_900236",
+        "seed_rl_hands_800200",
+        "seed_rl_hands_900022"
+      ]
+    },
+    {
+      "name": "recent_regressions",
+      "opponents": [
+        "seed_rl_hands_600040",
+        "seed_rl_hands_600049",
+        "seed_rl_hands_500016"
+      ]
+    },
+    {
+      "name": "old_strengths",
+      "opponents": [
+        "seed_rl_hands_550046",
+        "seed_rl_hands_700016",
+        "seed_rl_hands_1000054",
+        "seed_rl_hands_1500036"
+      ]
+    }
+  ]
+}

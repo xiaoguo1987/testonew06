@@ -69,6 +69,7 @@ class SeedRLTrainer:
         hard_opponent_scored_only_ratio: float = 0.0,
         hard_opponent_positive_ratio: float = 0.0,
         opponent_ensemble_size: int = 1,
+        opponent_roster_file: Optional[str] = None,
         checkpoint_validation_command: Optional[str] = None,
         stop_on_validation_failure: bool = False,
         validation_start_hands: int = 0,
@@ -111,6 +112,7 @@ class SeedRLTrainer:
         self.hard_opponent_scored_only_ratio = min(max(float(hard_opponent_scored_only_ratio), 0.0), 1.0)
         self.hard_opponent_positive_ratio = min(max(float(hard_opponent_positive_ratio), 0.0), 1.0)
         self.opponent_ensemble_size = max(1, int(opponent_ensemble_size))
+        self.opponent_roster_file = opponent_roster_file
         self.checkpoint_validation_command = checkpoint_validation_command
         self.stop_on_validation_failure = bool(stop_on_validation_failure)
         self.validation_start_hands = max(0, int(validation_start_hands))
@@ -171,6 +173,7 @@ class SeedRLTrainer:
         self._opponent_pool: List[str] = []  # 可用的历史 checkpoint 路径列表
         self._opponent_score_paths: List[str] = []
         self._opponent_scores: Dict[str, float] = self._load_opponent_scores(opponent_score_file)
+        self._opponent_roster_buckets = self._load_opponent_roster(opponent_roster_file)
         self._opponent_pool_max_size = 20    # 对手池最大容量
         self._loaded_checkpoint_path: Optional[str] = None
         self._archive_dir = '/root/autodl-tmp/poker_checkpoints'  # 数据盘归档目录
@@ -817,6 +820,52 @@ class SeedRLTrainer:
             logger.warning(f"[SEED RL] 加载 hard-opponent 评分失败: {exc}")
         return scores
 
+    def _load_opponent_roster(self, path: Optional[str]) -> List[Dict]:
+        """Load fixed opponent buckets for ensemble slots.
+
+        The roster intentionally matches checkpoints by basename so the same
+        file works on local and server paths as long as the score file provides
+        the checkpoint locations.
+        """
+        if not path:
+            return []
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            buckets = data.get("buckets", data) if isinstance(data, dict) else data
+            if not isinstance(buckets, list):
+                raise ValueError("roster must be a list or {'buckets': [...]}")
+
+            loaded = []
+            for idx, bucket in enumerate(buckets):
+                if not isinstance(bucket, dict):
+                    raise ValueError(f"bucket #{idx} is not an object")
+                names = bucket.get("opponents") or bucket.get("names") or []
+                if isinstance(names, str):
+                    names = [names]
+                clean_names = [
+                    os.path.basename(str(name).replace(".actor.weights.h5", ""))
+                    for name in names
+                    if str(name).strip()
+                ]
+                if not clean_names:
+                    continue
+                loaded.append({
+                    "name": str(bucket.get("name") or f"bucket_{idx}"),
+                    "opponents": clean_names,
+                })
+            logger.info(
+                "[SEED RL] 已加载固定对手 roster: "
+                + ", ".join(
+                    f"{bucket['name']}({len(bucket['opponents'])})"
+                    for bucket in loaded
+                )
+            )
+            return loaded
+        except Exception as exc:
+            logger.warning(f"[SEED RL] 加载固定对手 roster 失败: {exc}")
+            return []
+
     def _add_scored_opponents_to_pool(self) -> int:
         """Add explicit opponent checkpoint paths from the matrix score file."""
         added = 0
@@ -879,6 +928,35 @@ class SeedRLTrainer:
                 return path
         return candidates[-1]
 
+    def _bucket_candidates(self, candidates: List[str], bucket: Dict) -> List[str]:
+        names = set(bucket.get("opponents", []))
+        matched = [
+            path for path in candidates
+            if os.path.basename(path) in names
+        ]
+        return matched or candidates
+
+    def _sample_roster_paths(self, candidates: List[str]) -> List[str]:
+        chosen_paths = []
+        if not self._opponent_roster_buckets:
+            available = list(candidates)
+            for _ in range(len(self._opponent_models)):
+                if not available:
+                    available = list(candidates)
+                chosen = self._sample_opponent_checkpoint(available)
+                chosen_paths.append(chosen)
+                if chosen in available and len(available) > 1:
+                    available.remove(chosen)
+            return chosen_paths
+
+        for slot_idx in range(len(self._opponent_models)):
+            bucket = self._opponent_roster_buckets[
+                slot_idx % len(self._opponent_roster_buckets)
+            ]
+            bucket_candidates = self._bucket_candidates(candidates, bucket)
+            chosen_paths.append(self._sample_opponent_checkpoint(bucket_candidates))
+        return chosen_paths
+
     def _update_opponent_from_pool(self):
         """从历史对手池中抽取一个或多个版本加载到对手模型。
 
@@ -939,15 +1017,7 @@ class SeedRLTrainer:
                 candidates = non_current
 
         pool_size = len(candidates)
-        available = list(candidates)
-        chosen_paths: List[str] = []
-        for _ in range(len(self._opponent_models)):
-            if not available:
-                available = list(candidates)
-            chosen = self._sample_opponent_checkpoint(available)
-            chosen_paths.append(chosen)
-            if chosen in available and len(available) > 1:
-                available.remove(chosen)
+        chosen_paths = self._sample_roster_paths(candidates)
 
         loaded_paths: List[str] = []
         for model_idx, (model, chosen) in enumerate(zip(self._opponent_models, chosen_paths)):
@@ -973,7 +1043,8 @@ class SeedRLTrainer:
             f"[SEED RL] 对手池抽取 ensemble_size={len(self._opponent_models)} "
             f"(pool_size={pool_size}, hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}, "
             f"positive_ratio={self.hard_opponent_positive_ratio:.2f}, "
-            f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}): "
+            f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}, "
+            f"roster_buckets={len(self._opponent_roster_buckets)}): "
             + ", ".join(parts)
         )
 
@@ -1190,6 +1261,7 @@ class SeedRLTrainer:
             f"hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}, "
             f"positive_ratio={self.hard_opponent_positive_ratio:.2f}, "
             f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}, "
+            f"roster_buckets={len(self._opponent_roster_buckets)}, "
             f"hard_temperature={self.hard_opponent_temperature:.1f}, "
             f"archive_dir={self._archive_dir}"
         )
@@ -1299,6 +1371,9 @@ class SeedRLTrainer:
             anchor_kl_patience=int(self.anchor_kl_patience),
             opponent_ensemble_size=int(len(self._opponent_models)),
             opponent_ensemble=list(self._opponent_ensemble_paths),
+            opponent_roster_buckets=[
+                bucket.get("name") for bucket in self._opponent_roster_buckets
+            ],
         )
 
         def log_ppo_update(loss: float, reason: str) -> None:
@@ -1361,6 +1436,9 @@ class SeedRLTrainer:
                 opponent_types=list(self.opp_type_list),
                 opponent_ensemble_size=int(len(self._opponent_models)),
                 opponent_ensemble=list(self._opponent_ensemble_paths),
+                opponent_roster_buckets=[
+                    bucket.get("name") for bucket in self._opponent_roster_buckets
+                ],
                 train_action_distribution=cumulative_action_dist,
                 train_action_distribution_interval=interval_action_dist,
                 position_profit=cumulative_position_profit,

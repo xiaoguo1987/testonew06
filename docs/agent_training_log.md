@@ -610,6 +610,15 @@ agent_training_log.md
   fail-fast collapse, but avg/worst below baseline.  Next mechanism should use
   a fixed multi-bucket roster or candidate selection across multiple short
   checkpoints, not another blind global sampling-ratio tweak.
+- Added fixed roster support for the next mechanism:
+  `--opponent-roster-file`.  The roster matches checkpoint basenames against
+  the score-file opponent paths, then maps ensemble slots across explicit
+  buckets.  Default roster:
+  `configs/seed_roster_3803147.json`, with buckets for hard negatives
+  (`1000262`, `900236`, `800200`, `900022`), recent regressions (`600040`,
+  `600049`, `500016`), and old strengths (`550046`, `700016`, `1000054`,
+  `1500036`).  This should be tested before any longer run so each table sees
+  a controlled mix instead of a global positive/negative sampling ratio.
 
 ## Next Work Queue
 
@@ -620,8 +629,9 @@ agent_training_log.md
   implementation: a fixed multi-bucket opponent roster that always includes
   hard negatives (`1000262`, `900236`, `800200`), recent regressions
   (`600040`, `600049`, `500016`), and old strengths (`550046`, `700016`,
-  `1000054`, `1500036`), plus evaluation of all intermediate checkpoints
-  before choosing a continuation base.  Every candidate must pass
+  `1000054`, `1500036`).  Use `configs/seed_roster_3803147.json` and evaluate
+  all intermediate checkpoints before choosing a continuation base.  Every
+  candidate must pass
   `scripts/seed_matrix_gate.py` before replacing the current best.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.

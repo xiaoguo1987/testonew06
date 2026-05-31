@@ -324,6 +324,8 @@ def parse_arguments():
                        help='hard-opponent 训练中只从 score-file 已评分对手采样的概率；0 表示允许未评分历史池')
     parser.add_argument('--opponent-ensemble-size', type=int, default=1,
                        help='同时加载多少个历史 PPO 对手；>1 时不同 PPO 座位使用不同 checkpoint 以降低遗忘')
+    parser.add_argument('--opponent-roster-file', type=str, default=None,
+                       help='JSON 固定对手分桶；ensemble slot 会按 bucket 轮转抽取 checkpoint')
     parser.add_argument('--anchor-policy-path', type=str, default=None,
                        help='冻结参考策略 base 路径；repair 训练时用于 anchor KL 防止遗忘')
     parser.add_argument('--anchor-kl-coef', type=float, default=0.0,
@@ -533,6 +535,7 @@ def _train_seed_rl(args):
             hard_opponent_positive_ratio=getattr(args, 'hard_opponent_positive_ratio', 0.0),
             hard_opponent_scored_only_ratio=getattr(args, 'hard_opponent_scored_only_ratio', 0.0),
             opponent_ensemble_size=getattr(args, 'opponent_ensemble_size', 1),
+            opponent_roster_file=getattr(args, 'opponent_roster_file', None),
             checkpoint_validation_command=getattr(args, 'checkpoint_validation_command', None),
             stop_on_validation_failure=getattr(args, 'stop_on_validation_failure', False),
             validation_start_hands=getattr(args, 'validation_start_hands', 0),
