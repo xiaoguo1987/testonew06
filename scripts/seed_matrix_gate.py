@@ -31,6 +31,10 @@ class MatrixSummary:
     best_opponent: str
     invalid_rate: float
     truncated_rate: float
+    max_invalid_rate: float
+    max_invalid_opponent: str
+    max_truncated_rate: float
+    max_truncated_opponent: str
     opponent_scores: dict[str, float]
 
 
@@ -69,6 +73,8 @@ def summarize(path: Path) -> MatrixSummary:
     avg = sum(float(row["bb_per_100"]) for row in rows) / len(rows)
     invalid = sum(float(row.get("invalid_bet_rate", 0.0)) for row in rows) / len(rows)
     truncated = sum(float(row.get("truncated_hand_rate", 0.0)) for row in rows) / len(rows)
+    max_invalid = max(rows, key=lambda row: float(row.get("invalid_bet_rate", 0.0)))
+    max_truncated = max(rows, key=lambda row: float(row.get("truncated_hand_rate", 0.0)))
     opponent_scores = {
         _opponent_key(row): float(row["bb_per_100"])
         for row in rows
@@ -84,6 +90,10 @@ def summarize(path: Path) -> MatrixSummary:
         best_opponent=str(best.get("opponent_name") or os.path.basename(str(best.get("opponent", "")))),
         invalid_rate=invalid,
         truncated_rate=truncated,
+        max_invalid_rate=float(max_invalid.get("invalid_bet_rate", 0.0)),
+        max_invalid_opponent=_opponent_key(max_invalid),
+        max_truncated_rate=float(max_truncated.get("truncated_hand_rate", 0.0)),
+        max_truncated_opponent=_opponent_key(max_truncated),
         opponent_scores=opponent_scores,
     )
 
@@ -114,6 +124,16 @@ def _check_summary(
         failures.append(f"invalid {_pct(summary.invalid_rate)} > max {_pct(args.max_invalid)}")
     if summary.truncated_rate > args.max_truncated:
         failures.append(f"truncated {_pct(summary.truncated_rate)} > max {_pct(args.max_truncated)}")
+    if args.max_row_invalid is not None and summary.max_invalid_rate > args.max_row_invalid:
+        failures.append(
+            f"row invalid {summary.max_invalid_opponent} {_pct(summary.max_invalid_rate)} "
+            f"> max {_pct(args.max_row_invalid)}"
+        )
+    if args.max_row_truncated is not None and summary.max_truncated_rate > args.max_row_truncated:
+        failures.append(
+            f"row truncated {summary.max_truncated_opponent} {_pct(summary.max_truncated_rate)} "
+            f"> max {_pct(args.max_row_truncated)}"
+        )
     if summary.worst_bb100 < args.fail_fast_worst:
         failures.append(f"fail-fast worst {_fmt(summary.worst_bb100)} < {_fmt(args.fail_fast_worst)}")
 
@@ -161,6 +181,8 @@ def build_report(
         if args.max_opponent_regression is not None
         else "disabled"
     )
+    max_row_invalid = _pct(args.max_row_invalid) if args.max_row_invalid is not None else "disabled"
+    max_row_truncated = _pct(args.max_row_truncated) if args.max_row_truncated is not None else "disabled"
     any_pass = False
     lines = [
         "# SEED RL Matrix Gate",
@@ -187,13 +209,15 @@ def build_report(
         f"- fail_fast_worst={_fmt(args.fail_fast_worst)}",
         f"- max_invalid={_pct(args.max_invalid)}",
         f"- max_truncated={_pct(args.max_truncated)}",
+        f"- max_row_invalid={max_row_invalid}",
+        f"- max_row_truncated={max_row_truncated}",
         f"- max_opponent_regression={regression_threshold}",
         f"- expected_count={args.expected_count or 'disabled'}",
         "",
         "## Candidates",
         "",
-        "| status | model | count | avg | worst | best | invalid | trunc | notes |",
-        "|---|---:|---:|---:|---|---|---:|---:|---|",
+        "| status | model | count | avg | worst | best | invalid | trunc | max invalid | max trunc | notes |",
+        "|---|---:|---:|---:|---|---|---:|---:|---:|---:|---|",
     ])
 
     for summary in ranked:
@@ -206,7 +230,10 @@ def build_report(
             f"{status} | {summary.label} | {summary.count} | {_fmt(summary.avg_bb100)} | "
             f"{summary.worst_opponent} {_fmt(summary.worst_bb100)} | "
             f"{summary.best_opponent} {_fmt(summary.best_bb100)} | "
-            f"{_pct(summary.invalid_rate)} | {_pct(summary.truncated_rate)} | {notes} |"
+            f"{_pct(summary.invalid_rate)} | {_pct(summary.truncated_rate)} | "
+            f"{summary.max_invalid_opponent} {_pct(summary.max_invalid_rate)} | "
+            f"{summary.max_truncated_opponent} {_pct(summary.max_truncated_rate)} | "
+            f"{notes} |"
         )
 
     passing = [
@@ -259,6 +286,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fail-fast-worst", type=float, default=-500.0)
     parser.add_argument("--max-invalid", type=float, default=0.001)
     parser.add_argument("--max-truncated", type=float, default=0.005)
+    parser.add_argument(
+        "--max-row-invalid",
+        type=float,
+        default=None,
+        help="Fail if any single opponent row exceeds this invalid bet rate",
+    )
+    parser.add_argument(
+        "--max-row-truncated",
+        type=float,
+        default=None,
+        help="Fail if any single opponent row exceeds this truncated hand rate",
+    )
     parser.add_argument(
         "--max-opponent-regression",
         type=float,

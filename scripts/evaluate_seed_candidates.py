@@ -78,6 +78,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fail-fast-worst", type=float, default=-500.0)
     parser.add_argument("--max-invalid", type=float, default=0.001)
     parser.add_argument("--max-truncated", type=float, default=0.005)
+    parser.add_argument("--max-row-invalid", type=float)
+    parser.add_argument("--max-row-truncated", type=float)
     parser.add_argument(
         "--max-opponent-regression",
         type=float,
@@ -212,6 +214,10 @@ def main() -> int:
         "--fail-exit-code",
         str(args.gate_fail_exit_code),
     ]
+    if args.max_row_invalid is not None:
+        gate_cmd.extend(["--max-row-invalid", str(args.max_row_invalid)])
+    if args.max_row_truncated is not None:
+        gate_cmd.extend(["--max-row-truncated", str(args.max_row_truncated)])
     if args.baseline:
         gate_cmd.extend(["--baseline", str(args.baseline)])
         if not args.no_baseline_improvement_required:

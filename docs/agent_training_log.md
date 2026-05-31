@@ -619,6 +619,27 @@ agent_training_log.md
   `600049`, `500016`), and old strengths (`550046`, `700016`, `1000054`,
   `1500036`).  This should be tested before any longer run so each table sees
   a controlled mix instead of a global positive/negative sampling ratio.
+- Roster 50k smoke:
+  `/root/testo-seed-rl/runs/seed_roster_smoke_50k_from3803k_20260531_201728`.
+  Setup used `--opponent-ensemble-size 3`,
+  `--opponent-roster-file configs/seed_roster_3803147.json`, LR `1e-7`,
+  anchor coef `0.1`, and skipped final buffer training.  Training stayed
+  mechanically healthy: 1,109 hand/s, 5 PPO updates, KL median 0.0541, KL max
+  0.0656, all-in 9.27%, and active opponents were drawn one per bucket as
+  intended.
+- The 200-game matrix initially looked promising for intermediate checkpoint
+  `seed_rl_hands_3853156`: avg +333.4 bb/100, worst `600049` -166.0, 13/13
+  rows completed.  However this was not stable.  A 500-game confirmation at
+  `/root/testo-seed-rl/runs/seed_roster_smoke_50k_from3803k_20260531_201728_eval_500_3853156/gate_report.md`
+  failed: avg -92.4, worst `900022` -474.4, with large regressions versus
+  baseline on `900022` and `1000054`.  Do not promote `3853156`.
+- DeepSeek reviewed the 200-game result before the 500-game failure and agreed
+  the candidate could only be considered after a higher-sample confirmation.
+  It also flagged invalid/truncation boundaries as a separate acceptance risk.
+  Added per-row gate controls to `scripts/seed_matrix_gate.py` and
+  `scripts/evaluate_seed_candidates.py`: `--max-row-invalid` and
+  `--max-row-truncated`.  Future acceptance should use at least 500 games per
+  opponent plus row-level invalid/truncated gates.
 
 ## Next Work Queue
 
@@ -629,9 +650,9 @@ agent_training_log.md
   implementation: a fixed multi-bucket opponent roster that always includes
   hard negatives (`1000262`, `900236`, `800200`), recent regressions
   (`600040`, `600049`, `500016`), and old strengths (`550046`, `700016`,
-  `1000054`, `1500036`).  Use `configs/seed_roster_3803147.json` and evaluate
-  all intermediate checkpoints before choosing a continuation base.  Every
-  candidate must pass
+  `1000054`, `1500036`).  Use `configs/seed_roster_3803147.json`, evaluate all
+  intermediate checkpoints before choosing a continuation base, and require
+  500-game confirmation before promotion.  Every candidate must pass
   `scripts/seed_matrix_gate.py` before replacing the current best.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
