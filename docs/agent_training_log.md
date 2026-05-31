@@ -449,10 +449,26 @@ agent_training_log.md
   `/root/testo-seed-rl/runs/seed_mild_repair_100k_from3803k_20260531_115843`
   from `3803147`, LR `3e-7`, Phase2 locked, score-file from the `3803147`
   matrix, temperature 300, negative-ratio 0.50.
+- Mild repair did not pass:
+  - Matrix:
+    `/root/testo-seed-rl/runs/seed_pool_eval_mild_repair_20260531_120313`
+  - `3853167`: avg -165.7, worst `900236` -728.3.
+  - `3903167`: avg +84.5, worst `1500036` -384.4.
+  - `3903174`: avg -7.8, worst `1500036` -527.5.
+  - Takeaway: even lower negative-ratio can regress when fallback samples
+    unscored intermediate checkpoints from the base run directory.
+- Code change: added `--hard-opponent-scored-only-ratio`.  It defaults to 0
+  for backwards compatibility.  When enabled, fallback sampling is constrained
+  to checkpoint names present in the matrix score file, keeping repair stages
+  inside the evaluated 13-opponent population.
+- Started scored-only repair:
+  `/root/testo-seed-rl/runs/seed_scoredonly_repair_100k_from3803k_20260531_121603`
+  from `3803147`, LR `3e-7`, Phase2 locked, score-file from the `3803147`
+  matrix, temperature 280, negative-ratio 0.55, scored-only-ratio 1.0.
 
 ## Next Work Queue
 
-- Monitor `seed_mild_repair_100k_from3803k_20260531_115843`; after it
+- Monitor `seed_scoredonly_repair_100k_from3803k_20260531_121603`; after it
   completes, run the same 13-opponent matrix before any extension.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
