@@ -436,10 +436,23 @@ agent_training_log.md
   `/root/testo-seed-rl/runs/seed_worstcase_repair_150k_from3803k_20260531_114355`
   from `3803147`, LR `5e-7`, Phase2 locked, score-file from the `3803147`
   matrix, temperature 180, negative-ratio 0.75.
+- Worst-case repair did not pass:
+  - Matrix:
+    `/root/testo-seed-rl/runs/seed_pool_eval_worstcase_repair_20260531_114747`
+  - `3853196`: avg -105.2, worst `700016` -554.2.
+  - `3903225`: avg -84.8, worst `550046` -911.8.
+  - `3953186`: avg +94.2, worst `800200` -591.8.
+  - Takeaway: negative-ratio 0.75 is too aggressive from `3803147`; it repairs
+    some sampled weaknesses but creates worse retention failures.  Keep
+    `3803147` as current best.
+- Started milder repair:
+  `/root/testo-seed-rl/runs/seed_mild_repair_100k_from3803k_20260531_115843`
+  from `3803147`, LR `3e-7`, Phase2 locked, score-file from the `3803147`
+  matrix, temperature 300, negative-ratio 0.50.
 
 ## Next Work Queue
 
-- Monitor `seed_worstcase_repair_150k_from3803k_20260531_114355`; after it
+- Monitor `seed_mild_repair_100k_from3803k_20260531_115843`; after it
   completes, run the same 13-opponent matrix before any extension.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
