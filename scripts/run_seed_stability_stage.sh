@@ -15,8 +15,11 @@ CURRICULUM_MAX_PHASE="${CURRICULUM_MAX_PHASE:-3}"
 OPPONENT_SCORE_FILE="${OPPONENT_SCORE_FILE:-}"
 HARD_OPPONENT_TEMPERATURE="${HARD_OPPONENT_TEMPERATURE:-200}"
 HARD_OPPONENT_NEGATIVE_RATIO="${HARD_OPPONENT_NEGATIVE_RATIO:-0}"
+HARD_OPPONENT_POSITIVE_RATIO="${HARD_OPPONENT_POSITIVE_RATIO:-0}"
 HARD_OPPONENT_SCORED_ONLY_RATIO="${HARD_OPPONENT_SCORED_ONLY_RATIO:-0}"
+OPPONENT_ENSEMBLE_SIZE="${OPPONENT_ENSEMBLE_SIZE:-1}"
 OPPONENT_UPDATE_INTERVAL="${OPPONENT_UPDATE_INTERVAL:-10000}"
+SKIP_FINAL_BUFFER_TRAIN="${SKIP_FINAL_BUFFER_TRAIN:-0}"
 
 mkdir -p "${RUN_DIR}/checkpoints"
 mkdir -p "${ROOT_DIR}/runs"
@@ -38,8 +41,11 @@ cd "${ROOT_DIR}"
   echo "OPPONENT_SCORE_FILE=${OPPONENT_SCORE_FILE}"
   echo "HARD_OPPONENT_TEMPERATURE=${HARD_OPPONENT_TEMPERATURE}"
   echo "HARD_OPPONENT_NEGATIVE_RATIO=${HARD_OPPONENT_NEGATIVE_RATIO}"
+  echo "HARD_OPPONENT_POSITIVE_RATIO=${HARD_OPPONENT_POSITIVE_RATIO}"
   echo "HARD_OPPONENT_SCORED_ONLY_RATIO=${HARD_OPPONENT_SCORED_ONLY_RATIO}"
+  echo "OPPONENT_ENSEMBLE_SIZE=${OPPONENT_ENSEMBLE_SIZE}"
   echo "OPPONENT_UPDATE_INTERVAL=${OPPONENT_UPDATE_INTERVAL}"
+  echo "SKIP_FINAL_BUFFER_TRAIN=${SKIP_FINAL_BUFFER_TRAIN}"
   echo "START_TS=$(date -Is)"
 } > "${RUN_DIR}/stage.env"
 
@@ -48,7 +54,13 @@ if [[ -n "${OPPONENT_SCORE_FILE}" ]]; then
   score_args+=(--opponent-score-file "${OPPONENT_SCORE_FILE}")
   score_args+=(--hard-opponent-temperature "${HARD_OPPONENT_TEMPERATURE}")
   score_args+=(--hard-opponent-negative-ratio "${HARD_OPPONENT_NEGATIVE_RATIO}")
+  score_args+=(--hard-opponent-positive-ratio "${HARD_OPPONENT_POSITIVE_RATIO}")
   score_args+=(--hard-opponent-scored-only-ratio "${HARD_OPPONENT_SCORED_ONLY_RATIO}")
+fi
+
+final_buffer_args=()
+if [[ "${SKIP_FINAL_BUFFER_TRAIN}" == "1" || "${SKIP_FINAL_BUFFER_TRAIN}" == "true" ]]; then
+  final_buffer_args+=(--skip-final-buffer-train)
 fi
 
 /root/miniconda3/bin/python train.py \
@@ -65,9 +77,11 @@ fi
   --eval-interval "${EVAL_INTERVAL}" \
   --num-eval-games "${NUM_EVAL_GAMES}" \
   --opponent-update-interval "${OPPONENT_UPDATE_INTERVAL}" \
+  --opponent-ensemble-size "${OPPONENT_ENSEMBLE_SIZE}" \
   --curriculum-start-phase "${CURRICULUM_START_PHASE}" \
   --curriculum-max-phase "${CURRICULUM_MAX_PHASE}" \
   "${score_args[@]}" \
+  "${final_buffer_args[@]}" \
   > "${RUN_DIR}/train.log" 2>&1
 
 code=$?

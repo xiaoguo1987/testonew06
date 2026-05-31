@@ -55,6 +55,7 @@ class SeedRLTrainer:
         inference_timeout_s: float = 0.002,  # 推理批量积攒超时（从1ms提升到2ms：给批量更多积攒时间，提高GPU吞吐）
         ppo_buffer_size: int = 4096,
         skip_final_eval: bool = False,
+        skip_final_buffer_train: bool = False,
         allin_eq_threshold: float = 0.72,
         allin_bonus_cap: float = 0.25,
         tables_per_worker: int = 8,
@@ -66,6 +67,8 @@ class SeedRLTrainer:
         hard_opponent_temperature: float = 200.0,
         hard_opponent_negative_ratio: float = 0.0,
         hard_opponent_scored_only_ratio: float = 0.0,
+        hard_opponent_positive_ratio: float = 0.0,
+        opponent_ensemble_size: int = 1,
         checkpoint_validation_command: Optional[str] = None,
         stop_on_validation_failure: bool = False,
         validation_start_hands: int = 0,
@@ -97,6 +100,7 @@ class SeedRLTrainer:
         self.inference_timeout_s = inference_timeout_s
         self.ppo_buffer_size = ppo_buffer_size
         self.skip_final_eval = skip_final_eval
+        self.skip_final_buffer_train = bool(skip_final_buffer_train)
         self.allin_eq_threshold = allin_eq_threshold
         self.allin_bonus_cap = allin_bonus_cap
         self.tables_per_worker = tables_per_worker
@@ -105,6 +109,8 @@ class SeedRLTrainer:
         self.hard_opponent_temperature = max(float(hard_opponent_temperature), 1e-6)
         self.hard_opponent_negative_ratio = min(max(float(hard_opponent_negative_ratio), 0.0), 1.0)
         self.hard_opponent_scored_only_ratio = min(max(float(hard_opponent_scored_only_ratio), 0.0), 1.0)
+        self.hard_opponent_positive_ratio = min(max(float(hard_opponent_positive_ratio), 0.0), 1.0)
+        self.opponent_ensemble_size = max(1, int(opponent_ensemble_size))
         self.checkpoint_validation_command = checkpoint_validation_command
         self.stop_on_validation_failure = bool(stop_on_validation_failure)
         self.validation_start_hands = max(0, int(validation_start_hands))
@@ -147,6 +153,17 @@ class SeedRLTrainer:
         )
         # 初始化时就同步一次权重
         self.opp_model.set_weights(model.get_weights())
+        self._opponent_models = [self.opp_model]
+        for _ in range(1, self.opponent_ensemble_size):
+            extra_opp = LargePPOModel(
+                input_dim=model.input_dim,
+                output_dim=model.output_dim,
+                hidden_dims=model.hidden_dims,
+                residual_layer_idx=model.residual_layer_idx,
+            )
+            extra_opp.set_weights(model.get_weights())
+            self._opponent_models.append(extra_opp)
+        self._opponent_ensemble_paths: List[str] = ["current"] * len(self._opponent_models)
         self._opp_weights = None  # 废弃旧的权重快照变量
 
         # 历史对手池 (Fictitious Self-Play)
@@ -387,7 +404,7 @@ class SeedRLTrainer:
         # ---- GPU 批量推理 ----
         # 区分主 agent / PPO 对手 / Fish 对手（Curriculum 感知）
         main_items = []  # (original_index, wid, pname, sv)
-        opp_ppo_items = []  # PPO 对手 → GPU 推理
+        opp_ppo_items = defaultdict(list)  # model_idx -> PPO 对手 → GPU 推理
         opp_fish_items = []  # Fish 对手 → 随机动作
 
         for i, (wid, pname, sv) in enumerate(batch_items):
@@ -400,7 +417,8 @@ class SeedRLTrainer:
                 if self.opp_type_list[oi] == 'fish':
                     opp_fish_items.append((i, wid, pname, sv))
                 else:
-                    opp_ppo_items.append((i, wid, pname, sv))
+                    model_idx = oi % max(len(self._opponent_models), 1)
+                    opp_ppo_items[model_idx].append((i, wid, pname, sv))
 
         # 预分配结果数组
         n = len(batch_items)
@@ -416,10 +434,13 @@ class SeedRLTrainer:
                 values[oi] = m_vals[j]
 
         # PPO 对手用独立模型推理 — 零权重切换开销
-        if opp_ppo_items:
-            opp_states = np.array([it[3] for it in opp_ppo_items], dtype=np.float32)
-            o_probs, o_vals = self.opp_model.predict_batch(opp_states)
-            for j, (oi, _, _, _) in enumerate(opp_ppo_items):
+        for model_idx, items in opp_ppo_items.items():
+            if not items:
+                continue
+            opp_states = np.array([it[3] for it in items], dtype=np.float32)
+            model = self._opponent_models[model_idx]
+            o_probs, o_vals = model.predict_batch(opp_states)
+            for j, (oi, _, _, _) in enumerate(items):
                 action_probs[oi] = o_probs[j]
                 values[oi] = o_vals[j]
 
@@ -433,7 +454,7 @@ class SeedRLTrainer:
         self._inference_batches += 1
         self._inference_items += len(batch_items)
         self._inference_main_items += len(main_items)
-        self._inference_opp_items += len(opp_ppo_items)
+        self._inference_opp_items += sum(len(items) for items in opp_ppo_items.values())
         self._inference_fish_items += len(opp_fish_items)
         self._inference_seconds += time.time() - t0
 
@@ -830,11 +851,16 @@ class SeedRLTrainer:
             path for path in candidates
             if self._opponent_scores.get(os.path.basename(path), 0.0) < 0.0
         ]
-        if (
-            negative_candidates
-            and self.hard_opponent_negative_ratio > 0.0
-            and random.random() < self.hard_opponent_negative_ratio
-        ):
+        positive_candidates = [
+            path for path in candidates
+            if self._opponent_scores.get(os.path.basename(path), 0.0) >= 0.0
+        ]
+        positive_ratio = self.hard_opponent_positive_ratio
+        negative_ratio = min(self.hard_opponent_negative_ratio, max(0.0, 1.0 - positive_ratio))
+        roll = random.random()
+        if positive_candidates and positive_ratio > 0.0 and roll < positive_ratio:
+            candidates = positive_candidates
+        elif negative_candidates and negative_ratio > 0.0 and roll < positive_ratio + negative_ratio:
             candidates = negative_candidates
 
         weights = []
@@ -854,12 +880,12 @@ class SeedRLTrainer:
         return candidates[-1]
 
     def _update_opponent_from_pool(self):
-        """从历史对手池中随机抽取一个版本加载到对手模型。
+        """从历史对手池中抽取一个或多个版本加载到对手模型。
 
         安全阀机制：
         - 连续 3 次 win_rate < 0.2: 临时降级对手配置（增加鱼的比例）
         - 连续 2 次 win_rate < 0.25: 冻结对手池更新（不换更强的对手）
-        抽取策略：70% 概率抽最近 3 个版本，30% 概率抽更早的版本。
+        抽取策略：无 score 时 70% 概率抽最近 3 个版本；有 score 时偏向亏损对手。
         如果对手池为空或加载失败，回退到同步当前模型权重。
         """
         wr = self._latest_win_rate
@@ -895,7 +921,9 @@ class SeedRLTrainer:
 
         if not self._opponent_pool:
             # 池为空，回退到同步当前权重
-            self.opp_model.set_weights(self.model.get_weights())
+            for model in self._opponent_models:
+                model.set_weights(self.model.get_weights())
+            self._opponent_ensemble_paths = ["current"] * len(self._opponent_models)
             return
 
         # 加权抽取：最近的版本被抽中概率更高。恢复训练时优先排除
@@ -911,20 +939,43 @@ class SeedRLTrainer:
                 candidates = non_current
 
         pool_size = len(candidates)
-        chosen = self._sample_opponent_checkpoint(candidates)
+        available = list(candidates)
+        chosen_paths: List[str] = []
+        for _ in range(len(self._opponent_models)):
+            if not available:
+                available = list(candidates)
+            chosen = self._sample_opponent_checkpoint(available)
+            chosen_paths.append(chosen)
+            if chosen in available and len(available) > 1:
+                available.remove(chosen)
 
-        try:
-            self.opp_model.load_weights(chosen)
-            score = self._opponent_scores.get(os.path.basename(chosen))
-            score_text = "" if score is None else f", score_bb100={score:.1f}"
-            logger.info(
-                f"[SEED RL] 对手池抽取: {os.path.basename(chosen)} "
-                f"(pool_size={pool_size}, hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}, "
-                f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}{score_text})"
-            )
-        except Exception as e:
-            logger.warning(f"[SEED RL] 加载历史对手失败: {e}，回退到当前权重")
-            self.opp_model.set_weights(self.model.get_weights())
+        loaded_paths: List[str] = []
+        for model_idx, (model, chosen) in enumerate(zip(self._opponent_models, chosen_paths)):
+            try:
+                model.load_weights(chosen)
+                loaded_paths.append(chosen)
+            except Exception as e:
+                logger.warning(
+                    f"[SEED RL] 加载历史对手失败(slot={model_idx}, path={chosen}): {e}，"
+                    "该 slot 回退到当前权重"
+                )
+                model.set_weights(self.model.get_weights())
+                loaded_paths.append("current")
+        self._opponent_ensemble_paths = loaded_paths
+
+        parts = []
+        for idx, path in enumerate(loaded_paths):
+            name = os.path.basename(path)
+            score = self._opponent_scores.get(name)
+            score_text = "" if score is None else f":{score:.1f}"
+            parts.append(f"slot{idx}={name}{score_text}")
+        logger.info(
+            f"[SEED RL] 对手池抽取 ensemble_size={len(self._opponent_models)} "
+            f"(pool_size={pool_size}, hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}, "
+            f"positive_ratio={self.hard_opponent_positive_ratio:.2f}, "
+            f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}): "
+            + ", ".join(parts)
+        )
 
     def save_checkpoint(self, is_best: bool = False, max_keep: int = 30) -> str:
         path = os.path.join(self.checkpoint_dir, f"seed_rl_hands_{self.total_hands}")
@@ -1082,7 +1133,9 @@ class SeedRLTrainer:
 
             # 同步对手模型权重
             try:
-                self.opp_model.set_weights(self.model.get_weights())
+                for model in self._opponent_models:
+                    model.set_weights(self.model.get_weights())
+                self._opponent_ensemble_paths = ["current"] * len(self._opponent_models)
                 logger.info("对手模型权重已同步")
             except Exception:
                 pass
@@ -1133,14 +1186,18 @@ class SeedRLTrainer:
             f"min_phase=Phase{self._curriculum_min_phase + 1}, "
             f"max_phase=Phase{self._curriculum_max_phase + 1}, "
             f"历史对手池=开启(max_size={self._opponent_pool_max_size}), "
+            f"opponent_ensemble_size={len(self._opponent_models)}, "
             f"hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}, "
+            f"positive_ratio={self.hard_opponent_positive_ratio:.2f}, "
             f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}, "
             f"hard_temperature={self.hard_opponent_temperature:.1f}, "
             f"archive_dir={self._archive_dir}"
         )
 
         # 初始化对手模型权重并预热
-        self.opp_model.set_weights(self.model.get_weights())
+        for model in self._opponent_models:
+            model.set_weights(self.model.get_weights())
+        self._opponent_ensemble_paths = ["current"] * len(self._opponent_models)
 
         # 初始化对手池：扫描当前 run 与外部加载 checkpoint 的目录。
         added_current = self._add_checkpoints_to_opponent_pool(self.checkpoint_dir)
@@ -1162,7 +1219,8 @@ class SeedRLTrainer:
 
         # 模型预热（主模型 + 对手模型）
         self.model.warmup()
-        self.opp_model.warmup()
+        for model in self._opponent_models:
+            model.warmup()
 
         # 计算每个 worker 需要跑的手牌数
         hands_per_worker = max(1, num_hands // self.num_workers)
@@ -1230,6 +1288,7 @@ class SeedRLTrainer:
             tables_per_worker=int(self.tables_per_worker),
             concurrent_tables=int(self.num_workers * self.tables_per_worker),
             ppo_buffer_size=int(self.ppo_buffer_size),
+            skip_final_buffer_train=bool(self.skip_final_buffer_train),
             inference_min_batch=int(self.inference_min_batch),
             inference_max_batch=int(self.inference_max_batch),
             small_blind=int(self.small_blind),
@@ -1238,6 +1297,8 @@ class SeedRLTrainer:
             anchor_kl_coef=float(getattr(self.model, "anchor_kl_coef", 0.0)),
             max_anchor_kl=float(self.max_anchor_kl) if self.max_anchor_kl is not None else None,
             anchor_kl_patience=int(self.anchor_kl_patience),
+            opponent_ensemble_size=int(len(self._opponent_models)),
+            opponent_ensemble=list(self._opponent_ensemble_paths),
         )
 
         def log_ppo_update(loss: float, reason: str) -> None:
@@ -1298,6 +1359,8 @@ class SeedRLTrainer:
                 avg_inference_batch=float(avg_batch),
                 curriculum_phase=int(self._curriculum_phase + 1),
                 opponent_types=list(self.opp_type_list),
+                opponent_ensemble_size=int(len(self._opponent_models)),
+                opponent_ensemble=list(self._opponent_ensemble_paths),
                 train_action_distribution=cumulative_action_dist,
                 train_action_distribution_interval=interval_action_dist,
                 position_profit=cumulative_position_profit,
@@ -1453,6 +1516,14 @@ class SeedRLTrainer:
                 logger.info(
                     f"[SEED RL] 跳过剩余 buffer: {remaining} steps，"
                     "因为训练已被 validation/anchor guard 停止"
+                )
+                for k in traj_buffer:
+                    traj_buffer[k] = []
+        elif self.skip_final_buffer_train:
+            if remaining > 0:
+                logger.info(
+                    f"[SEED RL] 按配置跳过剩余 buffer: {remaining} steps "
+                    "(skip_final_buffer_train=True)"
                 )
                 for k in traj_buffer:
                     traj_buffer[k] = []

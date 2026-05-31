@@ -531,12 +531,97 @@ agent_training_log.md
 - Fix after smoke: when validation or anchor guard stops a run, skip remaining
   PPO buffer training so the model cannot mutate after the failing checkpoint
   has already been validated.
+- Anchor-KL targeted 20k smoke against `900022`:
+  `/root/testo-seed-rl/runs/seed_anchor_kl_target900022_20k_from3803k_20260531_152543`.
+  Setup used anchor coef `0.1`, LR `2e-7`, and a one-row score file that forced
+  `900022` as the hard opponent.  Training was stable, with KL max 0.0543,
+  all-in about 9.4%, and online eval +412.7 bb/100 against the active opponent.
+  Matrix validation failed immediately at 2/13 opponents:
+  `/root/testo-seed-rl/runs/seed_anchor_kl_target900022_eval_3823150/gate_report.md`.
+  The failure shifted to `seed_rl_hands_1500036` at -969.8 bb/100 with invalid
+  0.12%, confirming that single-opponent repair still causes retention collapse
+  even with stronger anchor KL.  Do not use `seed_rl_hands_3823150` as a base.
+- Anchor-KL fast-rotation 50k smoke from `3803147`:
+  `/root/testo-seed-rl/runs/seed_anchor_kl_fastrotate_50k_from3803k_20260531_152847`.
+  This used the full baseline score file, anchor coef `0.1`, LR `2e-7`,
+  hard-negative ratio `0.65`, scored-only `1.0`, and opponent updates every
+  2k hands.  Training mechanics were stable: 5 PPO updates, KL median 0.0577,
+  KL max 0.0734, all-in 9.28% cumulative, invalid/truncated 0, and interval
+  speed median 1,637 hand/s.  The safety validation still failed fast:
+  `/root/testo-seed-rl/runs/seed_anchor_kl_fastrotate_eval_3853147/gate_report.md`.
+  Only 3/13 opponents were evaluated before `seed_rl_hands_500016` dropped to
+  -786.6 bb/100, so `seed_rl_hands_3853147` must not replace the baseline.
+- Conclusion from the three anchor repair attempts: KL/anchor-KL stability is
+  not enough.  A single global opponent model, even when rotated quickly,
+  encourages local adaptation and shifts the leak to another historical
+  checkpoint.  Added configurable multi-opponent training with
+  `--opponent-ensemble-size`; when set above 1, different PPO opponent seats
+  route to different loaded historical checkpoints in the same table instead
+  of all sharing one global opponent.  The active ensemble paths are logged in
+  `metrics.jsonl` for retention analysis.
+- DeepSeek review after the fast-rotation failure agreed that the next attempt
+  should emphasize hard historical opponents and short smoke validation.  Useful
+  takeaways: keep the worst failing opponents heavily represented, run a small
+  defensive preflight before broadening the pool, and continue fail-fast matrix
+  validation instead of accepting online eval gains.
+- First 5k ensemble code smoke:
+  `/root/testo-seed-rl/runs/seed_ensemble_smoke_5k_from3803k_20260531_154002`.
+  It confirmed `--opponent-ensemble-size 3` works on the server: the trainer
+  loaded three simultaneous opponent slots (`500016`, `1000262`, `800200`) and
+  later rotated them to another three-checkpoint mix.  Because 5k is shorter
+  than the normal PPO buffer, it trained only the final partial buffer and KL
+  jumped to 0.1918 despite tiny anchor KL.  Added
+  `--skip-final-buffer-train` so short smoke/gated runs can discard the tail
+  buffer instead of applying a high-variance final update.
+- 50k ensemble smoke:
+  `/root/testo-seed-rl/runs/seed_ensemble_smoke_50k_from3803k_20260531_154314`,
+  candidate `seed_rl_hands_3853190`.  Training was stable and faster than
+  expected for three opponent models: 5 PPO updates, 1,179 hand/s overall,
+  median interval speed 1,441 hand/s, KL median 0.0718, KL max 0.0928, all-in
+  8.91%, invalid/truncated 0.  Gate report:
+  `/root/testo-seed-rl/runs/seed_ensemble_smoke_50k_from3803k_20260531_154314_eval/gate_report.md`.
+  It evaluated all 13 opponents but failed: avg +38.6 bb/100 and worst
+  `seed_rl_hands_600040` -527.9 bb/100.  This is materially better than the
+  single-opponent repairs, but still not acceptable.
+- Per-opponent deltas versus `3803147` explain the failure.  The ensemble run
+  repaired the old weaknesses (`1000262` from -360.1 to +391.2, `900236` from
+  -110.4 to +668.9, `900022` from +467.2 to +545.6) but regressed old strengths
+  (`550046` from +420.0 to -273.4, `700016` from +355.7 to -296.4, `600049`
+  from +134.4 to -445.4).  Added `--hard-opponent-positive-ratio` so future
+  ensemble runs can reserve part of the opponent sampling budget for nonnegative
+  baseline matchups instead of over-focusing on negative-score opponents.
+- DeepSeek review after the 50k ensemble result recommended exactly this
+  direction: force degraded old-strength opponents back into training, keep
+  checkpoint rollback/branching, and avoid accepting any candidate until the
+  full matrix recovers both hard-negative and retention opponents.
+- Balanced positive-retention 50k smoke:
+  `/root/testo-seed-rl/runs/seed_ensemble_balanced_50k_from3803k_20260531_154929`,
+  candidate `seed_rl_hands_3853170`.  Setup changed only the sampling mix:
+  hard-negative ratio `0.45`, positive-retention ratio `0.35`, ensemble size 3,
+  LR `1e-7`, anchor coef `0.1`, and skip final buffer enabled.  Training speed
+  remained acceptable at 1,134 hand/s, KL median 0.0676, KL max 0.0988, all-in
+  9.04%, invalid/truncated 0.  Gate report:
+  `/root/testo-seed-rl/runs/seed_ensemble_balanced_50k_from3803k_20260531_154929_eval/gate_report.md`.
+  This run failed badly after only 2/13 opponents: `1500036` -1103.3 bb/100
+  and `1000054` -555.6 bb/100.  Do not use `3853170`.
+- Conclusion: a broad positive-ratio knob is too blunt.  It can destabilize
+  small-positive opponents while still failing retention.  The best signal so
+  far is the first ensemble 50k run (`3853190`): complete matrix, no severe
+  fail-fast collapse, but avg/worst below baseline.  Next mechanism should use
+  a fixed multi-bucket roster or candidate selection across multiple short
+  checkpoints, not another blind global sampling-ratio tweak.
 
 ## Next Work Queue
 
 - Do not start another sampling-only repair from `3803147` unless the proposed
-  change includes a different training mechanism.  Anchor-KL repair is now the
-  next candidate mechanism, and every candidate must pass
+  change includes a different training mechanism.  The next candidate mechanism
+  is anchor-KL plus multi-opponent ensemble training, not one global opponent
+  rotation.  Do not continue blind sampling-ratio sweeps.  Next suggested
+  implementation: a fixed multi-bucket opponent roster that always includes
+  hard negatives (`1000262`, `900236`, `800200`), recent regressions
+  (`600040`, `600049`, `500016`), and old strengths (`550046`, `700016`,
+  `1000054`, `1500036`), plus evaluation of all intermediate checkpoints
+  before choosing a continuation base.  Every candidate must pass
   `scripts/seed_matrix_gate.py` before replacing the current best.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.

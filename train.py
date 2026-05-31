@@ -253,6 +253,8 @@ def parse_arguments():
     parser.add_argument('--eval-workers', type=int, default=0, help='评估并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--train-workers', type=int, default=0, help='训练采样并行worker数量（<=0 自动按CPU核数推断）')
     parser.add_argument('--skip-final-eval', action='store_true', help='训练结束后跳过最终评估（加速）')
+    parser.add_argument('--skip-final-buffer-train', action='store_true',
+                        help='训练结束时丢弃剩余 PPO buffer，避免短跑尾批高方差扰动')
     parser.add_argument('--allin-unlucky-eq-threshold', type=float, default=0.72,
                         help='all-in 不走运补偿触发阈值（翻牌前/翻牌，若估计胜率高于该值但输掉则补偿）')
     parser.add_argument('--allin-unlucky-bonus-cap', type=float, default=0.25,
@@ -316,8 +318,12 @@ def parse_arguments():
                        help='hard-opponent softmax 温度，越小越偏向亏损对手')
     parser.add_argument('--hard-opponent-negative-ratio', type=float, default=0.0,
                        help='hard-opponent 训练中只从负 bb/100 对手采样的概率；0 表示不过滤')
+    parser.add_argument('--hard-opponent-positive-ratio', type=float, default=0.0,
+                       help='hard-opponent 训练中强制从非负 bb/100 对手采样的概率；用于保留基线原本擅长的对局')
     parser.add_argument('--hard-opponent-scored-only-ratio', type=float, default=0.0,
                        help='hard-opponent 训练中只从 score-file 已评分对手采样的概率；0 表示允许未评分历史池')
+    parser.add_argument('--opponent-ensemble-size', type=int, default=1,
+                       help='同时加载多少个历史 PPO 对手；>1 时不同 PPO 座位使用不同 checkpoint 以降低遗忘')
     parser.add_argument('--anchor-policy-path', type=str, default=None,
                        help='冻结参考策略 base 路径；repair 训练时用于 anchor KL 防止遗忘')
     parser.add_argument('--anchor-kl-coef', type=float, default=0.0,
@@ -514,6 +520,7 @@ def _train_seed_rl(args):
             inference_max_batch=getattr(args, 'inference_max_batch', 512),
             ppo_buffer_size=getattr(args, 'ppo_buffer_size', 4096),
             skip_final_eval=getattr(args, 'skip_final_eval', False),
+            skip_final_buffer_train=getattr(args, 'skip_final_buffer_train', False),
             allin_eq_threshold=getattr(args, 'allin_unlucky_eq_threshold', 0.72),
             allin_bonus_cap=getattr(args, 'allin_unlucky_bonus_cap', 0.25),
             tables_per_worker=getattr(args, 'tables_per_worker', 8),
@@ -523,7 +530,9 @@ def _train_seed_rl(args):
             opponent_score_file=getattr(args, 'opponent_score_file', None),
             hard_opponent_temperature=getattr(args, 'hard_opponent_temperature', 200.0),
             hard_opponent_negative_ratio=getattr(args, 'hard_opponent_negative_ratio', 0.0),
+            hard_opponent_positive_ratio=getattr(args, 'hard_opponent_positive_ratio', 0.0),
             hard_opponent_scored_only_ratio=getattr(args, 'hard_opponent_scored_only_ratio', 0.0),
+            opponent_ensemble_size=getattr(args, 'opponent_ensemble_size', 1),
             checkpoint_validation_command=getattr(args, 'checkpoint_validation_command', None),
             stop_on_validation_failure=getattr(args, 'stop_on_validation_failure', False),
             validation_start_hands=getattr(args, 'validation_start_hands', 0),
