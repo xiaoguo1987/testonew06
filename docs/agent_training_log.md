@@ -640,6 +640,13 @@ agent_training_log.md
   `scripts/evaluate_seed_candidates.py`: `--max-row-invalid` and
   `--max-row-truncated`.  Future acceptance should use at least 500 games per
   opponent plus row-level invalid/truncated gates.
+- Added `scripts/evaluate_seed_repeats.py` for more stable acceptance.  It
+  evaluates each candidate across multiple seeds, aggregates per-opponent mean
+  bb/100, min/max repeat score, standard deviation, and max invalid/truncated
+  rates, then runs `scripts/seed_matrix_gate.py` on the aggregate JSONL.  This
+  is the preferred promotion workflow for any candidate that looks promising in
+  a single matrix.  DeepSeek also recommended treating the repeat/multi-seed
+  confirmation as mandatory before changing the research baseline.
 
 ## Next Work Queue
 
@@ -652,8 +659,9 @@ agent_training_log.md
   (`600040`, `600049`, `500016`), and old strengths (`550046`, `700016`,
   `1000054`, `1500036`).  Use `configs/seed_roster_3803147.json`, evaluate all
   intermediate checkpoints before choosing a continuation base, and require
-  500-game confirmation before promotion.  Every candidate must pass
-  `scripts/seed_matrix_gate.py` before replacing the current best.
+  500-game plus repeat/multi-seed confirmation before promotion.  Every
+  candidate must pass `scripts/seed_matrix_gate.py` before replacing the
+  current best.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
 - Periodically summarize metrics into this file.
