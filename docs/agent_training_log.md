@@ -415,12 +415,33 @@ agent_training_log.md
   `/root/testo-seed-rl/runs/seed_balanced_repair_200k_from3603k_20260531_112308`
   from `3603118`, LR `8e-7`, Phase2 locked, score-file from the `3603118`
   matrix, temperature 250, negative-ratio 0.65.
+- Balanced repair completed:
+  - Overall speed: 860.6 hands/s, median interval 1510.7 hands/s.
+  - KL median/p95/max: 0.0772 / 0.1208 / 0.1312.
+  - Online eval was noisy and not predictive: `3653159` -300.3 bb/100,
+    `3703192` -181.1, `3753230` +261.6, final `3803147` -21.6.
+  - Matrix:
+    `/root/testo-seed-rl/runs/seed_pool_eval_balanced_repair_20260531_112838`
+  - `3653159`: avg -160.9, worst `900236` -672.6.
+  - `3703192`: avg +120.6, worst `1500036` -671.1; high average but too
+    brittle.
+  - `3753230`: avg -149.5, worst `800200` -525.3; online-best was a false
+    positive.
+  - `3803147`: avg +103.9, worst `1000262` -360.1; invalid 0.01%, trunc
+    0.03%.
+- Current best candidate is now `seed_rl_hands_3803147`.  It improves both
+  average and worst-case versus `3603118` and `3503107`, but still misses the
+  delivery target because worst matchup is below -200 bb/100.
+- Started follow-up worst-case repair:
+  `/root/testo-seed-rl/runs/seed_worstcase_repair_150k_from3803k_20260531_114355`
+  from `3803147`, LR `5e-7`, Phase2 locked, score-file from the `3803147`
+  matrix, temperature 180, negative-ratio 0.75.
 
 ## Next Work Queue
 
-- Monitor `seed_balanced_repair_200k_from3603k_20260531_112308`; after it
+- Monitor `seed_worstcase_repair_150k_from3803k_20260531_114355`; after it
   completes, run the same 13-opponent matrix before any extension.
-- Current best research candidate: `seed_rl_hands_3603118`, but it is not
+- Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
