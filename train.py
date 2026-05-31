@@ -316,6 +316,8 @@ def parse_arguments():
                        help='hard-opponent softmax 温度，越小越偏向亏损对手')
     parser.add_argument('--hard-opponent-negative-ratio', type=float, default=0.0,
                        help='hard-opponent 训练中只从负 bb/100 对手采样的概率；0 表示不过滤')
+    parser.add_argument('--hard-opponent-scored-only-ratio', type=float, default=0.0,
+                       help='hard-opponent 训练中只从 score-file 已评分对手采样的概率；0 表示允许未评分历史池')
     
     # 探索参数
     parser.add_argument('--eps-start', type=float, default=1.0, help='ε-贪婪策略初始探索率')
@@ -503,6 +505,7 @@ def _train_seed_rl(args):
             opponent_score_file=getattr(args, 'opponent_score_file', None),
             hard_opponent_temperature=getattr(args, 'hard_opponent_temperature', 200.0),
             hard_opponent_negative_ratio=getattr(args, 'hard_opponent_negative_ratio', 0.0),
+            hard_opponent_scored_only_ratio=getattr(args, 'hard_opponent_scored_only_ratio', 0.0),
         )
 
         # 加载 checkpoint

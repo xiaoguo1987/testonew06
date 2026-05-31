@@ -64,6 +64,7 @@ class SeedRLTrainer:
         opponent_score_file: Optional[str] = None,
         hard_opponent_temperature: float = 200.0,
         hard_opponent_negative_ratio: float = 0.0,
+        hard_opponent_scored_only_ratio: float = 0.0,
     ):
         """
         Args:
@@ -97,6 +98,7 @@ class SeedRLTrainer:
         self.eval_seed = eval_seed
         self.hard_opponent_temperature = max(float(hard_opponent_temperature), 1e-6)
         self.hard_opponent_negative_ratio = min(max(float(hard_opponent_negative_ratio), 0.0), 1.0)
+        self.hard_opponent_scored_only_ratio = min(max(float(hard_opponent_scored_only_ratio), 0.0), 1.0)
 
         # 训练统计
         self.total_hands = 0
@@ -801,6 +803,17 @@ class SeedRLTrainer:
                 return random.choice(candidates[-3:])
             return random.choice(candidates)
 
+        scored_candidates = [
+            path for path in candidates
+            if os.path.basename(path) in self._opponent_scores
+        ]
+        if (
+            scored_candidates
+            and self.hard_opponent_scored_only_ratio > 0.0
+            and random.random() < self.hard_opponent_scored_only_ratio
+        ):
+            candidates = scored_candidates
+
         negative_candidates = [
             path for path in candidates
             if self._opponent_scores.get(os.path.basename(path), 0.0) < 0.0
@@ -894,7 +907,8 @@ class SeedRLTrainer:
             score_text = "" if score is None else f", score_bb100={score:.1f}"
             logger.info(
                 f"[SEED RL] 对手池抽取: {os.path.basename(chosen)} "
-                f"(pool_size={pool_size}, hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}{score_text})"
+                f"(pool_size={pool_size}, hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}, "
+                f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}{score_text})"
             )
         except Exception as e:
             logger.warning(f"[SEED RL] 加载历史对手失败: {e}，回退到当前权重")
@@ -1033,6 +1047,7 @@ class SeedRLTrainer:
             f"max_phase=Phase{self._curriculum_max_phase + 1}, "
             f"历史对手池=开启(max_size={self._opponent_pool_max_size}), "
             f"hard_neg_ratio={self.hard_opponent_negative_ratio:.2f}, "
+            f"scored_only_ratio={self.hard_opponent_scored_only_ratio:.2f}, "
             f"hard_temperature={self.hard_opponent_temperature:.1f}, "
             f"archive_dir={self._archive_dir}"
         )
