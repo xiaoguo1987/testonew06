@@ -1217,6 +1217,7 @@ class SeedRLTrainer:
         last_metric_time = training_start
         last_metric_hands = training_start_hands
         last_saved_checkpoint_path: Optional[str] = None
+        last_validated_checkpoint_path: Optional[str] = None
         stopped_by_validation = False
         stopped_by_anchor_guard = False
 
@@ -1405,6 +1406,7 @@ class SeedRLTrainer:
                     checkpoint_path = self.save_checkpoint(is_best=False)
                     last_saved_checkpoint_path = checkpoint_path
                     validation_ok = self._run_checkpoint_validation(checkpoint_path)
+                    last_validated_checkpoint_path = checkpoint_path
                     if not validation_ok and self.stop_on_validation_failure:
                         stopped_by_validation = True
                         logger.warning("[SEED RL] validation 失败，按配置停止训练")
@@ -1494,7 +1496,10 @@ class SeedRLTrainer:
             final_checkpoint_path = last_saved_checkpoint_path
         else:
             final_checkpoint_path = self.save_checkpoint(is_best=False)
-        if not stopped_by_validation:
+        if (
+            not stopped_by_validation
+            and final_checkpoint_path != last_validated_checkpoint_path
+        ):
             self._run_checkpoint_validation(final_checkpoint_path)
 
         # 最终评估
