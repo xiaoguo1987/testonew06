@@ -465,11 +465,23 @@ agent_training_log.md
   `/root/testo-seed-rl/runs/seed_scoredonly_repair_100k_from3803k_20260531_121603`
   from `3803147`, LR `3e-7`, Phase2 locked, score-file from the `3803147`
   matrix, temperature 280, negative-ratio 0.55, scored-only-ratio 1.0.
+- Scored-only repair did not pass:
+  - Matrix:
+    `/root/testo-seed-rl/runs/seed_pool_eval_scoredonly_repair_20260531_122040`
+  - `3853168`: avg +77.4, worst `600049` -472.8.
+  - `3903168`: avg +103.2, worst `600040` -1086.7.
+  - `3903176`: avg +19.0, worst `600047` -612.9.
+  - Takeaway: constraining fallback to scored opponents fixes pool cleanliness
+    but is not enough by itself.  New repair stages can still create a large
+    single-opponent regression, so acceptance needs an explicit retention gate
+    before more training is launched.
 
 ## Next Work Queue
 
-- Monitor `seed_scoredonly_repair_100k_from3803k_20260531_121603`; after it
-  completes, run the same 13-opponent matrix before any extension.
+- Do not start another sampling-only repair from `3803147` until a retention
+  gate is added.  Candidate must beat current avg +103.9 and worst -360.1, and
+  should fail fast if any opponent drops below roughly -500 bb/100 during matrix
+  evaluation.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
   acceptable for delivery until worst matchup improves toward -200 bb/100.
 - Periodically summarize metrics into this file.
