@@ -29,6 +29,11 @@ class MatrixSummary:
     worst_opponent: str
     best_bb100: float
     best_opponent: str
+    avg_lcb95: float
+    worst_lcb95: float
+    worst_lcb95_opponent: str
+    max_score_std: float
+    max_score_std_opponent: str
     invalid_rate: float
     truncated_rate: float
     max_invalid_rate: float
@@ -59,6 +64,15 @@ def _opponent_key(row: dict[str, Any]) -> str:
     return os.path.basename(str(raw))
 
 
+def _row_lcb95(row: dict[str, Any]) -> float:
+    if isinstance(row.get("bb_per_100_lcb95"), (int, float)):
+        return float(row["bb_per_100_lcb95"])
+    score = float(row.get("bb_per_100", 0.0))
+    std = float(row.get("bb_per_100_std", 0.0))
+    repeats = max(int(row.get("repeats", 1)), 1)
+    return score - 1.96 * (std / math.sqrt(repeats))
+
+
 def summarize(path: Path) -> MatrixSummary:
     rows = _read_rows(path)
     if not rows:
@@ -70,7 +84,10 @@ def summarize(path: Path) -> MatrixSummary:
 
     worst = min(rows, key=lambda row: float(row["bb_per_100"]))
     best = max(rows, key=lambda row: float(row["bb_per_100"]))
+    worst_lcb = min(rows, key=_row_lcb95)
+    max_std = max(rows, key=lambda row: float(row.get("bb_per_100_std", 0.0)))
     avg = sum(float(row["bb_per_100"]) for row in rows) / len(rows)
+    avg_lcb95 = sum(_row_lcb95(row) for row in rows) / len(rows)
     invalid = sum(float(row.get("invalid_bet_rate", 0.0)) for row in rows) / len(rows)
     truncated = sum(float(row.get("truncated_hand_rate", 0.0)) for row in rows) / len(rows)
     max_invalid = max(rows, key=lambda row: float(row.get("invalid_bet_rate", 0.0)))
@@ -88,6 +105,11 @@ def summarize(path: Path) -> MatrixSummary:
         worst_opponent=str(worst.get("opponent_name") or os.path.basename(str(worst.get("opponent", "")))),
         best_bb100=float(best["bb_per_100"]),
         best_opponent=str(best.get("opponent_name") or os.path.basename(str(best.get("opponent", "")))),
+        avg_lcb95=avg_lcb95,
+        worst_lcb95=_row_lcb95(worst_lcb),
+        worst_lcb95_opponent=_opponent_key(worst_lcb),
+        max_score_std=float(max_std.get("bb_per_100_std", 0.0)),
+        max_score_std_opponent=_opponent_key(max_std),
         invalid_rate=invalid,
         truncated_rate=truncated,
         max_invalid_rate=float(max_invalid.get("invalid_bet_rate", 0.0)),
@@ -118,8 +140,17 @@ def _check_summary(
         failures.append(f"only {summary.count}/{args.expected_count} opponents evaluated")
     if summary.avg_bb100 < args.min_avg:
         failures.append(f"avg {_fmt(summary.avg_bb100)} < min {_fmt(args.min_avg)}")
+    if args.min_avg_lcb is not None and summary.avg_lcb95 < args.min_avg_lcb:
+        failures.append(
+            f"avg lcb95 {_fmt(summary.avg_lcb95)} < min {_fmt(args.min_avg_lcb)}"
+        )
     if summary.worst_bb100 < args.min_worst:
         failures.append(f"worst {_fmt(summary.worst_bb100)} < min {_fmt(args.min_worst)}")
+    if args.max_row_std is not None and summary.max_score_std > args.max_row_std:
+        failures.append(
+            f"row std {summary.max_score_std_opponent} {_fmt(summary.max_score_std)} "
+            f"> max {_fmt(args.max_row_std)}"
+        )
     if summary.invalid_rate > args.max_invalid:
         failures.append(f"invalid {_pct(summary.invalid_rate)} > max {_pct(args.max_invalid)}")
     if summary.truncated_rate > args.max_truncated:
@@ -183,6 +214,8 @@ def build_report(
     )
     max_row_invalid = _pct(args.max_row_invalid) if args.max_row_invalid is not None else "disabled"
     max_row_truncated = _pct(args.max_row_truncated) if args.max_row_truncated is not None else "disabled"
+    min_avg_lcb = _fmt(args.min_avg_lcb) if args.min_avg_lcb is not None else "disabled"
+    max_row_std = _fmt(args.max_row_std) if args.max_row_std is not None else "disabled"
     any_pass = False
     lines = [
         "# SEED RL Matrix Gate",
@@ -195,7 +228,9 @@ def build_report(
             "",
             (
                 f"- {baseline.label}: avg={_fmt(baseline.avg_bb100)}, "
+                f"avg_lcb95={_fmt(baseline.avg_lcb95)}, "
                 f"worst={baseline.worst_opponent} {_fmt(baseline.worst_bb100)}, "
+                f"max_std={baseline.max_score_std_opponent} {_fmt(baseline.max_score_std)}, "
                 f"invalid={_pct(baseline.invalid_rate)}, trunc={_pct(baseline.truncated_rate)}"
             ),
             "",
@@ -205,7 +240,9 @@ def build_report(
         "## Thresholds",
         "",
         f"- min_avg={_fmt(args.min_avg)}",
+        f"- min_avg_lcb={min_avg_lcb}",
         f"- min_worst={_fmt(args.min_worst)}",
+        f"- max_row_std={max_row_std}",
         f"- fail_fast_worst={_fmt(args.fail_fast_worst)}",
         f"- max_invalid={_pct(args.max_invalid)}",
         f"- max_truncated={_pct(args.max_truncated)}",
@@ -216,8 +253,8 @@ def build_report(
         "",
         "## Candidates",
         "",
-        "| status | model | count | avg | worst | best | invalid | trunc | max invalid | max trunc | notes |",
-        "|---|---:|---:|---:|---|---|---:|---:|---:|---:|---|",
+        "| status | model | count | avg | avg lcb95 | worst | max std | best | invalid | trunc | max invalid | max trunc | notes |",
+        "|---|---:|---:|---:|---:|---|---|---|---:|---:|---:|---:|---|",
     ])
 
     for summary in ranked:
@@ -228,7 +265,9 @@ def build_report(
         lines.append(
             "| "
             f"{status} | {summary.label} | {summary.count} | {_fmt(summary.avg_bb100)} | "
+            f"{_fmt(summary.avg_lcb95)} | "
             f"{summary.worst_opponent} {_fmt(summary.worst_bb100)} | "
+            f"{summary.max_score_std_opponent} {_fmt(summary.max_score_std)} | "
             f"{summary.best_opponent} {_fmt(summary.best_bb100)} | "
             f"{_pct(summary.invalid_rate)} | {_pct(summary.truncated_rate)} | "
             f"{summary.max_invalid_opponent} {_pct(summary.max_invalid_rate)} | "
@@ -248,6 +287,7 @@ def build_report(
             "",
             (
                 f"- {best_passing.label}: avg={_fmt(best_passing.avg_bb100)}, "
+                f"avg_lcb95={_fmt(best_passing.avg_lcb95)}, "
                 f"worst={best_passing.worst_opponent} {_fmt(best_passing.worst_bb100)}"
             ),
         ])
@@ -267,6 +307,7 @@ def build_report(
             "",
             (
                 f"- {best.label}: avg={_fmt(best.avg_bb100)}, "
+                f"avg_lcb95={_fmt(best.avg_lcb95)}, "
                 f"worst={best.worst_opponent} {_fmt(best.worst_bb100)}"
             ),
         ])
@@ -282,7 +323,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", type=Path, help="Optional Markdown report path")
     parser.add_argument("--expected-count", type=int, default=13)
     parser.add_argument("--min-avg", type=float, default=103.9)
+    parser.add_argument(
+        "--min-avg-lcb",
+        type=float,
+        default=None,
+        help="Fail if the average per-opponent 95% lower confidence bound is below this bb/100",
+    )
     parser.add_argument("--min-worst", type=float, default=-360.1)
+    parser.add_argument(
+        "--max-row-std",
+        type=float,
+        default=None,
+        help="Fail if any repeated-evaluation opponent row exceeds this bb/100 stddev",
+    )
     parser.add_argument("--fail-fast-worst", type=float, default=-500.0)
     parser.add_argument("--max-invalid", type=float, default=0.001)
     parser.add_argument("--max-truncated", type=float, default=0.005)

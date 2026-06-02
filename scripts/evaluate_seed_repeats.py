@@ -76,7 +76,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden-dims", default="2048,2048,1024,512")
     parser.add_argument("--expected-count", type=int, default=13)
     parser.add_argument("--min-avg", type=float, default=103.9)
+    parser.add_argument("--min-avg-lcb", type=float)
     parser.add_argument("--min-worst", type=float, default=-360.1)
+    parser.add_argument("--max-row-std", type=float)
     parser.add_argument("--fail-fast-worst", type=float, default=-700.0)
     parser.add_argument("--max-invalid", type=float, default=0.001)
     parser.add_argument("--max-truncated", type=float, default=0.005)
@@ -137,14 +139,20 @@ def _aggregate_candidate(
         invalids = [float(row.get("invalid_bet_rate", 0.0)) for row in rows]
         truncs = [float(row.get("truncated_hand_rate", 0.0)) for row in rows]
         first = rows[0]
+        mean_score = _mean(scores)
+        score_std = _stdev(scores)
+        score_sem = score_std / (len(scores) ** 0.5) if scores else 0.0
         aggregate_rows.append({
             "model": candidate,
             "opponent": first.get("opponent"),
             "opponent_name": opponent_name,
-            "bb_per_100": _mean(scores),
+            "bb_per_100": mean_score,
             "bb_per_100_min": min(scores),
             "bb_per_100_max": max(scores),
-            "bb_per_100_std": _stdev(scores),
+            "bb_per_100_std": score_std,
+            "bb_per_100_sem": score_sem,
+            "bb_per_100_lcb95": mean_score - 1.96 * score_sem,
+            "bb_per_100_ucb95": mean_score + 1.96 * score_sem,
             "invalid_bet_rate": max(invalids),
             "invalid_bet_rate_avg": _mean(invalids),
             "truncated_hand_rate": max(truncs),
@@ -164,8 +172,8 @@ def _write_repeat_report(path: Path, aggregate_paths: list[Path]) -> None:
     lines = [
         "# SEED RL Repeat Evaluation",
         "",
-        "| model | opponent | mean bb/100 | min repeat | max repeat | std | max invalid | max trunc | repeats |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| model | opponent | mean bb/100 | lcb95 | min repeat | max repeat | std | max invalid | max trunc | repeats |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for aggregate_path in aggregate_paths:
         for row in sorted(_read_jsonl(aggregate_path), key=lambda item: float(item.get("bb_per_100", 0.0))):
@@ -174,6 +182,7 @@ def _write_repeat_report(path: Path, aggregate_paths: list[Path]) -> None:
                 f"{Path(str(row.get('model', aggregate_path.stem))).name} | "
                 f"{row.get('opponent_name')} | "
                 f"{float(row.get('bb_per_100', 0.0)):.1f} | "
+                f"{float(row.get('bb_per_100_lcb95', row.get('bb_per_100', 0.0))):.1f} | "
                 f"{float(row.get('bb_per_100_min', 0.0)):.1f} | "
                 f"{float(row.get('bb_per_100_max', 0.0)):.1f} | "
                 f"{float(row.get('bb_per_100_std', 0.0)):.1f} | "
@@ -290,6 +299,10 @@ def main() -> int:
         gate_cmd.extend(["--max-row-invalid", str(args.max_row_invalid)])
     if args.max_row_truncated is not None:
         gate_cmd.extend(["--max-row-truncated", str(args.max_row_truncated)])
+    if args.min_avg_lcb is not None:
+        gate_cmd.extend(["--min-avg-lcb", str(args.min_avg_lcb)])
+    if args.max_row_std is not None:
+        gate_cmd.extend(["--max-row-std", str(args.max_row_std)])
     if args.baseline:
         gate_cmd.extend(["--baseline", str(args.baseline)])
         if not args.no_baseline_improvement_required:

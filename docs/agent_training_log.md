@@ -655,6 +655,23 @@ agent_training_log.md
   `truncated_hand_action_avg`.  The existing `invalid_bet_rate` now represents
   actual invalid Main_AI actions, while truncation remains separately gated by
   `truncated_hand_rate`.
+- Repeated 500-game confirmation for current best `seed_rl_hands_3803147`:
+  `/root/testo-seed-rl/runs/seed_repeat_500_baseline_3803147_20260602_2249`.
+  This was 3 repeats x 500 games x 13 opponents.  It failed the aggregate
+  gate: avg -87.3 bb/100, worst `seed_rl_hands_600040` -542.1, best
+  `seed_rl_hands_800200` +320.3.  Legality was not the blocker:
+  invalid actions 0.00%, average truncation 0.12%, max row truncation 0.40%.
+  Worst repeated rows were `600040` -542.1, `700016` -421.3, `600047` -271.4,
+  `600049` -225.0, and `1000262` -220.3.  High-variance rows included
+  `700169` std 334.1, `1500036` std 297.7, `550046` std 297.5, `1000054`
+  std 275.2, and `1000262` std 238.8.  Conclusion: the earlier +103.9 single
+  matrix was a noisy false positive; do not treat `3803147` as stable.
+- DeepSeek review agreed with the repeated-evaluation interpretation: stop
+  repairing `3803147` as the continuation base, add LCB/variance acceptance
+  gates, and evaluate an earlier checkpoint window before any long training.
+  Added gate support for repeat-derived `avg_lcb95` and max per-opponent
+  `bb_per_100_std` so a high-variance candidate cannot be accepted from a
+  favorable single matrix.
 
 ## Next Work Queue
 
@@ -671,11 +688,15 @@ agent_training_log.md
   candidate must pass `scripts/seed_matrix_gate.py` before replacing the
   current best.
 - Current best research candidate: `seed_rl_hands_3803147`, but it is not
-  acceptable for delivery until worst matchup improves toward -200 bb/100.
+  acceptable for delivery or continuation; repeated confirmation failed.
 - Periodically summarize metrics into this file.
 - Add richer all-in diagnostics: all-in by street/SPR, all-in called rate, and
   all-in showdown result.
 - Run repeat evaluation with the richer legality/truncation fields before
   accepting `seed_rl_best`.
+- Evaluate an earlier checkpoint window around 2.8M-3.6M hands using repeated
+  LCB/std gates.  Promotion gates should include `--min-avg-lcb 0`,
+  `--max-row-std 200`, worst opponent better than -150 to -200 bb/100, and
+  row-level invalid/truncation gates.
 - Reduce KL tail risk with PPO clipping/entropy/buffer tuning if instability
   repeats.
