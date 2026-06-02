@@ -784,3 +784,13 @@ agent_training_log.md
   add stronger offline/reference-buffer policy retention before more long PPO
   repair, and consider PCGrad or other per-opponent gradient conflict handling
   before relying on weighted roster alone.
+- Repeat hard-subset probes with the upgraded validator gave a clearer base
+  comparison.  `2802839` failed badly on the same 6 opponents: avg -243.8 and
+  worst `1500036` -780.4, with huge per-opponent std.  `3600064` was better
+  overall but still failed worst-row protection: avg about +65.7, worst
+  `1000262` -436.4, and no invalid/truncation.  This keeps `3600064` as the
+  least-bad research anchor, but it should not receive more weighted PPO repair
+  until the training loop can preserve multiple opponent objectives together.
+  Next implementation priority: reference-buffer policy distillation and/or
+  opponent-aware gradient conflict handling; use repeat safety validation for
+  every checkpoint gate.
