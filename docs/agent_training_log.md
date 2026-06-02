@@ -700,3 +700,34 @@ agent_training_log.md
   row-level invalid/truncation gates.
 - Reduce KL tail risk with PPO clipping/entropy/buffer tuning if instability
   repeats.
+
+## 2026-06-03 Rollback Window / Safety Controls
+
+- Chrome/Gemini collaboration was paused by user request after the browser
+  control path proved disruptive.  Continue with Codex + DeepSeek only until
+  Gemini web access is stable again.
+- Rollback-window repeated evaluation is still running on the server:
+  `/root/testo-seed-rl/runs/seed_repeat_window_2700k_3600k_20260602_2358`.
+  Completed partial aggregates already show no acceptable rollback base:
+  `2702798` avg -84.0 / avg_lcb -343.0 / maxstd 375.5,
+  `2802839` avg +2.9 / avg_lcb -309.2 / maxstd 508.8,
+  `2902893` avg -22.6 / avg_lcb -295.8 / maxstd 461.1,
+  `3002919` avg -115.5 / avg_lcb -376.9 / maxstd 535.6,
+  `3102925` avg -127.4 / avg_lcb -318.4 / maxstd 333.6, and
+  `3202958` avg -97.0 / avg_lcb -334.3 / maxstd 530.8.  `3303044`
+  is running and already has severe repeat-2 rows against `1500036` and
+  `500016`, so it is unlikely to pass.  Legality remains clean; robustness is
+  the blocker.
+- DeepSeek review agreed the next work should stop sampling-only repair and
+  add explicit worst-case safety controls.  Practical near-term actions:
+  keep hard-negative opponents permanently in training, run cheap hard-subset
+  validation during training, and stop/reduce LR when worst-opponent collapse
+  appears.  Expensive ideas such as full-game CFR distillation, model
+  ensembles, and meta-learning are deferred until the current PPO pipeline has
+  stronger retention gates.
+- Added `scripts/seed_safety_validate.py` as a `--checkpoint-validation-command`
+  helper.  It evaluates a saved checkpoint against explicit opponents or the
+  worst rows from a JSONL score file, writes a raw JSONL plus markdown report,
+  and fails fast on avg/worst/invalid/truncation or per-opponent regression.
+  Use it as an early brake before long runs; full promotion still requires the
+  repeated 13-opponent matrix gate.
