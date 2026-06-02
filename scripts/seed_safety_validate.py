@@ -91,6 +91,50 @@ def _baseline_scores(paths: list[Path]) -> dict[str, float]:
     return scores
 
 
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+def _std(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    avg = _mean(values)
+    return (sum((value - avg) ** 2 for value in values) / (len(values) - 1)) ** 0.5
+
+
+def _aggregate_rows(rows: list[dict]) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(_opponent_name(row), []).append(row)
+
+    aggregated: list[dict] = []
+    for name, group in grouped.items():
+        base = dict(group[0])
+        scores = [float(row.get("bb_per_100", 0.0)) for row in group]
+        invalid_rates = [float(row.get("invalid_bet_rate", 0.0)) for row in group]
+        trunc_rates = [float(row.get("truncated_hand_rate", 0.0)) for row in group]
+        base["opponent_name"] = name
+        base["bb_per_100"] = _mean(scores)
+        base["bb_per_100_min"] = min(scores)
+        base["bb_per_100_max"] = max(scores)
+        base["bb_per_100_std"] = _std(scores)
+        base["invalid_bet_rate"] = max(invalid_rates) if invalid_rates else 0.0
+        base["invalid_bet_rate_avg"] = _mean(invalid_rates)
+        base["truncated_hand_rate"] = max(trunc_rates) if trunc_rates else 0.0
+        base["truncated_hand_rate_avg"] = _mean(trunc_rates)
+        base["repeats"] = len(group)
+        base["total_games"] = sum(int(row.get("total_games", 0)) for row in group)
+        aggregated.append(base)
+    return aggregated
+
+
+def _write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -115,6 +159,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--worst-count", type=int, default=4)
     parser.add_argument("--games", type=int, default=100)
     parser.add_argument("--seed", type=int, default=20260603)
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help="Run multiple seeds and gate on per-opponent aggregate rows.",
+    )
+    parser.add_argument(
+        "--seed-step",
+        type=int,
+        default=1,
+        help="Seed increment between repeats.",
+    )
     parser.add_argument("--hidden-dims", default="2048,2048,1024,512")
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--expected-count", type=int, default=0)
@@ -153,13 +209,17 @@ def _write_report(
         "",
         "## Rows",
         "",
-        "| opponent | bb/100 | invalid | trunc |",
-        "|---|---:|---:|---:|",
+        "| opponent | bb/100 | min | max | std | repeats | invalid | trunc |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in sorted(rows, key=lambda item: float(item.get("bb_per_100", 0.0))):
         lines.append(
             f"| {_opponent_name(row)} | "
             f"{float(row.get('bb_per_100', 0.0)):.1f} | "
+            f"{float(row.get('bb_per_100_min', row.get('bb_per_100', 0.0))):.1f} | "
+            f"{float(row.get('bb_per_100_max', row.get('bb_per_100', 0.0))):.1f} | "
+            f"{float(row.get('bb_per_100_std', 0.0)):.1f} | "
+            f"{int(row.get('repeats', 1))} | "
             f"{float(row.get('invalid_bet_rate', 0.0)):.2%} | "
             f"{float(row.get('truncated_hand_rate', 0.0)):.2%} |"
         )
@@ -191,35 +251,49 @@ def main() -> int:
     raw_path = out_dir / f"{label}_{stamp}.jsonl"
     report_path = out_dir / f"{label}_{stamp}_report.md"
 
-    cmd = [
-        sys.executable,
-        str(SCRIPT_DIR / "evaluate_seed_pool.py"),
-        "--model",
-        checkpoint,
-        "--games",
-        str(args.games),
-        "--seed",
-        str(args.seed),
-        "--hidden-dims",
-        args.hidden_dims,
-        "--out",
-        str(raw_path),
-        "--fail-fast-worst-bb100",
-        str(args.fail_fast_worst),
-        "--max-invalid-rate",
-        str(args.max_invalid),
-        "--max-truncated-rate",
-        str(args.max_truncated),
-        "--continue-on-gate-fail",
-        "--fail-exit-code",
-        str(args.fail_exit_code),
-    ]
-    for opponent in opponents:
-        cmd.extend(["--opponent", opponent])
+    all_rows: list[dict] = []
+    return_codes: list[int] = []
+    repeats = max(1, int(args.repeats))
+    for repeat_idx in range(repeats):
+        repeat_raw_path = (
+            raw_path
+            if repeats == 1
+            else out_dir / f"{label}_{stamp}_repeat{repeat_idx + 1}.jsonl"
+        )
+        cmd = [
+            sys.executable,
+            str(SCRIPT_DIR / "evaluate_seed_pool.py"),
+            "--model",
+            checkpoint,
+            "--games",
+            str(args.games),
+            "--seed",
+            str(args.seed + repeat_idx * args.seed_step),
+            "--hidden-dims",
+            args.hidden_dims,
+            "--out",
+            str(repeat_raw_path),
+            "--fail-fast-worst-bb100",
+            str(args.fail_fast_worst),
+            "--max-invalid-rate",
+            str(args.max_invalid),
+            "--max-truncated-rate",
+            str(args.max_truncated),
+            "--continue-on-gate-fail",
+            "--fail-exit-code",
+            str(args.fail_exit_code),
+        ]
+        for opponent in opponents:
+            cmd.extend(["--opponent", opponent])
 
-    print("+ " + " ".join(cmd), flush=True)
-    rc = subprocess.run(cmd, cwd=ROOT).returncode
-    rows = _read_jsonl(raw_path)
+        print("+ " + " ".join(cmd), flush=True)
+        rc = subprocess.run(cmd, cwd=ROOT).returncode
+        return_codes.append(rc)
+        all_rows.extend(_read_jsonl(repeat_raw_path))
+
+    rows = _aggregate_rows(all_rows) if repeats > 1 else all_rows
+    if repeats > 1:
+        _write_jsonl(raw_path, rows)
     failures: list[str] = []
     if args.expected_count and len(rows) < args.expected_count:
         failures.append(f"only {len(rows)}/{args.expected_count} opponents evaluated")
@@ -258,8 +332,9 @@ def main() -> int:
     else:
         failures.append("no result rows written")
 
-    if rc not in (0, args.fail_exit_code):
-        failures.append(f"evaluate_seed_pool exited {rc}")
+    bad_rcs = [rc for rc in return_codes if rc not in (0, args.fail_exit_code)]
+    if bad_rcs:
+        failures.append(f"evaluate_seed_pool exited {bad_rcs}")
 
     _write_report(report_path, checkpoint, raw_path, rows, failures)
     print(f"Safety report: {report_path}", flush=True)

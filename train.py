@@ -13,6 +13,7 @@ import json
 import logging
 import time
 import copy
+import sys
 import numpy as np
 from datetime import datetime
 import platform
@@ -83,6 +84,10 @@ def _apply_hardware_profile(args) -> None:
     - rtx4090d: NVIDIA RTX 4090D (24GB VRAM) 场景，最大化GPU利用率
     """
     profile = getattr(args, 'hardware_profile', 'auto')
+    entropy_explicit = any(
+        arg == '--ppo-entropy-coef' or arg.startswith('--ppo-entropy-coef=')
+        for arg in sys.argv[1:]
+    )
 
     if profile == 'rtx4090d':
         cpu_total = os.cpu_count() or 32
@@ -114,7 +119,7 @@ def _apply_hardware_profile(args) -> None:
             args.inference_min_batch = 32
             args.inference_max_batch = 1024  # 最大推理批量（从512提升：RTX 4090D显存充足，提高GPU吞吐）
             # Anti-Fold-Bot: SEED RL 大模型需要更强的探索
-            if float(getattr(args, 'ppo_entropy_coef', 0.02)) <= 0.02:
+            if (not entropy_explicit) and float(getattr(args, 'ppo_entropy_coef', 0.02)) <= 0.02:
                 args.ppo_entropy_coef = 0.05
             # 向量化环境：根据引擎类型决定 tables_per_worker
             if int(getattr(args, 'tables_per_worker', 0)) <= 0:

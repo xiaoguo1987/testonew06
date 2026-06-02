@@ -766,3 +766,21 @@ agent_training_log.md
   stop if any regressed opponent remains below roughly -300 bb/100, if subset
   avg is below -100, if invalid actions appear, or if truncation exceeds the
   row limit.  Full promotion still requires repeated 13-opponent gates.
+- The 10k weighted-retention smoke from `3600064` stopped immediately at
+  `3610119`: the weighted roster repaired `700169` (+620.6) and `600040`
+  (+852.0), but catastrophically lost the old-strength row `1500036`
+  (-2166.6).  This confirms the current on-policy PPO repair can swing between
+  opponent objectives instead of preserving all hard rows together.
+- A no-training hard-subset probe of `2802839` also failed the same 100-game
+  single-seed safety gate, despite the 3x500 aggregate being much less severe:
+  avg -422.8, worst `1000262` -1767.6, plus large negative single-seed rows on
+  `1000054` and `1500036`.  This shows that 100-game single-seed checkpoint
+  validation is too noisy to be the only early brake.  Added repeat support to
+  `scripts/seed_safety_validate.py`; use `--repeats 3` for future safety gates
+  so the decision is made on per-opponent aggregate rows, while still tracking
+  per-row max invalid/truncated rates.
+- DeepSeek's latest review recommended treating the failures as multi-objective
+  gradient conflict: prefer `2802839` only if repeat safety probes are stable,
+  add stronger offline/reference-buffer policy retention before more long PPO
+  repair, and consider PCGrad or other per-opponent gradient conflict handling
+  before relying on weighted roster alone.
