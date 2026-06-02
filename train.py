@@ -325,7 +325,7 @@ def parse_arguments():
     parser.add_argument('--opponent-ensemble-size', type=int, default=1,
                        help='同时加载多少个历史 PPO 对手；>1 时不同 PPO 座位使用不同 checkpoint 以降低遗忘')
     parser.add_argument('--opponent-roster-file', type=str, default=None,
-                       help='JSON 固定对手分桶；ensemble slot 会按 bucket 轮转抽取 checkpoint')
+                       help='JSON 固定对手分桶；默认按 bucket 轮转，bucket 带 weight 时按权重抽取 checkpoint')
     parser.add_argument('--anchor-policy-path', type=str, default=None,
                        help='冻结参考策略 base 路径；repair 训练时用于 anchor KL 防止遗忘')
     parser.add_argument('--anchor-kl-coef', type=float, default=0.0,

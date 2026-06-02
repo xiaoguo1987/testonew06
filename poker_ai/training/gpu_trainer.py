@@ -173,6 +173,7 @@ class SeedRLTrainer:
         self._opponent_pool: List[str] = []  # 可用的历史 checkpoint 路径列表
         self._opponent_score_paths: List[str] = []
         self._opponent_scores: Dict[str, float] = self._load_opponent_scores(opponent_score_file)
+        self._opponent_roster_weighted = False
         self._opponent_roster_buckets = self._load_opponent_roster(opponent_roster_file)
         self._opponent_pool_max_size = 20    # 对手池最大容量
         self._loaded_checkpoint_path: Optional[str] = None
@@ -888,14 +889,19 @@ class SeedRLTrainer:
                 ]
                 if not clean_names:
                     continue
+                weight = 1.0
+                if "weight" in bucket:
+                    weight = max(0.0, float(bucket.get("weight", 1.0)))
+                    self._opponent_roster_weighted = True
                 loaded.append({
                     "name": str(bucket.get("name") or f"bucket_{idx}"),
                     "opponents": clean_names,
+                    "weight": weight,
                 })
             logger.info(
                 "[SEED RL] 已加载固定对手 roster: "
                 + ", ".join(
-                    f"{bucket['name']}({len(bucket['opponents'])})"
+                    f"{bucket['name']}({len(bucket['opponents'])}, w={bucket['weight']:.2f})"
                     for bucket in loaded
                 )
             )
@@ -974,6 +980,27 @@ class SeedRLTrainer:
         ]
         return matched or candidates
 
+    def _sample_roster_bucket(self, slot_idx: int) -> Dict:
+        if not self._opponent_roster_weighted:
+            return self._opponent_roster_buckets[
+                slot_idx % len(self._opponent_roster_buckets)
+            ]
+
+        weights = [max(0.0, float(bucket.get("weight", 1.0))) for bucket in self._opponent_roster_buckets]
+        total = sum(weights)
+        if total <= 0 or not math.isfinite(total):
+            return self._opponent_roster_buckets[
+                slot_idx % len(self._opponent_roster_buckets)
+            ]
+
+        r = random.random() * total
+        acc = 0.0
+        for bucket, weight in zip(self._opponent_roster_buckets, weights):
+            acc += weight
+            if acc >= r:
+                return bucket
+        return self._opponent_roster_buckets[-1]
+
     def _sample_roster_paths(self, candidates: List[str]) -> List[str]:
         chosen_paths = []
         if not self._opponent_roster_buckets:
@@ -988,9 +1015,7 @@ class SeedRLTrainer:
             return chosen_paths
 
         for slot_idx in range(len(self._opponent_models)):
-            bucket = self._opponent_roster_buckets[
-                slot_idx % len(self._opponent_roster_buckets)
-            ]
+            bucket = self._sample_roster_bucket(slot_idx)
             bucket_candidates = self._bucket_candidates(candidates, bucket)
             chosen_paths.append(self._sample_opponent_checkpoint(bucket_candidates))
         return chosen_paths

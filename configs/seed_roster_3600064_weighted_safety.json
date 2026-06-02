@@ -1,0 +1,41 @@
+{
+  "buckets": [
+    {
+      "name": "regression_focus",
+      "weight": 0.5,
+      "opponents": [
+        "seed_rl_hands_700169",
+        "seed_rl_hands_600047",
+        "seed_rl_hands_600040"
+      ]
+    },
+    {
+      "name": "variance_guards",
+      "weight": 0.2,
+      "opponents": [
+        "seed_rl_hands_1000262",
+        "seed_rl_hands_800200",
+        "seed_rl_hands_900022",
+        "seed_rl_hands_700016"
+      ]
+    },
+    {
+      "name": "positive_retention",
+      "weight": 0.15,
+      "opponents": [
+        "seed_rl_hands_1000054",
+        "seed_rl_hands_1500036"
+      ]
+    },
+    {
+      "name": "broad_retention",
+      "weight": 0.15,
+      "opponents": [
+        "seed_rl_hands_500016",
+        "seed_rl_hands_550046",
+        "seed_rl_hands_600049",
+        "seed_rl_hands_900236"
+      ]
+    }
+  ]
+}

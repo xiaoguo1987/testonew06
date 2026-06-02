@@ -746,3 +746,23 @@ agent_training_log.md
   avg >= 0, avg_lcb95 >= 0, worst >= -200, max row std <= 200, and clean
   legality.  If no 200k checkpoint improves materially, fall back to `2802839`
   rather than continuing 3600064 repairs blindly.
+- The first safety smoke from `3600064` was restarted once because the
+  `rtx4090d` hardware profile silently lifted entropy `0.02` to `0.05`; the
+  actual controlled run used entropy `0.021`.  It stopped at the first 50k
+  checkpoint `3650106` as designed.  Safety subset rows were:
+  `700169` -409.3 bb/100, `600047` -348.8 with one truncated hand,
+  `600040` -303.8, `1000262` -213.2, `1000054` +456.5, and `1500036`
+  +1556.9.  Failures were worst-row collapse on `700169`, `700169`
+  regression -350 versus the `3600064` baseline, and `600047` truncation.
+  Invalid actions stayed at zero, so this is policy-retention failure rather
+  than legality failure.
+- DeepSeek review agreed the next experiment should not continue the same
+  3600064 repair.  Use stronger retention: LR `2e-7`, PPO clip `0.04`,
+  anchor/action-KL coef `0.08`, and a weighted opponent roster that puts about
+  half of PPO opponent exposure on the three regressed rows
+  (`700169`, `600047`, `600040`) while retaining coverage of positive and
+  variance guards.  Added weighted roster support and
+  `configs/seed_roster_3600064_weighted_safety.json`.  Gate early at 10k:
+  stop if any regressed opponent remains below roughly -300 bb/100, if subset
+  avg is below -100, if invalid actions appear, or if truncation exceeds the
+  row limit.  Full promotion still requires repeated 13-opponent gates.
