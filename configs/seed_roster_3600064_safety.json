@@ -1,0 +1,32 @@
+{
+  "buckets": [
+    {
+      "name": "collapse_guards",
+      "opponents": [
+        "seed_rl_hands_600047",
+        "seed_rl_hands_1000054",
+        "seed_rl_hands_1500036",
+        "seed_rl_hands_600040"
+      ]
+    },
+    {
+      "name": "variance_guards",
+      "opponents": [
+        "seed_rl_hands_1000262",
+        "seed_rl_hands_800200",
+        "seed_rl_hands_900022",
+        "seed_rl_hands_700016"
+      ]
+    },
+    {
+      "name": "retention_mix",
+      "opponents": [
+        "seed_rl_hands_500016",
+        "seed_rl_hands_550046",
+        "seed_rl_hands_600049",
+        "seed_rl_hands_700169",
+        "seed_rl_hands_900236"
+      ]
+    }
+  ]
+}

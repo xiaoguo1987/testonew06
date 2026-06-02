@@ -731,3 +731,18 @@ agent_training_log.md
   and fails fast on avg/worst/invalid/truncation or per-opponent regression.
   Use it as an early brake before long runs; full promotion still requires the
   repeated 13-opponent matrix gate.
+- Rollback-window repeated evaluation completed and all 10 candidates failed
+  the repeat gates.  Best by average was `2802839` with avg +2.9 but
+  avg_lcb -309.2 and max row std 508.8.  Best practical continuation base is
+  `3600064`: avg -17.8, avg_lcb -268.5, worst `600047` -250.7, max row std
+  `1000262` 439.5.  It still fails, but it is closest on LCB and worst-row
+  distance while showing a more usable overall action profile than the older
+  collapses.  No model should be promoted from this window.
+- DeepSeek review after the full rollback failure agreed to start a constrained
+  200k smoke from `3600064`, not `2802839`: LR `5e-7`, PPO clip `0.08`,
+  entropy `0.02`, anchor KL coef `0.02`, fixed Phase3, score file from the
+  `3600064` aggregate, hard-negative roster, and checkpoint safety validation
+  every 50k hands.  Acceptance remains the full repeated 13-opponent gate:
+  avg >= 0, avg_lcb95 >= 0, worst >= -200, max row std <= 200, and clean
+  legality.  If no 200k checkpoint improves materially, fall back to `2802839`
+  rather than continuing 3600064 repairs blindly.
