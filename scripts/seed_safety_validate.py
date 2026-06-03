@@ -181,6 +181,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-truncated", type=float, default=0.005)
     parser.add_argument("--baseline-file", action="append", type=Path, default=[])
     parser.add_argument("--max-opponent-regression", type=float)
+    parser.add_argument(
+        "--reference-file",
+        type=Path,
+        help="Optional reference distillation .npz checked after opponent evaluation.",
+    )
+    parser.add_argument(
+        "--max-reference-mean-kl",
+        type=float,
+        help="Fail if checkpoint mean KL against --reference-file exceeds this value.",
+    )
+    parser.add_argument(
+        "--max-reference-p95-kl",
+        type=float,
+        help="Fail if checkpoint p95 KL against --reference-file exceeds this value.",
+    )
     parser.add_argument("--pass-exit-code", type=int, default=0)
     parser.add_argument("--fail-exit-code", type=int, default=3)
     return parser.parse_args()
@@ -335,6 +350,37 @@ def main() -> int:
     bad_rcs = [rc for rc in return_codes if rc not in (0, args.fail_exit_code)]
     if bad_rcs:
         failures.append(f"evaluate_seed_pool exited {bad_rcs}")
+
+    if args.reference_file:
+        reference_out = out_dir / f"{label}_{stamp}_reference_kl.json"
+        ref_cmd = [
+            sys.executable,
+            str(SCRIPT_DIR / "check_seed_reference_kl.py"),
+            "--model",
+            checkpoint,
+            "--reference-file",
+            str(args.reference_file),
+            "--hidden-dims",
+            args.hidden_dims,
+            "--out",
+            str(reference_out),
+            "--fail-exit-code",
+            str(args.fail_exit_code),
+        ]
+        if args.max_reference_mean_kl is not None:
+            ref_cmd.extend(["--max-mean-kl", str(args.max_reference_mean_kl)])
+        if args.max_reference_p95_kl is not None:
+            ref_cmd.extend(["--max-p95-kl", str(args.max_reference_p95_kl)])
+        print("+ " + " ".join(ref_cmd), flush=True)
+        ref_rc = subprocess.run(ref_cmd, cwd=ROOT).returncode
+        try:
+            ref_row = json.loads(reference_out.read_text(encoding="utf-8"))
+            if ref_row.get("failures"):
+                failures.extend(f"reference_kl: {item}" for item in ref_row["failures"])
+        except Exception as exc:
+            failures.append(f"reference_kl report unreadable: {exc}")
+        if ref_rc not in (0, args.fail_exit_code):
+            failures.append(f"check_seed_reference_kl exited {ref_rc}")
 
     _write_report(report_path, checkpoint, raw_path, rows, failures)
     print(f"Safety report: {report_path}", flush=True)

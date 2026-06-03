@@ -807,3 +807,10 @@ agent_training_log.md
   `reference_distill_coef` around `0.1-0.3` (start `0.2`), reference batch
   roughly 1:2 to the PPO batch, and repeat safety validation remains required
   before any checkpoint promotion.
+- Tightened the reference-retention tooling before the next server smoke:
+  disabled reference actor forward passes when `reference_distill_coef=0`, and
+  wired `scripts/seed_safety_validate.py` to optionally run
+  `scripts/check_seed_reference_kl.py` through `--reference-file`,
+  `--max-reference-mean-kl`, and `--max-reference-p95-kl`.  Future checkpoint
+  gates can therefore reject candidates that pass noisy hard-opponent rows but
+  already drift too far from the fixed hard-state policy buffer.

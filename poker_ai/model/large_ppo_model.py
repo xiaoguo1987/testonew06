@@ -293,19 +293,20 @@ class LargePPOModel:
                 actor_loss = actor_loss + tf.cast(self.anchor_kl_coef, tf.float32) * anchor_kl
 
             reference_kl = tf.constant(0.0, dtype=tf.float32)
-            ref_mask = tf.cast(reference_mask, tf.float32)
-            ref_denom = tf.reduce_sum(ref_mask) + 1e-8
-            ref_raw = tf.cast(self.actor(reference_states, training=True), tf.float32)
-            ref_probs = tf.clip_by_value(ref_raw, 1e-6, 1.0)
-            ref_probs = ref_probs / (tf.reduce_sum(ref_probs, axis=1, keepdims=True) + 1e-8)
-            ref_target = tf.clip_by_value(tf.cast(reference_target_probs, tf.float32), 1e-6, 1.0)
-            ref_target = ref_target / (tf.reduce_sum(ref_target, axis=1, keepdims=True) + 1e-8)
-            per_state_reference_kl = tf.reduce_sum(
-                ref_target * (tf.math.log(ref_target) - tf.math.log(ref_probs)),
-                axis=1,
-            )
-            reference_kl = tf.reduce_sum(per_state_reference_kl * ref_mask) / ref_denom
-            actor_loss = actor_loss + tf.cast(self.reference_distill_coef, tf.float32) * reference_kl
+            if self.reference_distill_coef > 0.0:
+                ref_mask = tf.cast(reference_mask, tf.float32)
+                ref_denom = tf.reduce_sum(ref_mask) + 1e-8
+                ref_raw = tf.cast(self.actor(reference_states, training=True), tf.float32)
+                ref_probs = tf.clip_by_value(ref_raw, 1e-6, 1.0)
+                ref_probs = ref_probs / (tf.reduce_sum(ref_probs, axis=1, keepdims=True) + 1e-8)
+                ref_target = tf.clip_by_value(tf.cast(reference_target_probs, tf.float32), 1e-6, 1.0)
+                ref_target = ref_target / (tf.reduce_sum(ref_target, axis=1, keepdims=True) + 1e-8)
+                per_state_reference_kl = tf.reduce_sum(
+                    ref_target * (tf.math.log(ref_target) - tf.math.log(ref_probs)),
+                    axis=1,
+                )
+                reference_kl = tf.reduce_sum(per_state_reference_kl * ref_mask) / ref_denom
+                actor_loss = actor_loss + tf.cast(self.reference_distill_coef, tf.float32) * reference_kl
 
         a_grads = actor_tape.gradient(actor_loss, self.actor.trainable_variables)
         a_grads, _ = tf.clip_by_global_norm(a_grads, self.max_grad_norm)
