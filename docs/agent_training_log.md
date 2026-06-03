@@ -914,3 +914,30 @@ agent_training_log.md
   `3600064` itself (`mean +8.8`, LCB `-194.7`), while `3403083` drops to LCB
   `-493.2`.  Future distillation must use robust repeat/LCB teacher selection
   and should not train from mean-only teacher peaks.
+- The new 2-GPU server was initialized on 2026-06-03.  It has two RTX 4090
+  GPUs visible to TensorFlow 2.21, 32 vCPU, 240GB RAM, the C++ poker engine
+  loads successfully, and the existing `/root/testo-seed-rl/runs` directory
+  already contains the key historical checkpoints (`2802839`, `3600064`,
+  `3803147`) plus rollback repeated-evaluation data.  Current branch code was
+  synced from commit `0a03aba` and compiled on the server.
+- DeepSeek reviewed the two-server setup.  It recommended separating candidate
+  generation from acceptance evaluation: use the 2-GPU server for training or
+  fast prescreening, and keep the 1-GPU server as an independent repeat-gate
+  verifier.  Codex agrees with the separation, but will use independent
+  `CUDA_VISIBLE_DEVICES=0/1` processes before attempting MirroredStrategy,
+  because the current SEED-RL path mixes CPU environment simulation, batched
+  inference, and learner updates.  A 20-game dual-GPU smoke on the new server
+  succeeded: two `evaluate_seed_pool.py` processes ran concurrently and each
+  saw only its assigned GPU.  The scores are not meaningful due to sample size.
+- Added `scripts/evaluate_seed_repeats_parallel.py` and
+  `docs/two_server_seed_rl_plan.md` on branch
+  `codex/two-server-seed-rl-20260603`.  The parallel script shards opponents
+  across CUDA devices, merges repeat JSONL files, writes aggregate matrices,
+  and calls the existing `seed_matrix_gate.py`.  Use it only as a fast
+  prescreen on the 2-GPU server; final promotion still requires independent
+  confirmation on the 1-GPU server.  Server smoke
+  `/root/testo-seed-rl/runs/twogpu_parallel_script_smoke_20260603_213004`
+  verified the script-level path end-to-end with two 20-game shards: both GPUs
+  launched independently, shard JSONL files were merged, aggregate JSONL was
+  written, and `seed_matrix_gate.py` produced a report.  The scores from this
+  smoke are intentionally ignored.
