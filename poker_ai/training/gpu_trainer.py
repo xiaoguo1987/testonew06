@@ -75,6 +75,8 @@ class SeedRLTrainer:
         validation_start_hands: int = 0,
         max_anchor_kl: float = 0.0,
         anchor_kl_patience: int = 10,
+        max_reference_kl: float = 0.0,
+        reference_kl_patience: int = 10,
     ):
         """
         Args:
@@ -119,6 +121,9 @@ class SeedRLTrainer:
         self.max_anchor_kl = float(max_anchor_kl) if float(max_anchor_kl) > 0.0 else None
         self.anchor_kl_patience = max(1, int(anchor_kl_patience))
         self._anchor_kl_high_streak = 0
+        self.max_reference_kl = float(max_reference_kl) if float(max_reference_kl) > 0.0 else None
+        self.reference_kl_patience = max(1, int(reference_kl_patience))
+        self._reference_kl_high_streak = 0
 
         # 训练统计
         self.total_hands = 0
@@ -1224,6 +1229,38 @@ class SeedRLTrainer:
             return True
         return False
 
+    def _reference_kl_guard_failed(self) -> bool:
+        if self.max_reference_kl is None:
+            return False
+        reference_kl = float(getattr(self.model, "last_reference_kl", 0.0))
+        if reference_kl > self.max_reference_kl:
+            self._reference_kl_high_streak += 1
+        else:
+            self._reference_kl_high_streak = 0
+        if self._reference_kl_high_streak <= 0:
+            return False
+
+        self._write_metric(
+            "reference_kl_guard",
+            reference_kl=reference_kl,
+            max_reference_kl=float(self.max_reference_kl),
+            high_streak=int(self._reference_kl_high_streak),
+            patience=int(self.reference_kl_patience),
+        )
+        if self._reference_kl_high_streak >= self.reference_kl_patience:
+            logger.warning(
+                "[SEED RL] reference KL 连续过高: %.4f > %.4f, streak=%s/%s",
+                reference_kl,
+                self.max_reference_kl,
+                self._reference_kl_high_streak,
+                self.reference_kl_patience,
+            )
+            return True
+        return False
+
+    def _retention_guard_failed(self) -> bool:
+        return self._anchor_kl_guard_failed() or self._reference_kl_guard_failed()
+
     def _find_latest_checkpoint(self) -> Optional[str]:
         """查找最新的 SEED RL checkpoint（按文件名中的手数排序）。"""
         import re
@@ -1432,6 +1469,15 @@ class SeedRLTrainer:
             anchor_kl_coef=float(getattr(self.model, "anchor_kl_coef", 0.0)),
             max_anchor_kl=float(self.max_anchor_kl) if self.max_anchor_kl is not None else None,
             anchor_kl_patience=int(self.anchor_kl_patience),
+            reference_distill_file=getattr(self.model, "reference_distill_file", None),
+            reference_distill_rows=(
+                int(len(getattr(self.model, "reference_states", [])))
+                if getattr(self.model, "reference_states", None) is not None else 0
+            ),
+            reference_distill_coef=float(getattr(self.model, "reference_distill_coef", 0.0)),
+            reference_distill_batch_size=int(getattr(self.model, "reference_distill_batch_size", 0)),
+            max_reference_kl=float(self.max_reference_kl) if self.max_reference_kl is not None else None,
+            reference_kl_patience=int(self.reference_kl_patience),
             opponent_ensemble_size=int(len(self._opponent_models)),
             opponent_ensemble=list(self._opponent_ensemble_paths),
             opponent_roster_buckets=[
@@ -1470,6 +1516,8 @@ class SeedRLTrainer:
                 f"速度={hps:.1f} hands/s, 区间速度={interval_hps:.1f} hands/s, "
                 f"推理batch均值={avg_batch:.1f}, PPO耗时={self._last_ppo_seconds:.3f}s, "
                 f"KL={getattr(self.model, 'last_kl', 0.0):.4f}, "
+                f"anchor_KL={getattr(self.model, 'last_anchor_kl', 0.0):.4f}, "
+                f"reference_KL={getattr(self.model, 'last_reference_kl', 0.0):.4f}, "
                 f"区间动作=[{interval_action_summary}], "
                 f"位置收益=[{interval_position_summary}]"
             )
@@ -1488,6 +1536,13 @@ class SeedRLTrainer:
                 last_kl=float(getattr(self.model, "last_kl", 0.0)),
                 anchor_kl=float(getattr(self.model, "last_anchor_kl", 0.0)),
                 anchor_kl_coef=float(getattr(self.model, "anchor_kl_coef", 0.0)),
+                reference_kl=float(getattr(self.model, "last_reference_kl", 0.0)),
+                reference_distill_coef=float(getattr(self.model, "reference_distill_coef", 0.0)),
+                reference_distill_batch_size=int(getattr(self.model, "reference_distill_batch_size", 0)),
+                reference_distill_rows=(
+                    int(len(getattr(self.model, "reference_states", [])))
+                    if getattr(self.model, "reference_states", None) is not None else 0
+                ),
                 inference_batches=int(self._inference_batches),
                 inference_items=int(self._inference_items),
                 inference_main_items=int(self._inference_main_items),
@@ -1527,7 +1582,7 @@ class SeedRLTrainer:
                         loss = self._do_ppo_train(traj_buffer)
                         if loss is not None:
                             log_ppo_update(loss, reason="backpressure")
-                            if self._anchor_kl_guard_failed():
+                            if self._retention_guard_failed():
                                 stopped_by_anchor_guard = True
                                 break
                     if stopped_by_anchor_guard:
@@ -1550,9 +1605,9 @@ class SeedRLTrainer:
                     loss = self._do_ppo_train(traj_buffer, force=overflow_boundary)
                     if loss is not None:
                         log_ppo_update(loss, reason="overflow_boundary" if overflow_boundary else "regular")
-                        if self._anchor_kl_guard_failed():
+                        if self._retention_guard_failed():
                             stopped_by_anchor_guard = True
-                            logger.warning("[SEED RL] anchor KL guard 触发，停止训练")
+                            logger.warning("[SEED RL] retention KL guard 触发，停止训练")
                             break
 
                 # 4. 定期评估（与 checkpoint 间隔对齐，避免阻塞训练流水线）
@@ -1656,7 +1711,7 @@ class SeedRLTrainer:
             if remaining > 0:
                 logger.info(
                     f"[SEED RL] 跳过剩余 buffer: {remaining} steps，"
-                    "因为训练已被 validation/anchor guard 停止"
+                    "因为训练已被 validation/retention guard 停止"
                 )
                 for k in traj_buffer:
                     traj_buffer[k] = []
@@ -1685,6 +1740,8 @@ class SeedRLTrainer:
                     last_kl=float(getattr(self.model, "last_kl", 0.0)),
                     anchor_kl=float(getattr(self.model, "last_anchor_kl", 0.0)),
                     anchor_kl_coef=float(getattr(self.model, "anchor_kl_coef", 0.0)),
+                    reference_kl=float(getattr(self.model, "last_reference_kl", 0.0)),
+                    reference_distill_coef=float(getattr(self.model, "reference_distill_coef", 0.0)),
                 )
             self.ppo_buffer_size = old_buf
         elif remaining > 0:

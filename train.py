@@ -339,6 +339,16 @@ def parse_arguments():
                        help='anchor_kl 连续超过该值时触发训练保护；<=0 表示关闭')
     parser.add_argument('--anchor-kl-patience', type=int, default=10,
                        help='anchor_kl 超阈值多少次 PPO 更新后停止训练')
+    parser.add_argument('--reference-distill-file', type=str, default=None,
+                       help='固定 reference buffer .npz；包含 states 和 target_probs/probs，用于旧策略蒸馏保留')
+    parser.add_argument('--reference-distill-coef', type=float, default=0.0,
+                       help='reference buffer KL 蒸馏系数；0 表示关闭')
+    parser.add_argument('--reference-distill-batch-size', type=int, default=0,
+                       help='每个 PPO mini-batch 额外采样多少 reference states；0 表示使用 min(batch_size, buffer_rows)')
+    parser.add_argument('--max-reference-kl', type=float, default=0.0,
+                       help='reference_kl 连续超过该值时触发训练保护；<=0 表示关闭')
+    parser.add_argument('--reference-kl-patience', type=int, default=10,
+                       help='reference_kl 超阈值多少次 PPO 更新后停止训练')
     parser.add_argument('--checkpoint-validation-command', type=str, default=None,
                        help='每次保存 checkpoint 后运行的外部验证命令；会注入 SEED_RL_CHECKPOINT 等环境变量')
     parser.add_argument('--stop-on-validation-failure', action='store_true',
@@ -510,6 +520,11 @@ def _train_seed_rl(args):
             getattr(args, 'anchor_policy_path', None),
             getattr(args, 'anchor_kl_coef', 0.0),
         )
+        model.set_reference_distillation(
+            getattr(args, 'reference_distill_file', None),
+            getattr(args, 'reference_distill_coef', 0.0),
+            getattr(args, 'reference_distill_batch_size', 0),
+        )
 
         trainer = SeedRLTrainer(
             model=model,
@@ -546,6 +561,8 @@ def _train_seed_rl(args):
             validation_start_hands=getattr(args, 'validation_start_hands', 0),
             max_anchor_kl=getattr(args, 'max_anchor_kl', 0.0),
             anchor_kl_patience=getattr(args, 'anchor_kl_patience', 10),
+            max_reference_kl=getattr(args, 'max_reference_kl', 0.0),
+            reference_kl_patience=getattr(args, 'reference_kl_patience', 10),
         )
 
         # 加载 checkpoint

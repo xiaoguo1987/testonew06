@@ -794,3 +794,16 @@ agent_training_log.md
   Next implementation priority: reference-buffer policy distillation and/or
   opponent-aware gradient conflict handling; use repeat safety validation for
   every checkpoint gate.
+- DeepSeek review on the concrete retention design agreed to implement fixed
+  reference-buffer policy distillation before PCGrad.  Rationale: the existing
+  anchor KL only constrains on-policy PPO states from the current repair run,
+  while the observed failures are off-distribution forgetting across old
+  hard-opponent states.  Implemented model-side `reference_KL` distillation:
+  load a `.npz` buffer of `states` + `target_probs`, sample reference states
+  every PPO mini-batch, add `coef * KL(target || current)` to the actor loss,
+  log `reference_KL`, and optionally stop on `--max-reference-kl`.  Also added
+  scripts to build the buffer from hard-opponent rollouts and to check a
+  checkpoint's reference KL independently.  Initial smoke hyperparameter range:
+  `reference_distill_coef` around `0.1-0.3` (start `0.2`), reference batch
+  roughly 1:2 to the PPO batch, and repeat safety validation remains required
+  before any checkpoint promotion.

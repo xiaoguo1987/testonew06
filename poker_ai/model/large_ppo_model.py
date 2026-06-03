@@ -96,6 +96,12 @@ class LargePPOModel:
         self.anchor_actor = None
         self.anchor_kl_coef = 0.0
         self.last_anchor_kl = 0.0
+        self.reference_states = None
+        self.reference_target_probs = None
+        self.reference_distill_coef = 0.0
+        self.reference_distill_batch_size = 0
+        self.reference_distill_file = None
+        self.last_reference_kl = 0.0
 
         # Critic 学习率倍率：Critic 需要更快收敛以提供准确价值估计
         self.critic_lr_multiplier = getattr(cfg, 'critic_lr_multiplier', 3.0)
@@ -241,6 +247,7 @@ class LargePPOModel:
         self,
         batch_states, batch_actions, batch_old_probs,
         batch_advantages, batch_returns, batch_old_values, batch_mask,
+        reference_states, reference_target_probs, reference_mask,
     ):
         # Actor
         with tf.GradientTape() as actor_tape:
@@ -285,6 +292,21 @@ class LargePPOModel:
                 anchor_kl = tf.reduce_sum(per_state_anchor_kl * msk) / (tf.reduce_sum(msk) + 1e-8)
                 actor_loss = actor_loss + tf.cast(self.anchor_kl_coef, tf.float32) * anchor_kl
 
+            reference_kl = tf.constant(0.0, dtype=tf.float32)
+            ref_mask = tf.cast(reference_mask, tf.float32)
+            ref_denom = tf.reduce_sum(ref_mask) + 1e-8
+            ref_raw = tf.cast(self.actor(reference_states, training=True), tf.float32)
+            ref_probs = tf.clip_by_value(ref_raw, 1e-6, 1.0)
+            ref_probs = ref_probs / (tf.reduce_sum(ref_probs, axis=1, keepdims=True) + 1e-8)
+            ref_target = tf.clip_by_value(tf.cast(reference_target_probs, tf.float32), 1e-6, 1.0)
+            ref_target = ref_target / (tf.reduce_sum(ref_target, axis=1, keepdims=True) + 1e-8)
+            per_state_reference_kl = tf.reduce_sum(
+                ref_target * (tf.math.log(ref_target) - tf.math.log(ref_probs)),
+                axis=1,
+            )
+            reference_kl = tf.reduce_sum(per_state_reference_kl * ref_mask) / ref_denom
+            actor_loss = actor_loss + tf.cast(self.reference_distill_coef, tf.float32) * reference_kl
+
         a_grads = actor_tape.gradient(actor_loss, self.actor.trainable_variables)
         a_grads, _ = tf.clip_by_global_norm(a_grads, self.max_grad_norm)
         self.actor_optimizer.apply_gradients(
@@ -313,7 +335,7 @@ class LargePPOModel:
             [(g, v) for g, v in zip(c_grads, self.critic.trainable_variables) if g is not None]
         )
 
-        return actor_loss, critic_loss, mean_kl, anchor_kl
+        return actor_loss, critic_loss, mean_kl, anchor_kl, reference_kl
 
     def set_anchor_policy(self, path: Optional[str], coef: float = 0.0) -> None:
         """Load a frozen actor used as a retention regularizer during PPO repair."""
@@ -335,6 +357,98 @@ class LargePPOModel:
             "[LargePPO] Anchor policy loaded: %s, anchor_kl_coef=%.4f",
             base,
             self.anchor_kl_coef,
+        )
+
+    def set_reference_distillation(
+        self,
+        path: Optional[str],
+        coef: float = 0.0,
+        batch_size: int = 0,
+    ) -> None:
+        """Load a fixed state/probability buffer for policy retention.
+
+        The existing anchor KL regularizes only states collected by the current
+        PPO rollout.  This buffer keeps old hard-opponent states visible during
+        repair runs, which reduces catastrophic forgetting across opponents.
+        """
+        self.reference_states = None
+        self.reference_target_probs = None
+        self.reference_distill_coef = max(0.0, float(coef))
+        self.reference_distill_batch_size = max(0, int(batch_size))
+        self.reference_distill_file = None
+        self.last_reference_kl = 0.0
+        if not path or self.reference_distill_coef <= 0.0:
+            return
+
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Reference distillation file not found: {path}")
+
+        data = np.load(path, allow_pickle=False)
+        if "states" not in data:
+            raise ValueError(f"Reference distillation file missing states: {path}")
+        prob_key = None
+        for key in ("target_probs", "probs", "action_probs"):
+            if key in data:
+                prob_key = key
+                break
+        if prob_key is None:
+            raise ValueError(f"Reference distillation file missing target_probs/probs: {path}")
+
+        states = np.asarray(data["states"], dtype=np.float32)
+        probs = np.asarray(data[prob_key], dtype=np.float32)
+        if states.ndim != 2 or states.shape[1] != self.input_dim:
+            raise ValueError(
+                f"Reference states shape {states.shape} does not match input_dim={self.input_dim}"
+            )
+        if probs.ndim != 2 or probs.shape[1] != self.output_dim or probs.shape[0] != states.shape[0]:
+            raise ValueError(
+                f"Reference probs shape {probs.shape} does not match states={states.shape}, "
+                f"output_dim={self.output_dim}"
+            )
+
+        finite = np.isfinite(states).all(axis=1) & np.isfinite(probs).all(axis=1)
+        probs = np.clip(probs, 1e-6, 1.0)
+        prob_sums = probs.sum(axis=1)
+        finite &= prob_sums > 1e-8
+        if not np.any(finite):
+            raise ValueError(f"Reference distillation file has no valid rows: {path}")
+
+        states = states[finite].astype(np.float32, copy=False)
+        probs = probs[finite].astype(np.float32, copy=False)
+        probs = probs / (probs.sum(axis=1, keepdims=True) + 1e-8)
+
+        self.reference_states = states
+        self.reference_target_probs = probs
+        if self.reference_distill_batch_size <= 0:
+            self.reference_distill_batch_size = min(self.batch_size, len(states))
+        self.reference_distill_file = path
+        logger.info(
+            "[LargePPO] Reference distillation loaded: %s, rows=%s, batch=%s, coef=%.4f",
+            path,
+            len(states),
+            self.reference_distill_batch_size,
+            self.reference_distill_coef,
+        )
+
+    def _sample_reference_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        bs = max(1, int(self.reference_distill_batch_size or 1))
+        if (
+            self.reference_states is None
+            or self.reference_target_probs is None
+            or self.reference_distill_coef <= 0.0
+        ):
+            return (
+                np.zeros((1, self.input_dim), dtype=np.float32),
+                np.zeros((1, self.output_dim), dtype=np.float32),
+                np.zeros(1, dtype=np.float32),
+            )
+
+        n = len(self.reference_states)
+        idx = np.random.randint(0, n, size=bs)
+        return (
+            self.reference_states[idx],
+            self.reference_target_probs[idx],
+            np.ones(bs, dtype=np.float32),
         )
 
     def _predict_critic_batch(self, states: np.ndarray, chunk_size: int = 256) -> np.ndarray:
@@ -380,7 +494,7 @@ class LargePPOModel:
         returns = advantages + values
         old_values = values.copy()
 
-        total_a, total_c, total_kl, total_anchor_kl = 0.0, 0.0, 0.0, 0.0
+        total_a, total_c, total_kl, total_anchor_kl, total_reference_kl = 0.0, 0.0, 0.0, 0.0, 0.0
         done_batches = 0
         sdim = states.shape[1]
 
@@ -415,7 +529,9 @@ class LargePPOModel:
                     ad_np = advantages[bi]; r_np = returns[bi]; ov_np = old_values[bi]
                     m_np = np.ones(bs, dtype=np.float32)
 
-                al, cl, kl, anchor_kl = self._ppo_update_step(
+                ref_s_np, ref_p_np, ref_m_np = self._sample_reference_batch()
+
+                al, cl, kl, anchor_kl, reference_kl = self._ppo_update_step(
                     tf.convert_to_tensor(s_np, tf.float32),
                     tf.convert_to_tensor(a_np, tf.int32),
                     tf.convert_to_tensor(op_np, tf.float32),
@@ -423,18 +539,23 @@ class LargePPOModel:
                     tf.convert_to_tensor(r_np, tf.float32),
                     tf.convert_to_tensor(ov_np, tf.float32),
                     tf.convert_to_tensor(m_np, tf.float32),
+                    tf.convert_to_tensor(ref_s_np, tf.float32),
+                    tf.convert_to_tensor(ref_p_np, tf.float32),
+                    tf.convert_to_tensor(ref_m_np, tf.float32),
                 )
 
                 bkl = float(kl.numpy())
                 bal = float(al.numpy())
                 bcl = float(cl.numpy())
                 bakl = float(anchor_kl.numpy())
+                brkl = float(reference_kl.numpy())
 
                 # 先记录指标，再判断 KL 早停（修复原先 break 后指标丢失的 bug）
                 total_a += bal
                 total_c += bcl
                 total_kl += bkl
                 total_anchor_kl += bakl
+                total_reference_kl += brkl
                 done_batches += 1
 
                 epoch_kl += bkl
@@ -461,12 +582,14 @@ class LargePPOModel:
         self.last_loss = (avg_a + avg_c) / 2
         self.last_kl = total_kl / done_batches
         self.last_anchor_kl = total_anchor_kl / done_batches
+        self.last_reference_kl = total_reference_kl / done_batches
 
         elapsed = _time.time() - t0
         logger.info(
             f"[LargePPO] train() 完成: {elapsed:.3f}s, batches={done_batches}, "
             f"actor_loss={avg_a:.6f}, critic_loss={avg_c:.6f}, "
-            f"KL={self.last_kl:.6f}, anchor_KL={self.last_anchor_kl:.6f}"
+            f"KL={self.last_kl:.6f}, anchor_KL={self.last_anchor_kl:.6f}, "
+            f"reference_KL={self.last_reference_kl:.6f}"
         )
         return self.last_loss
 
