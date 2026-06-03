@@ -814,3 +814,11 @@ agent_training_log.md
   `--max-reference-mean-kl`, and `--max-reference-p95-kl`.  Future checkpoint
   gates can therefore reject candidates that pass noisy hard-opponent rows but
   already drift too far from the fixed hard-state policy buffer.
+- Added `scripts/run_seed_reference_smoke.sh` as the next server-side smoke
+  entrypoint.  It resolves the `3600064` anchor and six hard-subset opponents,
+  builds a small fixed reference buffer, verifies the anchor has near-zero
+  reference KL, then runs a 10k-hand reference-distilled repair with checkpoint
+  validation wired to both repeated hard-opponent rows and reference KL gates.
+  Defaults are intentionally short (`NUM_HANDS=10000`,
+  `REF_STATES_PER_OPPONENT=5000`) so the first server run is mechanical
+  validation, not another long blind training stage.
