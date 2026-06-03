@@ -844,3 +844,16 @@ agent_training_log.md
   hard-subset avg/worst, plus a named `1500036` floor.  Added
   `--min-opponent-score NAME=BB100` to `scripts/seed_safety_validate.py` so
   fragile old-strength rows can be guarded explicitly.
+- The attempted 50k continuation
+  `/root/testo-seed-rl/runs/seed_reference_50k_from3610k_20260603_161653`
+  correctly stopped at the first 10k checkpoint `3620105`.  Failure was not
+  legality: hard-subset avg dropped to `-163.1`, `1500036` dropped to `-189.4`,
+  and reference KL failed (`mean=0.0128`, p95 `0.0420`).  This shows one PPO
+  update is still too large for retention repair.  Root cause in tooling:
+  the `rtx4090d` hardware profile still forced `ppo_epochs=4` and
+  `ppo_buffer_size=16384`, so repair runs could not request a smaller update.
+  Updated `train.py` so explicit `--ppo-epochs`, `--ppo-buffer-size`,
+  `--inference-min-batch`, and `--inference-max-batch` are respected by the
+  hardware profile.  Next experiment should use a smaller update, e.g.
+  `ppo_epochs=1`, `ppo_buffer_size=8192`, lower LR, and stronger reference
+  weight rather than repeating the same 4-epoch PPO update.

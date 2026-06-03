@@ -62,6 +62,13 @@ def _has_cc_engine() -> bool:
     return bool(_cc)
 
 
+def _arg_explicit(name: str) -> bool:
+    return any(
+        arg == name or arg.startswith(name + "=")
+        for arg in sys.argv[1:]
+    )
+
+
 def _validate_engine_requirements(args) -> None:
     if getattr(args, 'arch', 'legacy') != 'seed-rl':
         return
@@ -84,10 +91,11 @@ def _apply_hardware_profile(args) -> None:
     - rtx4090d: NVIDIA RTX 4090D (24GB VRAM) 场景，最大化GPU利用率
     """
     profile = getattr(args, 'hardware_profile', 'auto')
-    entropy_explicit = any(
-        arg == '--ppo-entropy-coef' or arg.startswith('--ppo-entropy-coef=')
-        for arg in sys.argv[1:]
-    )
+    entropy_explicit = _arg_explicit('--ppo-entropy-coef')
+    ppo_epochs_explicit = _arg_explicit('--ppo-epochs')
+    ppo_buffer_explicit = _arg_explicit('--ppo-buffer-size')
+    inference_min_explicit = _arg_explicit('--inference-min-batch')
+    inference_max_explicit = _arg_explicit('--inference-max-batch')
 
     if profile == 'rtx4090d':
         cpu_total = os.cpu_count() or 32
@@ -113,11 +121,16 @@ def _apply_hardware_profile(args) -> None:
             args.hidden_dims = [2048, 2048, 1024, 512]
             if int(getattr(args, 'batch_size', 64)) <= 1024:
                 args.batch_size = 1024
-            # 强制 ppo_epochs=4（大模型 + SEED RL 异步架构下，过多 epoch 会导致 buffer stale 引发 KL 爆炸）
-            args.ppo_epochs = 4
-            args.ppo_buffer_size = 16384
-            args.inference_min_batch = 32
-            args.inference_max_batch = 1024  # 最大推理批量（从512提升：RTX 4090D显存充足，提高GPU吞吐）
+            # 大模型 + SEED RL 默认用较稳的 4 epoch / 16k buffer；
+            # repair 阶段可显式调小，避免一次 PPO 更新过猛。
+            if not ppo_epochs_explicit:
+                args.ppo_epochs = 4
+            if not ppo_buffer_explicit:
+                args.ppo_buffer_size = 16384
+            if not inference_min_explicit:
+                args.inference_min_batch = 32
+            if not inference_max_explicit:
+                args.inference_max_batch = 1024  # RTX 4090/D 显存充足，提高GPU吞吐
             # Anti-Fold-Bot: SEED RL 大模型需要更强的探索
             if (not entropy_explicit) and float(getattr(args, 'ppo_entropy_coef', 0.02)) <= 0.02:
                 args.ppo_entropy_coef = 0.05
@@ -246,6 +259,14 @@ def parse_arguments():
     parser.add_argument('--ppo-clip', type=float, default=0.2, help='PPO clip_epsilon')
     parser.add_argument('--ppo-epochs', type=int, default=15, help='PPO 每批轨迹更新轮次（GPU利用率优化，KL早停保护策略稳定性）')
     parser.add_argument('--ppo-entropy-coef', type=float, default=0.02, help='PPO 熵正则系数，越大越鼓励探索')
+    parser.add_argument('--ppo-buffer-size', type=int, default=0,
+                        help='SEED RL PPO buffer steps；<=0 时由 hardware profile 自动设置')
+    parser.add_argument('--inference-min-batch', type=int, default=0,
+                        help='SEED RL 最小 GPU 推理 batch；<=0 自动')
+    parser.add_argument('--inference-max-batch', type=int, default=0,
+                        help='SEED RL 最大 GPU 推理 batch；<=0 自动')
+    parser.add_argument('--tables-per-worker', type=int, default=0,
+                        help='SEED RL 每个 worker 并发牌桌数；<=0 自动')
     parser.add_argument('--ppo-update-min-steps', type=int, default=0,
                         help='PPO累计多少步再做一次更新（<=0 自动，能提升GPU吞吐）')
     parser.add_argument('--target-update', type=int, default=10, help='DQN目标网络更新频率')
