@@ -822,3 +822,14 @@ agent_training_log.md
   Defaults are intentionally short (`NUM_HANDS=10000`,
   `REF_STATES_PER_OPPONENT=5000`) so the first server run is mechanical
   validation, not another long blind training stage.
+- Server smoke `/root/testo-seed-rl/runs/seed_reference_smoke_10k_from3600k_20260603_153937`
+  ran mechanically end-to-end: reference buffer generation succeeded with
+  30,000 states, anchor reference KL was essentially zero, and the candidate
+  checkpoint `3610064` kept reference KL low (mean `0.0043`, p95 `0.0133`).
+  The original 3x100 hard-subset gate failed on `1500036` at `-776.2`
+  bb/100, but a follow-up 10,000-hand diagnostic showed this was a
+  high-variance false negative rather than confirmed collapse: anchor `3600064`
+  scored `-70.1` bb/100 against `1500036`, while candidate `3610064` scored
+  `-26.5` bb/100 with clean legality.  Updated the smoke runner default
+  validation size to `500` games per repeat; future smoke gates should avoid
+  100-game promotion/rejection decisions for hard rows.
