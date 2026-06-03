@@ -857,3 +857,60 @@ agent_training_log.md
   hardware profile.  Next experiment should use a smaller update, e.g.
   `ppo_epochs=1`, `ppo_buffer_size=8192`, lower LR, and stronger reference
   weight rather than repeating the same 4-epoch PPO update.
+- DeepSeek reviewed the corrected micro-update proposal and agreed to run a
+  10k-only smoke from `3610064` with `lr=3e-8`, `ppo_epochs=1`,
+  `ppo_buffer_size=8192`, `ppo_clip=0.02`, `entropy=0.005`,
+  `anchor_coef=0.1`, and `reference_coef=0.5`.  The server run
+  `/root/testo-seed-rl/runs/seed_reference_micro_10k_from3610k_20260603_163242`
+  confirmed the new CLI knobs were respected, but checkpoint `3620065` still
+  failed the gate: hard-subset avg `+10.5` < `+50`, reference KL mean
+  `0.00644` > `0.006`, and p95 `0.01809` > `0.015`.  This is much less severe
+  than the prior 4-epoch PPO drift, but still not promotable.  Reject
+  `3620065`; do not continue PPO repair from it.
+- DeepSeek then recommended confirming whether `3610064` was actually safe
+  across the full historical pool before any more RL.  The full 13-opponent
+  repeated check
+  `/root/testo-seed-rl/runs/seed_full13_confirm_3610064_20260603_164235`
+  failed: avg `-55.7` bb/100 over `5x500`, with major weak rows including
+  `1000054 -202.9`, `900236 -178.6`, `900022 -177.4`, `500016 -165.7`,
+  `700016 -138.6`, and `1000262 -132.5`.  Reference KL still passed
+  (mean `0.00432`, p95 `0.01325`) and legality was clean, which means
+  reference retention alone is preserving a narrow hard-subset behavior rather
+  than producing full-pool robustness.  Treat `3610064` as a useful diagnostic
+  candidate only, not a safe anchor.
+- Current conclusion with DeepSeek: pause environment PPO repair.  The repeated
+  failures show conflicting multi-opponent objectives and high variance, not a
+  simple step-size or legality bug.  Added offline distillation tooling for the
+  next stage: `scripts/select_seed_teachers.py` selects a strongest teacher per
+  opponent row from matrix JSONL files, `scripts/build_seed_multiteacher_buffer.py`
+  collects row-labeled `(state, teacher_action_probs)` buffers from those
+  teachers, and `scripts/distill_seed_policy.py` trains a student actor with
+  row-balanced `KL(teacher || student)` plus optional reference-KL anchoring.
+  Also expanded `scripts/run_seed_reference_smoke.sh` so future smoke runs can
+  reuse an existing reference file (`BUILD_REFERENCE=0`) and pass explicit
+  PPO/gate knobs through environment variables.
+- First multi-teacher POC
+  `/root/testo-seed-rl/runs/seed_multiteacher_poc_20260603_170902` selected
+  three weak full-pool rows (`1000054`, `500016`, `900236`) using the old
+  mean-score selector and distilled from `3600064` for two short epochs.  The
+  offline KL looked good (`val_teacher_kl=0.0055`), but the `3x500` row check
+  failed badly: avg `-112.4` bb/100, `900236 -285.1`, `500016 -82.7`, and
+  reference p95 KL `0.0377` > `0.0300`.  This shows low teacher-logit KL is not
+  sufficient evidence that the policy improved in live play.
+- DeepSeek reviewed that POC and agreed the likely causes are: no opponent
+  identity/profile features in the `134`-dim state, high-variance teacher
+  choices, and harmful KL tail drift in a few critical states.  Codex then ran
+  a smaller single-teacher test
+  `/root/testo-seed-rl/runs/seed_singleteacher_900236_poc_20260603_172738`
+  using only `3403083 -> 900236`, with `lr=3e-6`, `steps_per_epoch=10`, and
+  `reference_coef=1.0`.  It also failed: avg `-180.4`, `900236 -311.2`, and
+  reference p95 KL `0.0356`.  The selected teacher was not robust; it had a
+  1500-hand mean of `+99.3` but repeat rows `[-200.9, +703.9, -205.1]`.
+- Updated `scripts/select_seed_teachers.py` with robust repeat aggregation:
+  `--aggregate-repeats`, `--rank-metric {score,mean,lcb,min}`,
+  `--min-repeats`, `--max-std`, and `--min-lcb`.  The server-side LCB selector
+  run `/root/testo-seed-rl/runs/seed_robust_teacher_selection_20260603_173536`
+  corrected the false teacher for `900236`: the least-bad LCB candidate is
+  `3600064` itself (`mean +8.8`, LCB `-194.7`), while `3403083` drops to LCB
+  `-493.2`.  Future distillation must use robust repeat/LCB teacher selection
+  and should not train from mean-only teacher peaks.
