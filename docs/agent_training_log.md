@@ -833,3 +833,14 @@ agent_training_log.md
   `-26.5` bb/100 with clean legality.  Updated the smoke runner default
   validation size to `500` games per repeat; future smoke gates should avoid
   100-game promotion/rejection decisions for hard rows.
+- Follow-up candidate confirmation passed with hard-subset `3x500` plus
+  reference KL: avg `+81.8` bb/100, worst `600047 -251.6`, `1500036 +228.1`,
+  zero invalid actions, and reference KL unchanged (mean `0.0043`, p95
+  `0.0133`).  DeepSeek agreed this is enough to use `3610064` as the next
+  research continuation base, not as a delivered model.  Recommended next
+  stage: 50k hands with the same conservative reference-distill settings
+  (`lr=1e-7`, `ppo_clip=0.04`, `entropy=0.01`, `anchor_coef=0.05`,
+  `reference_coef=0.2`), checkpoint every 10k, and hard gates on reference KL,
+  hard-subset avg/worst, plus a named `1500036` floor.  Added
+  `--min-opponent-score NAME=BB100` to `scripts/seed_safety_validate.py` so
+  fragile old-strength rows can be guarded explicitly.

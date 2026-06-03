@@ -182,6 +182,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline-file", action="append", type=Path, default=[])
     parser.add_argument("--max-opponent-regression", type=float)
     parser.add_argument(
+        "--min-opponent-score",
+        action="append",
+        default=[],
+        metavar="NAME=BB100",
+        help="Fail if a named opponent aggregate drops below this bb/100, e.g. seed_rl_hands_1500036=-60",
+    )
+    parser.add_argument(
         "--reference-file",
         type=Path,
         help="Optional reference distillation .npz checked after opponent evaluation.",
@@ -206,6 +213,22 @@ def _default_out_dir() -> Path:
     if checkpoint_dir:
         return Path(checkpoint_dir) / "safety_validation"
     return ROOT / "runs" / "safety_validation"
+
+
+def _parse_min_opponent_scores(values: list[str]) -> dict[str, float]:
+    thresholds: dict[str, float] = {}
+    for raw in values:
+        if "=" not in raw:
+            raise SystemExit(f"--min-opponent-score must be NAME=BB100, got: {raw}")
+        name, value = raw.split("=", 1)
+        clean_name = os.path.basename(name.strip().replace(".actor.weights.h5", ""))
+        if not clean_name:
+            raise SystemExit(f"--min-opponent-score has empty opponent name: {raw}")
+        try:
+            thresholds[clean_name] = float(value)
+        except ValueError as exc:
+            raise SystemExit(f"--min-opponent-score has invalid bb/100 value: {raw}") from exc
+    return thresholds
 
 
 def _write_report(
@@ -310,6 +333,7 @@ def main() -> int:
     if repeats > 1:
         _write_jsonl(raw_path, rows)
     failures: list[str] = []
+    named_thresholds = _parse_min_opponent_scores(args.min_opponent_score)
     if args.expected_count and len(rows) < args.expected_count:
         failures.append(f"only {len(rows)}/{args.expected_count} opponents evaluated")
     if rows:
@@ -332,6 +356,12 @@ def main() -> int:
                 failures.append(
                     f"{_opponent_name(row)} truncated {truncated:.4f} > {args.max_truncated:.4f}"
                 )
+            name = _opponent_name(row)
+            if name in named_thresholds:
+                min_score = named_thresholds[name]
+                score = float(row.get("bb_per_100", 0.0))
+                if score < min_score:
+                    failures.append(f"{name} bb/100 {score:.1f} < named min {min_score:.1f}")
 
         if args.baseline_file and args.max_opponent_regression is not None:
             baseline = _baseline_scores(args.baseline_file)
