@@ -965,3 +965,18 @@ agent_training_log.md
   (Python and C++ rollout paths) and `gpu_trainer.py` evaluation through the
   same helper functions.  This locks train/eval profile semantics together
   before any new 164-dim training run.
+- Codex ran a 50k continuation smoke from the best 164-dim checkpoint
+  `seed_rl_hands_1000194`:
+  `/root/testo-seed-rl/runs/seed_164_profile_smoke_50k_from1000k_20260604_215444`.
+  The run completed mechanically with the 164-dim C++ engine and shared profile
+  helpers active, but PPO drift was too high: median KL `0.3846`, p95 `0.4536`,
+  max `0.4666`, and cumulative actions collapsed toward call-heavy play
+  (`call=74.67%`).  The final checkpoint `seed_rl_hands_1050210` should not be
+  promoted without stronger gates.
+- A 6-opponent hard-subset `2x300` validation of `seed_rl_hands_1050210`
+  exposed the gate problem: aggregate status was `PASS`, but row stability was
+  unacceptable (`600047` min `-585.4`, std `409.5`; `600040` min `-588.0`, std
+  `570.5`; `1000262` std `655.1`; `1500036` std `655.5`).  Codex updated
+  `scripts/seed_safety_validate.py` with `--min-row-min` and `--max-row-std`,
+  and wired those knobs into `scripts/run_seed_reference_smoke.sh` so future
+  smoke runs fail high-variance candidates before they are scaled up.

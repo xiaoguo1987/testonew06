@@ -176,6 +176,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-count", type=int, default=0)
     parser.add_argument("--min-avg", type=float, default=-150.0)
     parser.add_argument("--min-worst", type=float, default=-350.0)
+    parser.add_argument(
+        "--min-row-min",
+        type=float,
+        default=None,
+        help="With --repeats, fail if any opponent's worst repeat drops below this bb/100.",
+    )
+    parser.add_argument(
+        "--max-row-std",
+        type=float,
+        default=None,
+        help="With --repeats, fail if any opponent row exceeds this bb/100 stddev.",
+    )
     parser.add_argument("--fail-fast-worst", type=float, default=-600.0)
     parser.add_argument("--max-invalid", type=float, default=0.001)
     parser.add_argument("--max-truncated", type=float, default=0.005)
@@ -348,8 +360,18 @@ def main() -> int:
                 f"< min {args.min_worst:.1f}"
             )
         for row in rows:
+            row_min = float(row.get("bb_per_100_min", row.get("bb_per_100", 0.0)))
+            row_std = float(row.get("bb_per_100_std", 0.0))
             invalid = float(row.get("invalid_bet_rate", 0.0))
             truncated = float(row.get("truncated_hand_rate", 0.0))
+            if args.min_row_min is not None and row_min < args.min_row_min:
+                failures.append(
+                    f"{_opponent_name(row)} min repeat {row_min:.1f} < {args.min_row_min:.1f}"
+                )
+            if args.max_row_std is not None and row_std > args.max_row_std:
+                failures.append(
+                    f"{_opponent_name(row)} std {row_std:.1f} > {args.max_row_std:.1f}"
+                )
             if invalid > args.max_invalid:
                 failures.append(f"{_opponent_name(row)} invalid {invalid:.4f} > {args.max_invalid:.4f}")
             if truncated > args.max_truncated:
