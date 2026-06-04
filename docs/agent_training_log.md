@@ -941,3 +941,21 @@ agent_training_log.md
   launched independently, shard JSONL files were merged, aggregate JSONL was
   written, and `seed_matrix_gate.py` produced a report.  The scores from this
   smoke are intentionally ignored.
+- After DeepSeek's 164-dim branch landed, Codex synced
+  `codex/two-server-seed-rl-20260603` at commit `a42f67f` and reviewed the
+  server results.  The best 164-dim candidate is still not delivery-ready:
+  `seed_rl_hands_1000194` has 13-opponent avg `+100.6` bb/100 but worst
+  `-251.1` and max row std `529.5`; the 3M final checkpoint
+  `seed_rl_hands_3000026` regressed to avg `+0.8`, worst `-235.0`, and max
+  row std `340.8`.  Legality is clean, but robustness and variance remain the
+  blocker.
+- Codex follow-up fix: evaluation now maintains the same VPIP/PFR/aggression
+  frequency/fold-to-3bet EMA opponent profile features used by training, so
+  the 164-dim policy no longer sees all-zero behavior features during
+  evaluation.  Worker-side behavior tracking was tightened from raw
+  action-list heuristics to per-hand flags with street-aware preflop raise
+  counting.  PPO rollouts now carry an explicit opponent group label
+  (`opponent_types` + ensemble checkpoint basenames), and `LargePPOModel.train`
+  can use those labels for opponent-aware minibatch clustering and metrics.
+  This is a prerequisite for real per-opponent gradient-conflict handling; it
+  should not be treated as full PCGrad yet.

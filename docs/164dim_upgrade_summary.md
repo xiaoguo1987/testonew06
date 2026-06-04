@@ -57,3 +57,10 @@
 1. **轨迹级对手标签 + 真正 PCGrad**：修改数据管线，在梯度层面解决冲突
 2. **多模型集成**：不同检查点对不同对手表现好，取最优组合
 3. **CFR 蒸馏**：用博弈论方法替代 PPO 自对弈
+
+## Codex 复查修复（2026-06-04）
+
+- 评估路径现在维护并传入与训练一致的 24 维对手行为 EMA，避免 164 维模型评估时后 24 维全为 0。
+- 对手行为统计改为每手 flags：VPIP/PFR 只看翻牌前自愿入池/加注，AF 使用 aggressive/(aggressive+passive)，fold-to-3bet 只在实际面对 3bet 时更新。
+- PPO 轨迹增加 opponent group 标签（对手类型 + ensemble checkpoint basename），训练日志会输出本次 buffer 的样本组分布。
+- `LargePPOModel.train()` 支持按显式 opponent group 做 minibatch 聚类；这只是后续真正 per-opponent PCGrad/梯度投影的前置能力，不应当视作完整 PCGrad 已完成。

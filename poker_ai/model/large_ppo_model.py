@@ -486,6 +486,7 @@ class LargePPOModel:
         rewards: np.ndarray,
         dones: np.ndarray,
         old_action_probs: np.ndarray,
+        sample_groups: Optional[np.ndarray] = None,
     ) -> float:
         t0 = _time.time()
         buf = len(states)
@@ -511,12 +512,39 @@ class LargePPOModel:
             f"abs_max={adv_abs_max:.6f}, returns_mean={float(np.mean(returns)):.4f}"
         )
 
-        # ---- PCGrad: Cluster by temporal segments (different opponent configs over time) ----
-        # Split buffer into N temporal segments. With fast opponent rotation,
-        # each segment has a different mix of opponent checkpoints.
+        # ---- Opponent-aware clustering ----
+        # Prefer explicit per-sample group labels from the rollout pipeline.
+        # This gives later gradient-conflict work a real opponent/ensemble key
+        # instead of relying on time slices as a proxy.
         PCGRAD_SEGMENTS = 4
         cluster_groups = None
-        if sdim >= 140:
+        if sample_groups is not None:
+            groups = np.asarray(sample_groups, dtype=object)
+            if len(groups) == buf:
+                grouped = {}
+                for row_idx, label in enumerate(groups):
+                    grouped.setdefault(str(label), []).append(row_idx)
+                min_group = max(1, min(bs, buf // max(len(grouped), 1)))
+                cluster_groups = [
+                    (label, idxs)
+                    for label, idxs in grouped.items()
+                    if len(idxs) >= min_group
+                ]
+                if len(cluster_groups) >= 2:
+                    logger.info(
+                        f"[OppGroup] explicit clustering: {len(cluster_groups)} groups "
+                        f"(sizes: {', '.join(f'{label}:{len(v)}' for label, v in cluster_groups)})"
+                    )
+                else:
+                    cluster_groups = None
+            else:
+                logger.warning(
+                    "[OppGroup] sample_groups length mismatch: %s vs buffer=%s; falling back",
+                    len(groups),
+                    buf,
+                )
+
+        if cluster_groups is None and sdim >= 140:
             seg_size = buf // PCGRAD_SEGMENTS
             if seg_size >= bs * 2:  # only if segments are large enough
                 cluster_groups = [
@@ -526,7 +554,7 @@ class LargePPOModel:
                 cluster_groups = [(k, v) for k, v in cluster_groups if len(v) >= bs]
                 if len(cluster_groups) >= 2:
                     logger.info(
-                        f"[PCGrad] temporal clustering: {len(cluster_groups)} segments "
+                        f"[OppGroup] temporal fallback: {len(cluster_groups)} segments "
                         f"(sizes: {', '.join(f'{len(v)}' for _,v in cluster_groups)})"
                     )
                 else:
@@ -534,7 +562,7 @@ class LargePPOModel:
 
         for epoch in range(self.update_epochs):
             if cluster_groups is not None:
-                # PCGrad: process clusters sequentially (each cluster = different opponent config)
+                # Process clusters sequentially so each mini-batch has a cleaner opponent mix.
                 idx_parts = []
                 for _label, cidx in cluster_groups:
                     np.random.shuffle(cidx)
@@ -607,7 +635,7 @@ class LargePPOModel:
                     stopped = True
                     break
 
-            # PCGrad: adaptive anchor KL based on inter-epoch gradient conflict
+            # Opponent-group diagnostic: adapt anchor KL when epoch updates reverse direction.
             if cluster_groups is not None and epoch >= 1 and self.anchor_actor is not None:
                 # Compute net weight change direction for this epoch
                 cur_flat = np.concatenate([v.numpy().ravel() for v in self.actor.trainable_variables])
@@ -625,7 +653,7 @@ class LargePPOModel:
                             old_coef = float(self.anchor_kl_coef)
                             self.anchor_kl_coef = min(old_coef * 1.5, 0.3)
                             logger.info(
-                                f"[PCGrad] gradient conflict (cos={cos:.3f}): "
+                                f"[OppGroup] update-direction conflict (cos={cos:.3f}): "
                                 f"anchor_kl_coef {old_coef:.4f} → {self.anchor_kl_coef:.4f}"
                             )
                     self._pcgrad_prev_dir = delta / max(delta_norm, 1e-8)

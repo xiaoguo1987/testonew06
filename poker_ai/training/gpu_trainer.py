@@ -24,7 +24,7 @@ import numpy as np
 import multiprocessing as mp
 from multiprocessing import Queue, Process, Pipe
 from typing import Dict, List, Optional, Tuple
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime
 
 from ..action_space import ACTION_DIM, ACTION_NAMES
@@ -199,6 +199,7 @@ class SeedRLTrainer:
         self._inference_seconds = 0.0
         self._last_ppo_seconds = 0.0
         self._last_ppo_steps = 0
+        self._last_ppo_group_counts: Dict[str, int] = {}
         self._traj_overflow = []
         self._action_names = ACTION_NAMES
         self._train_action_counts = np.zeros(ACTION_DIM, dtype=np.int64)
@@ -286,6 +287,8 @@ class SeedRLTrainer:
         self._record_result_stats(res)
         for k in ('states', 'actions', 'old_probs'):
             traj_buffer[k].extend(traj.get(k, []))
+        group_label = self._trajectory_group_label(traj)
+        traj_buffer['sample_groups'].extend([group_label] * n_steps)
         dones = [0.0] * n_steps
         rewards = [0.0] * n_steps
         dones[-1] = 1.0
@@ -298,6 +301,14 @@ class SeedRLTrainer:
             if 0 <= ai < len(self._train_action_counts):
                 self._train_action_counts[ai] += 1
         return True
+
+    def _trajectory_group_label(self, traj: Dict) -> str:
+        """Stable per-hand label for opponent-aware batching diagnostics."""
+        opp_types = traj.get('opponent_types') or getattr(self, '_worker_opp_type_list', [])
+        type_part = ",".join(str(x) for x in opp_types)
+        ensemble = getattr(self, '_opponent_ensemble_paths', None) or []
+        ensemble_part = ",".join(os.path.basename(str(x)) for x in ensemble)
+        return f"types={type_part}|ensemble={ensemble_part}"
 
     # ------------------------------------------------------------------
     #  Curriculum Learning
@@ -545,13 +556,19 @@ class SeedRLTrainer:
         rewards = np.array(traj_buffer['rewards'], dtype=np.float32)
         dones = np.array(traj_buffer['dones'], dtype=np.float32)
         old_probs = np.array(traj_buffer['old_probs'], dtype=np.float32)
+        sample_groups_raw = traj_buffer.get('sample_groups', [])
+        if len(sample_groups_raw) == n:
+            sample_groups = np.asarray(sample_groups_raw, dtype=object)
+        else:
+            sample_groups = np.asarray(["default"] * n, dtype=object)
+        self._last_ppo_group_counts = dict(Counter(str(x) for x in sample_groups))
 
         # 清空 buffer
         for k in traj_buffer:
             traj_buffer[k] = []
 
         t0 = time.time()
-        loss = self.model.train(states, actions, rewards, dones, old_probs)
+        loss = self.model.train(states, actions, rewards, dones, old_probs, sample_groups=sample_groups)
         self._last_ppo_seconds = time.time() - t0
         self._last_ppo_steps = int(n)
         self.total_ppo_updates += 1
@@ -633,6 +650,71 @@ class SeedRLTrainer:
         invalid_action_counts = defaultdict(int)
         truncated_action_counts = []
         stochastic_model_eval = opponent_policy == "opponent_model"
+        eval_opp_stats = np.zeros((6, 4), dtype=np.float32)
+
+        def _new_eval_flags() -> List[Dict[str, float]]:
+            return [
+                {
+                    'seen': 0.0,
+                    'vpip': 0.0,
+                    'pfr': 0.0,
+                    'agg_actions': 0.0,
+                    'passive_actions': 0.0,
+                    'faced_3bet': 0.0,
+                    'fold_to_3bet': 0.0,
+                }
+                for _ in range(6)
+            ]
+
+        def _observe_eval_action(
+            flags: List[Dict[str, float]],
+            player_index: int,
+            action: str,
+            amount: Optional[int],
+            round_num: int,
+            preflop_raise_count: int,
+        ) -> int:
+            raises_before = preflop_raise_count
+            if round_num == 1 and action == 'raise':
+                preflop_raise_count += 1
+
+            if player_index <= 0 or player_index >= 6:
+                return preflop_raise_count
+
+            row = flags[player_index]
+            row['seen'] = 1.0
+            paid = float(amount or 0) > 0.0
+            if round_num == 1:
+                if action in ('call', 'raise') and paid:
+                    row['vpip'] = 1.0
+                if action == 'raise':
+                    row['pfr'] = 1.0
+                if raises_before >= 2:
+                    row['faced_3bet'] = 1.0
+                    if action == 'fold':
+                        row['fold_to_3bet'] = 1.0
+            if action == 'raise':
+                row['agg_actions'] += 1.0
+            elif action == 'call' and paid:
+                row['passive_actions'] += 1.0
+            return preflop_raise_count
+
+        def _update_eval_opp_stats(flags: List[Dict[str, float]]) -> None:
+            decay = 0.99
+            for pi in range(1, min(6, len(flags))):
+                row = flags[pi]
+                if row.get('seen', 0.0) <= 0.0:
+                    continue
+                stats = eval_opp_stats[pi]
+                denom = row.get('agg_actions', 0.0) + row.get('passive_actions', 0.0)
+                agg_freq = row.get('agg_actions', 0.0) / denom if denom > 0.0 else 0.0
+                obs = np.array(
+                    [row.get('vpip', 0.0), row.get('pfr', 0.0), agg_freq, stats[3]],
+                    dtype=np.float32,
+                )
+                if row.get('faced_3bet', 0.0) > 0.0:
+                    obs[3] = row.get('fold_to_3bet', 0.0)
+                stats[:] = decay * stats + (1.0 - decay) * obs
 
         try:
             for _ in range(num_games):
@@ -644,6 +726,8 @@ class SeedRLTrainer:
                 game.start_new_hand()
 
                 hand_actions = 0
+                eval_flags = _new_eval_flags()
+                preflop_raise_count = 0
                 while not game.is_hand_over():
                     hand_actions += 1
                     max_hand_actions_observed = max(max_hand_actions_observed, hand_actions)
@@ -673,7 +757,9 @@ class SeedRLTrainer:
                         continue
 
                     if cp.name == "Main_AI":
-                        state = sr.get_state(game, cp, getattr(self, 'opp_type_list', None))
+                        state = sr.get_state(
+                            game, cp, getattr(self, 'opp_type_list', None), eval_opp_stats
+                        )
                         ap, v = self.model.predict(state)
                         lm = _legal_mask(game, cp)
                         mp_ = ap * lm
@@ -687,15 +773,26 @@ class SeedRLTrainer:
                         hs = sr.calculate_hand_strength(cp, game)
                         act, amt = sr.decode_action(av, game, cp, hs)
                         total_actions += 1
-                        if not game.handle_action(cp, act, amt):
+                        round_num = int(game.round)
+                        player_index = game.players.index(cp)
+                        if game.handle_action(cp, act, amt):
+                            preflop_raise_count = _observe_eval_action(
+                                eval_flags, player_index, act, amt, round_num, preflop_raise_count
+                            )
+                        else:
                             invalid_actions += 1
                             invalid_bets += 1
                             invalid_action_counts[action_names[ai]] += 1
                             action_counts[0] += 1  # 无效动作降级为弃牌
                             action_counts[ai] -= 1
                             game.handle_action(cp, 'fold', None)
+                            preflop_raise_count = _observe_eval_action(
+                                eval_flags, player_index, 'fold', None, round_num, preflop_raise_count
+                            )
                     elif opponent_policy == "opponent_model":
-                        state = sr.get_state(game, cp, getattr(self, 'opp_type_list', None))
+                        state = sr.get_state(
+                            game, cp, getattr(self, 'opp_type_list', None), eval_opp_stats
+                        )
                         ap, _ = self.opp_model.predict(state)
                         lm = _legal_mask(game, cp)
                         mp_ = ap * lm
@@ -706,8 +803,17 @@ class SeedRLTrainer:
                         av[ai] = 1.0
                         hs = sr.calculate_hand_strength(cp, game)
                         act, amt = sr.decode_action(av, game, cp, hs)
-                        if not game.handle_action(cp, act, amt):
+                        round_num = int(game.round)
+                        player_index = game.players.index(cp)
+                        if game.handle_action(cp, act, amt):
+                            preflop_raise_count = _observe_eval_action(
+                                eval_flags, player_index, act, amt, round_num, preflop_raise_count
+                            )
+                        else:
                             game.handle_action(cp, 'fold', None)
+                            preflop_raise_count = _observe_eval_action(
+                                eval_flags, player_index, 'fold', None, round_num, preflop_raise_count
+                            )
                     else:
                         # 对手随机
                         lm = _legal_mask(game, cp)
@@ -717,8 +823,17 @@ class SeedRLTrainer:
                         av[ai] = 1.0
                         hs = sr.calculate_hand_strength(cp, game)
                         act, amt = sr.decode_action(av, game, cp, hs)
-                        if not game.handle_action(cp, act, amt):
+                        round_num = int(game.round)
+                        player_index = game.players.index(cp)
+                        if game.handle_action(cp, act, amt):
+                            preflop_raise_count = _observe_eval_action(
+                                eval_flags, player_index, act, amt, round_num, preflop_raise_count
+                            )
+                        else:
                             game.handle_action(cp, 'fold', None)
+                            preflop_raise_count = _observe_eval_action(
+                                eval_flags, player_index, 'fold', None, round_num, preflop_raise_count
+                            )
 
                 alive = [p for p in players_e if p.is_active]
                 if len(alive) == 1 and game.pot > 0:
@@ -731,6 +846,7 @@ class SeedRLTrainer:
                     ws = [game.winner.name]
                 if "Main_AI" in ws:
                     wins += 1
+                _update_eval_opp_stats(eval_flags)
         finally:
             if np_state is not None:
                 np.random.set_state(np_state)
@@ -799,6 +915,7 @@ class SeedRLTrainer:
             'seed': seed,
             'truncated_hands': truncated_hands,
             'truncated_hand_rate': truncated_hands / max(num_games, 1),
+            'opponent_behavior_ema': eval_opp_stats.tolist(),
         }
 
     def _run_evaluation_suite(self, num_games: int = 100, seed: Optional[int] = None) -> Dict:
@@ -1510,6 +1627,9 @@ class SeedRLTrainer:
                 f"{name}={interval_position_profit[name]['bb_per_100']:.1f}bb/100"
                 for name in self._position_names
             )
+            group_summary = ", ".join(
+                f"{name}:{count}" for name, count in sorted(self._last_ppo_group_counts.items())
+            )
             logger.info(
                 f"[SEED RL] hands={self.total_hands}/{run_target_hands}, "
                 f"PPO更新#{self.total_ppo_updates}, loss={loss:.6f}, "
@@ -1519,7 +1639,8 @@ class SeedRLTrainer:
                 f"anchor_KL={getattr(self.model, 'last_anchor_kl', 0.0):.4f}, "
                 f"reference_KL={getattr(self.model, 'last_reference_kl', 0.0):.4f}, "
                 f"区间动作=[{interval_action_summary}], "
-                f"位置收益=[{interval_position_summary}]"
+                f"位置收益=[{interval_position_summary}], "
+                f"样本组=[{group_summary}]"
             )
             self._write_metric(
                 "ppo_update",
@@ -1561,6 +1682,7 @@ class SeedRLTrainer:
                 train_action_distribution_interval=interval_action_dist,
                 position_profit=cumulative_position_profit,
                 position_profit_interval=interval_position_profit,
+                ppo_sample_groups=dict(self._last_ppo_group_counts),
             )
             self._last_metric_action_counts = self._train_action_counts.copy()
             self._last_metric_position_profit_sum = self._position_profit_sum.copy()
