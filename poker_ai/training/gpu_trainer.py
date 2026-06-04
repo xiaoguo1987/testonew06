@@ -28,6 +28,11 @@ from collections import Counter, defaultdict
 from datetime import datetime
 
 from ..action_space import ACTION_DIM, ACTION_NAMES
+from .opponent_profile import (
+    new_opponent_hand_flags,
+    observe_profile_action,
+    update_opponent_profile_ema,
+)
 
 logger = logging.getLogger('SeedRLTrainer')
 
@@ -652,70 +657,6 @@ class SeedRLTrainer:
         stochastic_model_eval = opponent_policy == "opponent_model"
         eval_opp_stats = np.zeros((6, 4), dtype=np.float32)
 
-        def _new_eval_flags() -> List[Dict[str, float]]:
-            return [
-                {
-                    'seen': 0.0,
-                    'vpip': 0.0,
-                    'pfr': 0.0,
-                    'agg_actions': 0.0,
-                    'passive_actions': 0.0,
-                    'faced_3bet': 0.0,
-                    'fold_to_3bet': 0.0,
-                }
-                for _ in range(6)
-            ]
-
-        def _observe_eval_action(
-            flags: List[Dict[str, float]],
-            player_index: int,
-            action: str,
-            amount: Optional[int],
-            round_num: int,
-            preflop_raise_count: int,
-        ) -> int:
-            raises_before = preflop_raise_count
-            if round_num == 1 and action == 'raise':
-                preflop_raise_count += 1
-
-            if player_index <= 0 or player_index >= 6:
-                return preflop_raise_count
-
-            row = flags[player_index]
-            row['seen'] = 1.0
-            paid = float(amount or 0) > 0.0
-            if round_num == 1:
-                if action in ('call', 'raise') and paid:
-                    row['vpip'] = 1.0
-                if action == 'raise':
-                    row['pfr'] = 1.0
-                if raises_before >= 2:
-                    row['faced_3bet'] = 1.0
-                    if action == 'fold':
-                        row['fold_to_3bet'] = 1.0
-            if action == 'raise':
-                row['agg_actions'] += 1.0
-            elif action == 'call' and paid:
-                row['passive_actions'] += 1.0
-            return preflop_raise_count
-
-        def _update_eval_opp_stats(flags: List[Dict[str, float]]) -> None:
-            decay = 0.99
-            for pi in range(1, min(6, len(flags))):
-                row = flags[pi]
-                if row.get('seen', 0.0) <= 0.0:
-                    continue
-                stats = eval_opp_stats[pi]
-                denom = row.get('agg_actions', 0.0) + row.get('passive_actions', 0.0)
-                agg_freq = row.get('agg_actions', 0.0) / denom if denom > 0.0 else 0.0
-                obs = np.array(
-                    [row.get('vpip', 0.0), row.get('pfr', 0.0), agg_freq, stats[3]],
-                    dtype=np.float32,
-                )
-                if row.get('faced_3bet', 0.0) > 0.0:
-                    obs[3] = row.get('fold_to_3bet', 0.0)
-                stats[:] = decay * stats + (1.0 - decay) * obs
-
         try:
             for _ in range(num_games):
                 players_e = [Player("Main_AI", self.initial_stack, True)]
@@ -726,7 +667,7 @@ class SeedRLTrainer:
                 game.start_new_hand()
 
                 hand_actions = 0
-                eval_flags = _new_eval_flags()
+                eval_flags = new_opponent_hand_flags(6)
                 preflop_raise_count = 0
                 while not game.is_hand_over():
                     hand_actions += 1
@@ -776,7 +717,7 @@ class SeedRLTrainer:
                         round_num = int(game.round)
                         player_index = game.players.index(cp)
                         if game.handle_action(cp, act, amt):
-                            preflop_raise_count = _observe_eval_action(
+                            preflop_raise_count = observe_profile_action(
                                 eval_flags, player_index, act, amt, round_num, preflop_raise_count
                             )
                         else:
@@ -786,7 +727,7 @@ class SeedRLTrainer:
                             action_counts[0] += 1  # 无效动作降级为弃牌
                             action_counts[ai] -= 1
                             game.handle_action(cp, 'fold', None)
-                            preflop_raise_count = _observe_eval_action(
+                            preflop_raise_count = observe_profile_action(
                                 eval_flags, player_index, 'fold', None, round_num, preflop_raise_count
                             )
                     elif opponent_policy == "opponent_model":
@@ -806,12 +747,12 @@ class SeedRLTrainer:
                         round_num = int(game.round)
                         player_index = game.players.index(cp)
                         if game.handle_action(cp, act, amt):
-                            preflop_raise_count = _observe_eval_action(
+                            preflop_raise_count = observe_profile_action(
                                 eval_flags, player_index, act, amt, round_num, preflop_raise_count
                             )
                         else:
                             game.handle_action(cp, 'fold', None)
-                            preflop_raise_count = _observe_eval_action(
+                            preflop_raise_count = observe_profile_action(
                                 eval_flags, player_index, 'fold', None, round_num, preflop_raise_count
                             )
                     else:
@@ -826,12 +767,12 @@ class SeedRLTrainer:
                         round_num = int(game.round)
                         player_index = game.players.index(cp)
                         if game.handle_action(cp, act, amt):
-                            preflop_raise_count = _observe_eval_action(
+                            preflop_raise_count = observe_profile_action(
                                 eval_flags, player_index, act, amt, round_num, preflop_raise_count
                             )
                         else:
                             game.handle_action(cp, 'fold', None)
-                            preflop_raise_count = _observe_eval_action(
+                            preflop_raise_count = observe_profile_action(
                                 eval_flags, player_index, 'fold', None, round_num, preflop_raise_count
                             )
 
@@ -846,7 +787,7 @@ class SeedRLTrainer:
                     ws = [game.winner.name]
                 if "Main_AI" in ws:
                     wins += 1
-                _update_eval_opp_stats(eval_flags)
+                update_opponent_profile_ema(eval_opp_stats, eval_flags)
         finally:
             if np_state is not None:
                 np.random.set_state(np_state)

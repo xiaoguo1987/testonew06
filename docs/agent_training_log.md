@@ -959,3 +959,9 @@ agent_training_log.md
   can use those labels for opponent-aware minibatch clustering and metrics.
   This is a prerequisite for real per-opponent gradient-conflict handling; it
   should not be treated as full PCGrad yet.
+- DeepSeek noted that duplicated train/eval profile code can still drift.  Codex
+  extracted the VPIP/PFR/aggression/fold-to-3bet rules into
+  `poker_ai/training/opponent_profile.py` and wired both `env_worker.py`
+  (Python and C++ rollout paths) and `gpu_trainer.py` evaluation through the
+  same helper functions.  This locks train/eval profile semantics together
+  before any new 164-dim training run.

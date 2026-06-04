@@ -64,3 +64,4 @@
 - 对手行为统计改为每手 flags：VPIP/PFR 只看翻牌前自愿入池/加注，AF 使用 aggressive/(aggressive+passive)，fold-to-3bet 只在实际面对 3bet 时更新。
 - PPO 轨迹增加 opponent group 标签（对手类型 + ensemble checkpoint basename），训练日志会输出本次 buffer 的样本组分布。
 - `LargePPOModel.train()` 支持按显式 opponent group 做 minibatch 聚类；这只是后续真正 per-opponent PCGrad/梯度投影的前置能力，不应当视作完整 PCGrad 已完成。
+- VPIP/PFR/AF/fold-to-3bet 的统计规则已抽到 `poker_ai/training/opponent_profile.py`，训练 worker（Python/C++）和评估路径共用同一套 helper，避免训练/评估画像语义漂移。

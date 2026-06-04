@@ -30,6 +30,11 @@ from ..action_space import (
     RAISE_ACTION_START,
     is_allin_bucket_allowed,
 )
+from .opponent_profile import (
+    new_opponent_hand_flags,
+    observe_profile_action,
+    update_opponent_profile_ema,
+)
 
 # ---- C++ 引擎 (可选) ----
 try:
@@ -266,67 +271,24 @@ def env_worker_loop(
             self.opp_hand_flags = None
             self.preflop_raise_count = 0
 
-    def _new_opp_hand_flags() -> List[Dict[str, float]]:
-        return [
-            {
-                'seen': 0.0,
-                'vpip': 0.0,
-                'pfr': 0.0,
-                'agg_actions': 0.0,
-                'passive_actions': 0.0,
-                'faced_3bet': 0.0,
-                'fold_to_3bet': 0.0,
-            }
-            for _ in range(6)
-        ]
-
     def _observe_action(table: TableState, pi: int, action: str, amount: Optional[int], round_num: int) -> None:
         """Update per-hand opponent flags using the action as actually executed."""
-        if round_num == 1 and action == 'raise':
-            raises_before = table.preflop_raise_count
-            table.preflop_raise_count += 1
-        else:
-            raises_before = table.preflop_raise_count
-
-        if pi <= 0 or pi >= 6 or table.opp_hand_flags is None:
+        if table.opp_hand_flags is None:
             return
-
-        flags = table.opp_hand_flags[pi]
-        flags['seen'] = 1.0
-        paid = float(amount or 0) > 0.0
-        if round_num == 1:
-            if action in ('call', 'raise') and paid:
-                flags['vpip'] = 1.0
-            if action == 'raise':
-                flags['pfr'] = 1.0
-            if raises_before >= 2:
-                flags['faced_3bet'] = 1.0
-                if action == 'fold':
-                    flags['fold_to_3bet'] = 1.0
-        if action == 'raise':
-            flags['agg_actions'] += 1.0
-        elif action == 'call' and paid:
-            flags['passive_actions'] += 1.0
+        table.preflop_raise_count = observe_profile_action(
+            table.opp_hand_flags,
+            pi,
+            action,
+            amount,
+            round_num,
+            table.preflop_raise_count,
+        )
 
     def _update_opp_stats(table: TableState):
         """Update opponent behavior EMA after a completed hand."""
-        decay = 0.99
         if table.opp_hand_flags is None:
             return
-        for pi in range(1, min(6, len(table.opp_hand_flags))):
-            flags = table.opp_hand_flags[pi]
-            if flags.get('seen', 0.0) <= 0.0:
-                continue
-            s = table.opp_stats[pi]
-            denom = flags.get('agg_actions', 0.0) + flags.get('passive_actions', 0.0)
-            agg_freq = flags.get('agg_actions', 0.0) / denom if denom > 0.0 else 0.0
-            obs = np.array(
-                [flags.get('vpip', 0.0), flags.get('pfr', 0.0), agg_freq, s[3]],
-                dtype=np.float32,
-            )
-            if flags.get('faced_3bet', 0.0) > 0.0:
-                obs[3] = flags.get('fold_to_3bet', 0.0)
-            s[:] = decay * s + (1.0 - decay) * obs
+        update_opponent_profile_ema(table.opp_stats, table.opp_hand_flags)
 
     def _init_table(table: TableState):
         """(re)初始化一张牌桌"""
@@ -347,7 +309,7 @@ def env_worker_loop(
             'opponent_types': list(opp_type_list),
             'opponent_behavior_start': table.opp_stats.copy(),
         }
-        table.opp_hand_flags = _new_opp_hand_flags()
+        table.opp_hand_flags = new_opponent_hand_flags(6)
         table.preflop_raise_count = 0
         table.finished = False
 
@@ -675,66 +637,23 @@ def _env_worker_loop_cc(
             self.opp_hand_flags = None
             self.preflop_raise_count = 0
 
-    def _new_opp_hand_flags_cc() -> List[Dict[str, float]]:
-        return [
-            {
-                'seen': 0.0,
-                'vpip': 0.0,
-                'pfr': 0.0,
-                'agg_actions': 0.0,
-                'passive_actions': 0.0,
-                'faced_3bet': 0.0,
-                'fold_to_3bet': 0.0,
-            }
-            for _ in range(6)
-        ]
-
     def _observe_action_cc(table: CCTable, pi: int, action: str, amount: Optional[int], round_num: int) -> None:
-        if round_num == 1 and action == 'raise':
-            raises_before = table.preflop_raise_count
-            table.preflop_raise_count += 1
-        else:
-            raises_before = table.preflop_raise_count
-
-        if pi <= 0 or pi >= 6 or table.opp_hand_flags is None:
+        if table.opp_hand_flags is None:
             return
-
-        flags = table.opp_hand_flags[pi]
-        flags['seen'] = 1.0
-        paid = float(amount or 0) > 0.0
-        if round_num == 1:
-            if action in ('call', 'raise') and paid:
-                flags['vpip'] = 1.0
-            if action == 'raise':
-                flags['pfr'] = 1.0
-            if raises_before >= 2:
-                flags['faced_3bet'] = 1.0
-                if action == 'fold':
-                    flags['fold_to_3bet'] = 1.0
-        if action == 'raise':
-            flags['agg_actions'] += 1.0
-        elif action == 'call' and paid:
-            flags['passive_actions'] += 1.0
+        table.preflop_raise_count = observe_profile_action(
+            table.opp_hand_flags,
+            pi,
+            action,
+            amount,
+            round_num,
+            table.preflop_raise_count,
+        )
 
     def _update_opp_stats_cc(table: CCTable):
         """C++引擎版本：根据完成手牌更新对手行为统计 EMA。"""
-        decay = 0.99
         if table.opp_hand_flags is None:
             return
-        for pi in range(1, 6):  # opponents only (skip pi=0 = hero)
-            flags = table.opp_hand_flags[pi]
-            if flags.get('seen', 0.0) <= 0.0:
-                continue
-            s = table.opp_stats[pi]
-            denom = flags.get('agg_actions', 0.0) + flags.get('passive_actions', 0.0)
-            agg_freq = flags.get('agg_actions', 0.0) / denom if denom > 0.0 else 0.0
-            obs = np.array(
-                [flags.get('vpip', 0.0), flags.get('pfr', 0.0), agg_freq, s[3]],
-                dtype=np.float32,
-            )
-            if flags.get('faced_3bet', 0.0) > 0.0:
-                obs[3] = flags.get('fold_to_3bet', 0.0)
-            s[:] = decay * s + (1.0 - decay) * obs
+        update_opponent_profile_ema(table.opp_stats, table.opp_hand_flags)
 
     # 进程级缓存：在 _env_worker_loop_cc 内部加载一次，避免每张牌桌重复读取
     _preflop_lut_for_cc = _load_and_convert_preflop_lut()
@@ -755,7 +674,7 @@ def _env_worker_loop_cc(
             'opponent_types': list(opp_type_list),
             'opponent_behavior_start': table.opp_stats.copy(),
         }
-        table.opp_hand_flags = _new_opp_hand_flags_cc()
+        table.opp_hand_flags = new_opponent_hand_flags(6)
         table.preflop_raise_count = 0
         table.finished = False
 
