@@ -40,7 +40,7 @@ class PPOConfig:
     """
 
     # 网络结构
-    input_dim: int = 134  # 与 StateRepresentation.total_state_dim 一致（6-Max）
+    input_dim: int = 164  # 与 StateRepresentation.total_state_dim 一致（+ 对手行为统计）
     output_dim: int = ACTION_DIM
 
     # 学习率

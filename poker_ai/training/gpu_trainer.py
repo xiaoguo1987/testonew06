@@ -673,7 +673,7 @@ class SeedRLTrainer:
                         continue
 
                     if cp.name == "Main_AI":
-                        state = sr.get_state(game, cp)
+                        state = sr.get_state(game, cp, getattr(self, 'opp_type_list', None))
                         ap, v = self.model.predict(state)
                         lm = _legal_mask(game, cp)
                         mp_ = ap * lm
@@ -695,7 +695,7 @@ class SeedRLTrainer:
                             action_counts[ai] -= 1
                             game.handle_action(cp, 'fold', None)
                     elif opponent_policy == "opponent_model":
-                        state = sr.get_state(game, cp)
+                        state = sr.get_state(game, cp, getattr(self, 'opp_type_list', None))
                         ap, _ = self.opp_model.predict(state)
                         lm = _legal_mask(game, cp)
                         mp_ = ap * lm

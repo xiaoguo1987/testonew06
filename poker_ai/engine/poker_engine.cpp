@@ -360,11 +360,12 @@ public:
         winners_.clear(); winners_.push_back(pi);
     }
 
-    // ---- state vector (134 dims) ----
+    // ---- state vector (164 dims: 134 game + 6 type + 24 behavior) ----
+    // [134:140] opponent type flags, [140:164] behavior stats (VPIP/PFR/AF/fold3bet)
     py::array_t<float> get_state_vector(int pi) const {
-        auto out = py::array_t<float>(134);
+        auto out = py::array_t<float>(164);
         float* v = out.mutable_data();
-        std::memset(v, 0, 134*sizeof(float));
+        std::memset(v, 0, 164*sizeof(float));
 
         // [0:52] hand one-hot
         for (int i=0;i<hcnt_[pi];i++) { int c=hole_[pi][i]; if (c>=0&&c<52) v[c]=1.f; }

@@ -53,14 +53,24 @@ class StateRepresentation:
         
         # 6. [新增] 活跃玩家数量 (归一化数值) = 1维
         self.active_count_dim = 1
-        
+
+        # 7. [新增] 对手类型标识 (每座位1维: 0=fish, 1=ppo_opponent) = 6维
+        # 解决多目标梯度冲突：让策略能区分不同对手类型
+        self.opponent_type_dim = 6
+
+        # 8. [新增] 对手行为统计 EMA (每座位4维: VPIP/PFR/AF/fold_to_3bet) = 24维
+        # 让策略感知对手风格（松紧/激进被动），解决多对手适应问题
+        self.opponent_behavior_dim = 24  # 6 seats × 4 stats
+
         self.total_state_dim = (
-            self.player_cards_dim + 
-            self.board_cards_dim + 
-            self.player_info_dim + 
+            self.player_cards_dim +
+            self.board_cards_dim +
+            self.player_info_dim +
             self.game_info_dim +
             self.position_one_hot_dim +
-            self.active_count_dim
+            self.active_count_dim +
+            self.opponent_type_dim +
+            self.opponent_behavior_dim
         )
         
         self.evaluator = HandEvaluator()
@@ -148,18 +158,67 @@ class StateRepresentation:
             
         return pos_vector
 
+    def get_opponent_behavior_vector(self, game: PokerGame, current_player_idx: int,
+                                      opponent_stats: np.ndarray = None) -> np.ndarray:
+        """[新增] 获取对手行为统计特征向量 (6座位 × 4统计 = 24维)。
+
+        每个座位编码 4 个 EMA 统计值：VPIP, PFR, AF, fold_to_3bet。
+        旋转方向与 player_info_to_vector 一致：Hero 在位置 0。
+        """
+        vector = np.zeros(self.opponent_behavior_dim, dtype=np.float32)
+        if opponent_stats is None or len(opponent_stats) == 0:
+            return vector
+        num_players = len(game.players)
+        for i in range(min(6, num_players)):
+            target_idx = (current_player_idx + i) % num_players
+            if i == 0:
+                continue  # Hero: all zeros
+            if target_idx < len(opponent_stats):
+                base = i * 4
+                stats = opponent_stats[target_idx]
+                vector[base:base+4] = np.clip(stats, 0.0, 1.0)
+        return vector
+
     def get_active_count_vector(self, game: PokerGame) -> np.ndarray:
         """[新增] 获取活跃玩家数量特征"""
         if hasattr(game, 'player_active'):
             active_count = int(np.sum(game.player_active))
         else:
             active_count = sum(1 for p in game.players if p.is_active)
-        # 归一化：(活跃人数 - 1) / 5.0。 
+        # 归一化：(活跃人数 - 1) / 5.0。
         # 结果范围 0.0 (Heads-up) 到 1.0 (6人全在)
         normalized = (active_count - 1) / 5.0 if active_count > 0 else 0
         return np.array([normalized])
 
-    def get_state(self, game: PokerGame, current_player: Player) -> np.ndarray:
+    def get_opponent_type_vector(self, game: PokerGame, current_player_idx: int,
+                                  opponent_types: list = None) -> np.ndarray:
+        """[新增] 获取每座位的对手类型特征向量。
+
+        让策略能区分鱼玩家和 PPO 对手，解决多目标梯度冲突。
+        - Position 0 (Hero): 固定 0.0
+        - Positions 1-5: 0.0=fish, 1.0=ppo_opponent
+
+        旋转方向与 player_info_to_vector 一致：Hero 在位置 0。
+        """
+        vector = np.zeros(self.opponent_type_dim, dtype=np.float32)
+        if opponent_types is None:
+            return vector
+        num_players = len(game.players)
+        for i in range(min(self.opponent_type_dim, num_players)):
+            target_idx = (current_player_idx + i) % num_players
+            if i == 0:
+                # Hero: always 0
+                vector[i] = 0.0
+            else:
+                # Map opponent to opp_type_list (5 entries for non-hero players)
+                oi = target_idx - 1
+                if oi >= 0 and oi < len(opponent_types):
+                    vector[i] = 1.0 if opponent_types[oi] == 'ppo' else 0.0
+        return vector
+
+    def get_state(self, game: PokerGame, current_player: Player,
+                  opponent_types: list = None,
+                  opponent_stats: np.ndarray = None) -> np.ndarray:
         """获取完整的游戏状态向量"""
         current_player_idx = game.players.index(current_player)
         hole_codes = getattr(current_player, 'card_codes', None)
@@ -178,7 +237,11 @@ class StateRepresentation:
             # 5. [新增] 绝对位置信息 (至关重要)
             self.get_position_vector(game, current_player),
             # 6. [新增] 活跃人数信息
-            self.get_active_count_vector(game)
+            self.get_active_count_vector(game),
+            # 7. [新增] 对手类型标识 (区分鱼/PPO对手)
+            self.get_opponent_type_vector(game, current_player_idx, opponent_types),
+            # 8. [新增] 对手行为统计 (VPIP/PFR/AF/fold_to_3bet)
+            self.get_opponent_behavior_vector(game, current_player_idx, opponent_stats),
         ])
         return state
     

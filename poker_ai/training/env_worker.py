@@ -237,7 +237,7 @@ def env_worker_loop(
 
     # 打印引擎类型
     import sys
-    engine_tag = "C++ Engine" if USE_CC_ENGINE else "Python Engine"
+    engine_tag = "C++ Engine (140-dim)" if USE_CC_ENGINE else "Python Engine (140-dim)"
     print(f"[Worker {worker_id}] 使用 {engine_tag}", file=sys.stderr, flush=True)
 
     sb = game_cfg['small_blind']
@@ -251,7 +251,7 @@ def env_worker_loop(
 
     # 牌桌状态结构
     class TableState:
-        __slots__ = ['game', 'players', 'arecs', 'allin', 'traj', 'finished']
+        __slots__ = ['game', 'players', 'arecs', 'allin', 'traj', 'finished', 'opp_stats']
         def __init__(self):
             self.game = None
             self.players = None
@@ -259,6 +259,34 @@ def env_worker_loop(
             self.allin = None
             self.traj = None
             self.finished = False
+            self.opp_stats = np.zeros((6, 4), dtype=np.float32)  # VPIP,PFR,AF,fold3bet
+
+    def _update_opp_stats(table: TableState):
+        """根据刚完成的手牌更新对手行为统计 EMA (decay=0.99)。"""
+        decay = 0.99
+        arecs = table.arecs
+        for pi, p in enumerate(table.players):
+            if pi == 0 or p.name not in arecs:
+                continue  # skip hero
+            actions = arecs[p.name]
+            if not actions:
+                continue
+            # Observed stats for this hand
+            vpip = pfr = agg = fold3b = 0.0
+            preflop_actions = [a for a, amt in actions if a not in ('fold', 'check') and float(amt or 0) > 0]
+            raises = [a for a, amt in actions if a == 'raise']
+            folds = [a for a, amt in actions if a == 'fold']
+            calls = [a for a, amt in actions if a == 'call']
+            if preflop_actions:
+                vpip = 1.0
+            if raises:
+                pfr = 1.0
+            agg = 1.0 if raises else (0.5 if calls else 0.0)
+            fold3b = 1.0 if folds else 0.0
+            # EMA update
+            s = table.opp_stats[pi]
+            obs = np.array([vpip, pfr, agg, fold3b], dtype=np.float32)
+            s[:] = decay * s + (1.0 - decay) * obs
 
     def _init_table(table: TableState):
         """(re)初始化一张牌桌"""
@@ -328,6 +356,7 @@ def env_worker_loop(
             'metrics': {'bluffs': 0, 'aggressive': agg, 'raises': raises, 'invalid_bets': 0},
         }
 
+        _update_opp_stats(table)
         traj_queue.put(('traj', res, traj))
         hands_done += 1
         table.finished = True
@@ -357,7 +386,7 @@ def env_worker_loop(
             is_main = (pname == "Main_AI")
 
             if is_main:
-                state_vec = sr.get_state(game, cp)
+                state_vec = sr.get_state(game, cp, opp_type_list, table.opp_stats)
                 return (pname, state_vec, cp, True)  # 需要推理
 
             # 对手处理
@@ -372,7 +401,7 @@ def env_worker_loop(
                     game.handle_action(cp, 'fold', None)
             else:
                 # PPO 对手也需要推理
-                state_vec = sr.get_state(game, cp)
+                state_vec = sr.get_state(game, cp, opp_type_list, table.opp_stats)
                 return (pname, state_vec, cp, False)  # 需要推理
 
     def _apply_infer_result(
@@ -387,7 +416,7 @@ def env_worker_loop(
 
         if is_main:
             # 记录轨迹
-            state_vec = sr.get_state(game, cp) if not hasattr(cp, '_last_state') else cp._last_state
+            state_vec = sr.get_state(game, cp, opp_type_list, table.opp_stats) if not hasattr(cp, '_last_state') else cp._last_state
             # 实际上 state_vec 在 _advance_table_until_infer 中已经编码了
             # 这里使用之前编码的 state
             if ok:
@@ -473,6 +502,32 @@ def env_worker_loop(
 
 # ========================================================================
 #  C++ 引擎快速路径 —— 全部用 index-based API，零 Python 对象分配
+def _set_opp_features_cc(state_vec: np.ndarray, pi: int, opp_type_list: list,
+                          opp_stats: np.ndarray = None) -> None:
+    """在 C++ 引擎状态向量上设置对手特征 [134:164]。
+
+    [134:140] 对手类型 (0=fish, 1=ppo)
+    [140:164] 对手行为统计 (6座位 × 4统计: VPIP/PFR/AF/fold3bet)
+
+    旋转方式与 C++ get_state_vector 中 player info 的旋转一致：
+    位置 0 = 当前玩家 pi，位置 i = (pi+i)%6。
+    """
+    MAIN_IDX = 0
+    np_players = 6
+    for j in range(6):
+        t = (pi + j) % np_players
+        if t == MAIN_IDX:
+            state_vec[134 + j] = 0.0
+            if opp_stats is not None and len(state_vec) >= 164:
+                state_vec[140 + j*4:140 + (j+1)*4] = 0.0
+        else:
+            oi = t - 1  # Opponent index: 1-5 maps to opp_type_list[0-4]
+            if 0 <= oi < len(opp_type_list):
+                state_vec[134 + j] = 1.0 if opp_type_list[oi] == 'ppo' else 0.0
+            if opp_stats is not None and len(state_vec) >= 164 and len(opp_stats) > t:
+                base = 140 + j * 4
+                state_vec[base:base+4] = np.clip(opp_stats[t], 0.0, 1.0)
+
 # ========================================================================
 
 def _env_worker_loop_cc(
@@ -548,13 +603,35 @@ def _env_worker_loop_cc(
 
     # ---- C++ 牌桌状态 ----
     class CCTable:
-        __slots__ = ['eng', 'arecs', 'allin', 'traj', 'finished']
+        __slots__ = ['eng', 'arecs', 'allin', 'traj', 'finished', 'opp_stats']
         def __init__(self):
             self.eng = None
             self.arecs = None
             self.allin = None
             self.traj = None
             self.finished = False
+            self.opp_stats = np.zeros((6, 4), dtype=np.float32)
+
+    def _update_opp_stats_cc(table: CCTable):
+        """C++引擎版本：根据完成手牌更新对手行为统计 EMA。"""
+        decay = 0.99
+        arecs = table.arecs
+        for pi in range(1, 6):  # opponents only (skip pi=0 = hero)
+            actions = arecs.get(pi, [])
+            if not actions:
+                continue
+            vpip = pfr = agg = fold3b = 0.0
+            preflop_actions = [a for a, amt in actions if a not in ('fold', 'check') and float(amt or 0) > 0]
+            raises = [a for a, amt in actions if a == 'raise']
+            folds = [a for a, amt in actions if a == 'fold']
+            calls = [a for a, amt in actions if a == 'call']
+            if preflop_actions: vpip = 1.0
+            if raises: pfr = 1.0
+            agg = 1.0 if raises else (0.5 if calls else 0.0)
+            fold3b = 1.0 if folds else 0.0
+            s = table.opp_stats[pi]
+            obs = np.array([vpip, pfr, agg, fold3b], dtype=np.float32)
+            s[:] = decay * s + (1.0 - decay) * obs
 
     # 进程级缓存：在 _env_worker_loop_cc 内部加载一次，避免每张牌桌重复读取
     _preflop_lut_for_cc = _load_and_convert_preflop_lut()
@@ -627,6 +704,7 @@ def _env_worker_loop_cc(
             'action_histories': arecs_named,
             'metrics': {'bluffs': 0, 'aggressive': agg, 'raises': raises, 'invalid_bets': 0},
         }
+        _update_opp_stats_cc(table)
         traj_queue.put(('traj', res, traj))
         hands_done += 1
         table.finished = True
@@ -662,6 +740,8 @@ def _env_worker_loop_cc(
 
             if is_main:
                 state_vec = np.array(eng.get_state_vector(pi), dtype=np.float32)
+                # Append opponent identity features [134:140]
+                _set_opp_features_cc(state_vec, pi, opp_type_list, table.opp_stats)
                 return (pi, state_vec, is_main)
 
             # 对手处理
@@ -677,6 +757,7 @@ def _env_worker_loop_cc(
             else:
                 # PPO 对手也需要推理
                 state_vec = np.array(eng.get_state_vector(pi), dtype=np.float32)
+                _set_opp_features_cc(state_vec, pi, opp_type_list, table.opp_stats)
                 return (pi, state_vec, is_main)
 
     def _apply_cc_result(table: CCTable, pi: int, is_main: bool,

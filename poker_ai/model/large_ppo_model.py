@@ -351,7 +351,11 @@ class LargePPOModel:
         if not os.path.exists(actor_path):
             raise FileNotFoundError(f"Anchor actor weights not found: {actor_path}")
         anchor = self._build_network(softmax_output=True)
-        anchor.load_weights(actor_path)
+        try:
+            anchor.load_weights(actor_path)
+        except Exception:
+            logging.info("Anchor weight shape mismatch — expanding input dim")
+            self._expand_weights_via_temp(anchor, actor_path)
         anchor.trainable = False
         self.anchor_actor = anchor
         logger.info(
@@ -507,8 +511,37 @@ class LargePPOModel:
             f"abs_max={adv_abs_max:.6f}, returns_mean={float(np.mean(returns)):.4f}"
         )
 
+        # ---- PCGrad: Cluster by temporal segments (different opponent configs over time) ----
+        # Split buffer into N temporal segments. With fast opponent rotation,
+        # each segment has a different mix of opponent checkpoints.
+        PCGRAD_SEGMENTS = 4
+        cluster_groups = None
+        if sdim >= 140:
+            seg_size = buf // PCGRAD_SEGMENTS
+            if seg_size >= bs * 2:  # only if segments are large enough
+                cluster_groups = [
+                    (f"seg{i}", list(range(i * seg_size, min((i + 1) * seg_size, buf))))
+                    for i in range(PCGRAD_SEGMENTS)
+                ]
+                cluster_groups = [(k, v) for k, v in cluster_groups if len(v) >= bs]
+                if len(cluster_groups) >= 2:
+                    logger.info(
+                        f"[PCGrad] temporal clustering: {len(cluster_groups)} segments "
+                        f"(sizes: {', '.join(f'{len(v)}' for _,v in cluster_groups)})"
+                    )
+                else:
+                    cluster_groups = None
+
         for epoch in range(self.update_epochs):
-            idx = np.random.permutation(buf)
+            if cluster_groups is not None:
+                # PCGrad: process clusters sequentially (each cluster = different opponent config)
+                idx_parts = []
+                for _label, cidx in cluster_groups:
+                    np.random.shuffle(cidx)
+                    idx_parts.append(cidx)
+                idx = np.concatenate(idx_parts).astype(np.int64)
+            else:
+                idx = np.random.permutation(buf)
             epoch_kl, epoch_n = 0.0, 0
             stopped = False
 
@@ -573,6 +606,30 @@ class LargePPOModel:
                     )
                     stopped = True
                     break
+
+            # PCGrad: adaptive anchor KL based on inter-epoch gradient conflict
+            if cluster_groups is not None and epoch >= 1 and self.anchor_actor is not None:
+                # Compute net weight change direction for this epoch
+                cur_flat = np.concatenate([v.numpy().ravel() for v in self.actor.trainable_variables])
+                if not hasattr(self, '_pcgrad_prev_weights'):
+                    self._pcgrad_prev_weights = cur_flat.copy()
+                    self._pcgrad_prev_dir = None
+                else:
+                    delta = cur_flat - self._pcgrad_prev_weights
+                    delta_norm = float(np.linalg.norm(delta))
+                    if delta_norm > 1e-8 and self._pcgrad_prev_dir is not None:
+                        cos = float(np.dot(delta, self._pcgrad_prev_dir) / (
+                            delta_norm * max(np.linalg.norm(self._pcgrad_prev_dir), 1e-8)))
+                        if cos < 0:
+                            # Gradient conflict: tighten anchor KL
+                            old_coef = float(self.anchor_kl_coef)
+                            self.anchor_kl_coef = min(old_coef * 1.5, 0.3)
+                            logger.info(
+                                f"[PCGrad] gradient conflict (cos={cos:.3f}): "
+                                f"anchor_kl_coef {old_coef:.4f} → {self.anchor_kl_coef:.4f}"
+                            )
+                    self._pcgrad_prev_dir = delta / max(delta_norm, 1e-8)
+                    self._pcgrad_prev_weights = cur_flat.copy()
 
             if stopped:
                 break
@@ -666,8 +723,68 @@ class LargePPOModel:
         cp = base + ".critic.weights.h5"
         if not os.path.exists(ap) or not os.path.exists(cp):
             raise FileNotFoundError(f"权重文件不存在: {ap}, {cp}")
-        self.actor.load_weights(ap)
-        self.critic.load_weights(cp)
+        try:
+            self.actor.load_weights(ap)
+        except Exception:
+            logging.info("Actor weight shape mismatch — expanding input dim")
+            self._expand_weights_via_temp(self.actor, ap)
+        try:
+            self.critic.load_weights(cp)
+        except Exception:
+            logging.info("Critic weight shape mismatch — expanding input dim")
+            self._expand_weights_via_temp(self.critic, cp)
+
+    def _expand_weights_via_temp(self, model: models.Model, weight_path: str) -> None:
+        import h5py
+        with h5py.File(weight_path, 'r') as f:
+            all_arrays = []
+            def _collect(name, obj):
+                if isinstance(obj, h5py.Dataset):
+                    all_arrays.append(np.array(obj))
+            f.visititems(_collect)
+        model_vars = model.trainable_variables
+        if len(all_arrays) != len(model_vars):
+            self._expand_by_name(model, weight_path)
+            return
+        for i, (sv, mv) in enumerate(zip(all_arrays, model_vars)):
+            expected = mv.shape.as_list()
+            if list(sv.shape) == expected:
+                mv.assign(sv)
+            elif (i == 0 and len(sv.shape) == 2 and len(expected) == 2
+                  and sv.shape[1] == expected[1] and sv.shape[0] < expected[0]):
+                new_w = np.zeros(expected, dtype=sv.dtype)
+                new_w[:sv.shape[0], :] = sv
+                mv.assign(new_w)
+                logging.info(f"Expanded layer[0] weight: {sv.shape} → {expected}")
+            else:
+                logging.warning(f"Layer {i} shape mismatch: {sv.shape} vs {expected}")
+
+    def _expand_by_name(self, model: models.Model, weight_path: str) -> None:
+        import h5py
+        with h5py.File(weight_path, 'r') as f:
+            named_weights = {}
+            def _collect(name, obj):
+                if isinstance(obj, h5py.Dataset):
+                    clean = name.replace('/.0', '').replace('//', '/').strip('/')
+                    named_weights[clean] = np.array(obj)
+            f.visititems(_collect)
+        for var in model.trainable_variables:
+            vname = var.name.replace(':0', '').strip('/')
+            expected = var.shape.as_list()
+            matched = None
+            for sname, sarr in named_weights.items():
+                if vname in sname or sname in vname:
+                    matched = sarr; break
+            if matched is not None:
+                if list(matched.shape) == expected:
+                    var.assign(matched)
+                elif (len(matched.shape) == 2 and len(expected) == 2
+                      and matched.shape[1] == expected[1]
+                      and matched.shape[0] < expected[0]):
+                    new_w = np.zeros(expected, dtype=matched.dtype)
+                    new_w[:matched.shape[0], :] = matched
+                    var.assign(new_w)
+                    logging.info(f"Expanded {vname}: {matched.shape} → {expected}")
 
     # ------------------------------------------------------------------
     #  兼容旧接口
