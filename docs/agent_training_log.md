@@ -980,3 +980,11 @@ agent_training_log.md
   `scripts/seed_safety_validate.py` with `--min-row-min` and `--max-row-std`,
   and wired those knobs into `scripts/run_seed_reference_smoke.sh` so future
   smoke runs fail high-variance candidates before they are scaled up.
+- After DeepSeek's 13-opponent x 5000-game evaluation, `seed_rl_hands_1000194`
+  is accepted as the frozen v0 research/test baseline: avg `+77.7` bb/100,
+  worst `-68.2` bb/100.  Codex started branch
+  `codex/v0-baseline-optimization-20260605` to continue workflow optimization
+  without overwriting v0.  Added `configs/seed_v0_baseline.json` to record the
+  baseline, hard/full opponent pools, and guarded smoke gates, plus
+  `scripts/seed_config_export.py` so launchers can load these values without
+  hardcoding opponent lists and thresholds in bash.

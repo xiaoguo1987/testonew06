@@ -3,9 +3,19 @@ set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-/root/testo-seed-rl}"
 PYTHON="${PYTHON:-/root/miniconda3/bin/python}"
-RUN_NAME="${RUN_NAME:-seed_reference_smoke_10k_from3600k_$(date +%Y%m%d_%H%M%S)}"
+
+cd "${ROOT_DIR}"
+
+SEED_EXPERIMENT_CONFIG="${SEED_EXPERIMENT_CONFIG:-}"
+if [[ -n "${SEED_EXPERIMENT_CONFIG}" ]]; then
+  eval "$("${PYTHON}" scripts/seed_config_export.py "${SEED_EXPERIMENT_CONFIG}")"
+fi
+
+RUN_NAME_PREFIX="${RUN_NAME_PREFIX:-seed_reference_smoke_10k_from3600k}"
+RUN_NAME="${RUN_NAME:-${RUN_NAME_PREFIX}_$(date +%Y%m%d_%H%M%S)}"
 RUN_DIR="${RUN_DIR:-${ROOT_DIR}/runs/${RUN_NAME}}"
 ANCHOR_NAME="${ANCHOR_NAME:-seed_rl_hands_3600064}"
+ANCHOR_HINT="${ANCHOR_HINT:-}"
 NUM_HANDS="${NUM_HANDS:-10000}"
 REF_STATES_PER_OPPONENT="${REF_STATES_PER_OPPONENT:-5000}"
 REF_MAX_HANDS_PER_OPPONENT="${REF_MAX_HANDS_PER_OPPONENT:-30000}"
@@ -43,8 +53,8 @@ HARD_OPPONENT_SCORED_ONLY_RATIO="${HARD_OPPONENT_SCORED_ONLY_RATIO:-0}"
 OPPONENT_ENSEMBLE_SIZE="${OPPONENT_ENSEMBLE_SIZE:-3}"
 OPPONENT_ROSTER_FILE="${OPPONENT_ROSTER_FILE:-${ROOT_DIR}/configs/seed_roster_3600064_safety.json}"
 OPPONENT_NAMES="${OPPONENT_NAMES:-seed_rl_hands_1000262 seed_rl_hands_1500036 seed_rl_hands_600040 seed_rl_hands_1000054 seed_rl_hands_600047 seed_rl_hands_700169}"
+ARCHIVE_DIR="${ARCHIVE_DIR:-/root/autodl-tmp/poker_checkpoints}"
 
-cd "${ROOT_DIR}"
 mkdir -p "${RUN_DIR}/checkpoints" "${RUN_DIR}/reference" "${ROOT_DIR}/runs"
 echo "${RUN_DIR}" > "${ROOT_DIR}/runs/latest_run_dir"
 
@@ -52,7 +62,7 @@ resolve_checkpoint() {
   local name="$1"
   local found
   found="$(
-    find "${ROOT_DIR}/runs" "${ROOT_DIR}/checkpoints" /root/autodl-tmp/poker_checkpoints \
+    find "${ROOT_DIR}/runs" "${ROOT_DIR}/checkpoints" "${ARCHIVE_DIR}" \
       -name "${name}.actor.weights.h5" -print -quit 2>/dev/null || true
   )"
   if [[ -z "${found}" ]]; then
@@ -65,6 +75,18 @@ shell_quote() {
   printf '%q' "$1"
 }
 
+if [[ -z "${ANCHOR:-}" ]]; then
+  if [[ -n "${ANCHOR_HINT}" ]]; then
+    if [[ "${ANCHOR_HINT}" = /* ]]; then
+      hint_base="${ANCHOR_HINT}"
+    else
+      hint_base="${ROOT_DIR}/${ANCHOR_HINT}"
+    fi
+    if [[ -f "${hint_base}.actor.weights.h5" ]]; then
+      ANCHOR="${hint_base}"
+    fi
+  fi
+fi
 if [[ -z "${ANCHOR:-}" ]]; then
   ANCHOR="$(resolve_checkpoint "${ANCHOR_NAME}" || true)"
 fi
@@ -89,7 +111,11 @@ REF_FILE="${REF_FILE:-${RUN_DIR}/reference/${ANCHOR_NAME}_hard_subset_reference.
 
 {
   echo "RUN_DIR=${RUN_DIR}"
+  echo "SEED_EXPERIMENT_CONFIG=${SEED_EXPERIMENT_CONFIG}"
+  echo "SEED_EXPERIMENT_ID=${SEED_EXPERIMENT_ID:-}"
   echo "ANCHOR=${ANCHOR}"
+  echo "ANCHOR_NAME=${ANCHOR_NAME}"
+  echo "ANCHOR_HINT=${ANCHOR_HINT}"
   echo "NUM_HANDS=${NUM_HANDS}"
   echo "REF_FILE=${REF_FILE}"
   echo "BUILD_REFERENCE=${BUILD_REFERENCE}"
@@ -118,6 +144,7 @@ REF_FILE="${REF_FILE:-${RUN_DIR}/reference/${ANCHOR_NAME}_hard_subset_reference.
   echo "OPPONENT_SCORE_FILE=${OPPONENT_SCORE_FILE}"
   echo "HARD_OPPONENT_SCORED_ONLY_RATIO=${HARD_OPPONENT_SCORED_ONLY_RATIO}"
   echo "OPPONENT_ROSTER_FILE=${OPPONENT_ROSTER_FILE}"
+  echo "ARCHIVE_DIR=${ARCHIVE_DIR}"
   echo "OPPONENTS=${opponent_paths[*]}"
   echo "START_TS=$(date -Is)"
 } > "${RUN_DIR}/stage.env"
