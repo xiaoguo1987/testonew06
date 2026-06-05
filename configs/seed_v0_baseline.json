@@ -65,5 +65,14 @@
     "validation_fail_fast_worst": -900,
     "validation_max_invalid": 0.001,
     "validation_max_truncated": 0.005
+  },
+  "delivery_gate": {
+    "expected_count": 13,
+    "min_avg": 0,
+    "min_worst": -200,
+    "max_invalid": 0.001,
+    "max_truncated": 0.005,
+    "max_row_std": 300,
+    "fail_fast_worst": -900
   }
 }

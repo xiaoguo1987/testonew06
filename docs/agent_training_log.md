@@ -987,4 +987,7 @@ agent_training_log.md
   without overwriting v0.  Added `configs/seed_v0_baseline.json` to record the
   baseline, hard/full opponent pools, and guarded smoke gates, plus
   `scripts/seed_config_export.py` so launchers can load these values without
-  hardcoding opponent lists and thresholds in bash.
+  hardcoding opponent lists and thresholds in bash.  Added
+  `scripts/run_seed_config_eval.py` so full-pool or hard-subset repeated
+  evaluations can be launched from the same config instead of hand-writing
+  checkpoint paths.

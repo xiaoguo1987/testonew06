@@ -50,6 +50,38 @@ REF_MAX_HANDS_PER_OPPONENT=5000 \
   bash scripts/run_seed_reference_smoke.sh
 ```
 
+## Evaluation
+
+Use `scripts/run_seed_config_eval.py` to run the configured baseline against
+the hard subset or full 13-opponent pool without hand-writing checkpoint paths.
+
+Dry-run the full-pool command:
+
+```bash
+cd /root/testo-seed-rl
+/root/miniconda3/bin/python scripts/run_seed_config_eval.py \
+  --config configs/seed_v0_baseline.json \
+  --pool full_pool \
+  --games 5000 \
+  --repeats 1 \
+  --dry-run
+```
+
+Run the full-pool gate:
+
+```bash
+cd /root/testo-seed-rl
+/root/miniconda3/bin/python scripts/run_seed_config_eval.py \
+  --config configs/seed_v0_baseline.json \
+  --pool full_pool \
+  --games 5000 \
+  --repeats 1
+```
+
+The delivery gate in `configs/seed_v0_baseline.json` currently requires avg
+`>= 0` bb/100 and worst `>= -200` bb/100 for the configured pool, with clean
+invalid/truncated rates.
+
 ## Current Direction
 
 Do not run blind PPO fine-tuning from `1000194`. Both Codex and DeepSeek
